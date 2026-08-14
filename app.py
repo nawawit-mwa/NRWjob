@@ -1,9 +1,13 @@
 """
 app.py
-Flask Web App สำหรับ NRW Job Management (ต้นแบบหน้าจอ)
-รันด้วย: python app.py  แล้วเปิดเบราว์เซอร์ไปที่ http://127.0.0.1:5000
+Flask Web App สำหรับ NRW Job Management
+
+รันในเครื่อง (dev):   python app.py
+รันบนเซิร์ฟเวอร์จริง (production): gunicorn app:app --bind 0.0.0.0:$PORT
+(ดูขั้นตอน deploy ใน README.md หัวข้อ "Deploy บน Render")
 """
 
+import os
 from functools import wraps
 
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
@@ -16,7 +20,16 @@ from constants import ROLE_ADMIN, ROLE_DEPUTY_GOVERNOR, ROLE_ASSISTANT_GOVERNOR
 from schema_setup import SHEET_SCHEMAS
 
 app = Flask(__name__)
-app.secret_key = "dev-secret-key-change-me-in-production"  # เปลี่ยนก่อนใช้งานจริง
+# ในเครื่อง (dev): ไม่ตั้ง SECRET_KEY ก็ได้ จะใช้ค่า fallback ด้านล่างแทน
+# บน Render (production): ต้องตั้ง environment variable SECRET_KEY เป็นค่าสุ่มที่คาดเดาไม่ได้
+app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key-change-me-in-production")
+
+# โหลดข้อมูลจาก Google Sheets เข้า cache ครั้งเดียวตอนโมดูลนี้ถูก import
+# (ต้องอยู่นอก "if __name__ == '__main__'" เพราะตอน deploy จริงจะใช้ gunicorn
+#  import ตัวแปร app จากไฟล์นี้โดยตรง ไม่ได้รันไฟล์นี้เป็นสคริปต์หลัก โค้ดใน
+#  if __name__ == "__main__" จะไม่ถูกเรียกเลยในกรณีนั้น)
+print("=== Warm up cache ===")
+sc.warm_up(list(SHEET_SCHEMAS.keys()))
 
 
 def login_required(view_func):
@@ -176,6 +189,6 @@ def convert_incident(incident_id):
 
 
 if __name__ == "__main__":
-    print("=== Warm up cache ===")
-    sc.warm_up(list(SHEET_SCHEMAS.keys()))
+    # รันแบบนี้ตอนพัฒนาในเครื่องเท่านั้น (python app.py)
+    # ตอน deploy จริงบน Render จะใช้ gunicorn เรียก app:app โดยตรง ไม่ผ่านส่วนนี้เลย
     app.run(debug=True, host="127.0.0.1", port=5000)
