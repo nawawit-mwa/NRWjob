@@ -1,0 +1,18 @@
+# ห้ามอัปโหลดไฟล์ credential ขึ้น GitHub เด็ดขาด (กุญแจเข้าถึง Google Sheets จริง)
+service_account.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+env/
+.venv/
+
+# ไฟล์ข้อมูลจำลอง/ดิบ (ถ้ามีไฟล์ CSV จริงที่ไม่อยากเผยแพร่)
+static/data/*.csv
+
+# ระบบปฏิบัติการ/บรรณาธิการ
+.DS_Store
+Thumbs.db
+.vscode/

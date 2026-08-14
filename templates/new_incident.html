@@ -1,0 +1,83 @@
+{% extends "base_sidebar.html" %}
+{% block title %}แจ้งเหตุการณ์ใหม่ — NRW Job Management{% endblock %}
+{% block content %}
+<div class="container" style="max-width: 640px;">
+  <a href="{{ url_for('dashboard') }}">&larr; กลับไป Dashboard</a>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, message in messages %}
+        <div class="flash {{ category }}">{{ message }}</div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  <div class="section-title">แจ้งเหตุการณ์ใหม่</div>
+  <div class="panel" style="padding: 22px;">
+    <form method="post">
+      {% if branches|length > 1 %}
+      <div class="field">
+        <label for="branch_id">สาขา</label>
+        <select id="branch_id" name="branch_id" required>
+          <option value="">— เลือกสาขา —</option>
+          {% for b in branches %}
+          <option value="{{ b.BranchID }}">{{ b.BranchName }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% elif branches|length == 1 %}
+      <input type="hidden" name="branch_id" value="{{ branches[0].BranchID }}">
+      <div class="field">
+        <label>สาขา</label>
+        <input type="text" value="{{ branches[0].BranchName }}" disabled>
+      </div>
+      {% endif %}
+
+      <div class="field">
+        <label for="zone_id">โซน / DMA</label>
+        <select id="zone_id" name="zone_id">
+          <option value="">— ไม่ระบุ —</option>
+          {% for z in zones %}
+          <option value="{{ z.ZoneID }}">{{ z.ZoneName }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="incident_type">ประเภทเหตุการณ์</label>
+        {% if incident_types %}
+        <select id="incident_type" name="incident_type" required>
+          <option value="">— เลือกประเภทเหตุการณ์ —</option>
+          {% for it in incident_types %}
+          <option value="{{ it.IncidentTypeName }}">{{ it.IncidentTypeName }}</option>
+          {% endfor %}
+        </select>
+        {% else %}
+        <input type="text" id="incident_type" name="incident_type"
+               placeholder="เช่น ท่อแตก, มิเตอร์ผิดปกติ" required>
+        <p style="font-size:0.78rem; color:var(--ink-soft); margin:4px 0 0;">
+          ยังไม่มีข้อมูลประเภทเหตุการณ์ในระบบ (Sheet: IncidentTypes) — พิมพ์เองไปก่อนได้
+        </p>
+        {% endif %}
+      </div>
+
+      <div class="field">
+        <label for="description">รายละเอียด</label>
+        <input type="text" id="description" name="description"
+               placeholder="อธิบายเหตุการณ์โดยย่อ">
+      </div>
+
+      <div class="field">
+        <label for="severity">ความรุนแรง</label>
+        <select id="severity" name="severity">
+          <option value="สูง">สูง</option>
+          <option value="กลาง" selected>กลาง</option>
+          <option value="ต่ำ">ต่ำ</option>
+        </select>
+      </div>
+
+      <button type="submit" class="btn-primary">บันทึกเหตุการณ์</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

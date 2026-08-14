@@ -1,0 +1,532 @@
+/* NRW Job Management — Theme: อิงสีจริงจากเว็บไซต์การประปานครหลวง (mwa.co.th)
+   ค่าสีดึงจากภาพหน้าเว็บจริงที่ผู้ใช้ส่งมา (ไม่ใช่การเดา):
+   ฟ้าสด #009cff, ฟ้าอมเขียว #00d8ff, น้ำเงิน #085ab6, ม่วง #a400da, เขียว #079c00 */
+
+@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap');
+
+:root {
+  --mwa-sky: #009cff;       /* ฟ้าสด - แถบเมนูหลักของเว็บจริง */
+  --mwa-cyan: #00d8ff;      /* ฟ้าอมเขียว - accent */
+  --mwa-navy: #085ab6;      /* น้ำเงิน - แถบ accent / ข้อความหัวเรื่อง */
+  --mwa-navy-deep: #063f80; /* น้ำเงินเข้มกว่า สำหรับ contrast/ข้อความ */
+  --mwa-purple: #a400da;    /* ม่วง - แถบ accent */
+  --mwa-green: #079c00;     /* เขียว - แถบ accent / สถานะสำเร็จ */
+  --paper: #f4f8fc;
+  --panel: #ffffff;
+  --ink: #142433;
+  --ink-soft: #5c7488;
+  --line: #d9e6f2;
+  --amber: #b5790f;
+  --danger: #a6402a;
+  --radius: 10px;
+  --font-ui: "Sarabun", "Segoe UI", -apple-system, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: var(--font-ui);
+  background: var(--paper);
+  color: var(--ink);
+  line-height: 1.6;
+}
+
+a { color: var(--mwa-navy); }
+
+/* --- Topbar: ฟ้าสด-ฟ้าอมเขียว ไล่เฉด + ลายทแยงจางๆ เหมือนพื้นหลังเว็บจริง --- */
+.topbar {
+  position: relative;
+  background:
+    repeating-linear-gradient(
+      45deg,
+      rgba(255,255,255,0.10) 0 10px,
+      rgba(255,255,255,0) 10px 20px
+    ),
+    linear-gradient(100deg, var(--mwa-navy) 0%, var(--mwa-sky) 55%, var(--mwa-cyan) 100%);
+  color: #fff;
+  padding: 16px 30px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.topbar .brand {
+  position: relative;
+  z-index: 1;
+  font-weight: 700;
+  font-size: 1.2rem;
+  letter-spacing: 0.01em;
+  display: flex;
+  align-items: center;
+}
+
+.topbar .brand .badge-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid var(--mwa-navy-deep);
+  color: var(--mwa-navy-deep);
+  font-weight: 800;
+  font-size: 0.78rem;
+  margin-right: 12px;
+  flex-shrink: 0;
+}
+
+.topbar .brand-text small {
+  display: block;
+  font-weight: 400;
+  font-size: 0.72rem;
+  opacity: 0.9;
+  margin-top: 2px;
+}
+
+.topbar .user-chip {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.85rem;
+}
+
+.topbar .user-chip .role-tag {
+  background: rgba(255, 255, 255, 0.2);
+  padding: 3px 12px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+}
+
+.topbar a.logout {
+  color: #fff;
+  text-decoration: none;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  padding: 5px 14px;
+  border-radius: 6px;
+  font-size: 0.8rem;
+}
+.topbar a.logout:hover { background: rgba(255,255,255,0.15); }
+
+/* --- แถบสี 4 สี ใต้ topbar — homage ตรงๆ ต่อแถบสีบนเว็บ กปน. จริง --- */
+.accent-stripe {
+  display: flex;
+  height: 6px;
+}
+.accent-stripe span { flex: 1; }
+.accent-stripe span:nth-child(1) { background: var(--mwa-green); flex: 0.6; }
+.accent-stripe span:nth-child(2) { background: var(--mwa-purple); flex: 1; }
+.accent-stripe span:nth-child(3) { background: var(--mwa-navy); flex: 1; }
+.accent-stripe span:nth-child(4) { background: var(--mwa-cyan); flex: 2.5; }
+
+.container {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 28px 24px 60px;
+}
+
+.flash {
+  padding: 10px 16px;
+  border-radius: var(--radius);
+  margin-bottom: 16px;
+  font-size: 0.9rem;
+  border-left: 4px solid transparent;
+}
+.flash.error { background: #fbeae4; color: var(--danger); border-left-color: var(--danger); }
+.flash.info { background: #e3f5e0; color: var(--mwa-green); border-left-color: var(--mwa-green); }
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 14px;
+  margin-bottom: 22px;
+}
+
+.summary-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--mwa-sky);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+}
+
+.summary-card .num {
+  font-size: 1.9rem;
+  font-weight: 700;
+  color: var(--mwa-navy-deep);
+}
+
+.summary-card .label {
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+  margin-top: 2px;
+}
+
+.section-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin: 30px 0 12px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid var(--mwa-cyan);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+
+th, td {
+  text-align: left;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+th {
+  background: #e4f2fc;
+  color: var(--mwa-navy-deep);
+  font-weight: 700;
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+tr:hover td { background: #f2f9ff; }
+tr:last-child td { border-bottom: none; }
+
+.badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+.badge.status-pending { background: #f7ecd6; color: var(--amber); }
+.badge.status-progress { background: #dcecfc; color: var(--mwa-navy-deep); }
+.badge.status-verify { background: #f3e0fb; color: var(--mwa-purple); }
+.badge.status-done { background: #e0f4de; color: var(--mwa-green); }
+.badge.status-cancel { background: #fbe9e4; color: var(--danger); }
+.badge.status-reject { background: #fbe9e4; color: var(--danger); }
+
+.empty-state {
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+}
+
+/* --- Login --- */
+.login-wrap {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  background:
+    repeating-linear-gradient(
+      45deg,
+      rgba(255,255,255,0.08) 0 10px,
+      rgba(255,255,255,0) 10px 20px
+    ),
+    linear-gradient(135deg, var(--mwa-navy-deep) 0%, var(--mwa-navy) 45%, var(--mwa-sky) 100%);
+  overflow: hidden;
+}
+
+.login-card {
+  position: relative;
+  z-index: 1;
+  background: var(--panel);
+  border-radius: 14px;
+  padding: 38px 36px 30px;
+  width: 100%;
+  max-width: 360px;
+  box-shadow: 0 24px 60px rgba(5, 25, 40, 0.4);
+}
+
+.login-card .badge-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid var(--mwa-navy);
+  color: var(--mwa-navy-deep);
+  font-weight: 800;
+  font-size: 0.85rem;
+  margin-bottom: 14px;
+}
+
+.login-card h1 {
+  font-size: 1.3rem;
+  margin: 0 0 2px;
+  color: var(--ink);
+}
+
+.login-card p.subtitle {
+  margin: 0 0 24px;
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+}
+
+.field { margin-bottom: 16px; }
+
+.field label {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+  margin-bottom: 6px;
+}
+
+.field input, .field select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 0.92rem;
+  font-family: var(--font-ui);
+  background: #fff;
+}
+
+.field input:focus, .field select:focus {
+  outline: 2px solid var(--mwa-sky);
+  outline-offset: 1px;
+  border-color: var(--mwa-sky);
+}
+
+.btn-primary {
+  width: 100%;
+  padding: 11px;
+  background: var(--mwa-sky);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btn-primary:hover { background: var(--mwa-navy); }
+
+/* ===================== Sidebar Shell ===================== */
+
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+.side-nav {
+  width: 250px;
+  flex-shrink: 0;
+  background: linear-gradient(180deg, var(--mwa-navy-deep), var(--mwa-navy));
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+.side-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 18px;
+  text-decoration: none;
+  color: #fff;
+  border-bottom: 1px solid rgba(255,255,255,0.14);
+}
+
+.side-brand .badge-icon {
+  width: 34px;
+  height: 34px;
+  border: 2px solid #fff;
+  background: transparent;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.side-brand-text {
+  font-weight: 700;
+  font-size: 1rem;
+  line-height: 1.2;
+}
+.side-brand-text small {
+  display: block;
+  font-weight: 400;
+  font-size: 0.7rem;
+  opacity: 0.85;
+}
+
+.side-nav-groups {
+  flex: 1;
+  padding: 14px 12px;
+  overflow-y: auto;
+}
+
+.side-nav-group { margin-bottom: 20px; }
+
+.side-nav-label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(255,255,255,0.55);
+  padding: 0 10px 6px;
+}
+
+.side-nav-item {
+  display: block;
+  padding: 9px 12px;
+  border-radius: 8px;
+  color: rgba(255,255,255,0.88);
+  text-decoration: none;
+  font-size: 0.9rem;
+  margin-bottom: 2px;
+}
+.side-nav-item:hover { background: rgba(255,255,255,0.10); }
+.side-nav-item.active {
+  background: var(--mwa-sky);
+  color: #fff;
+  font-weight: 600;
+}
+.side-nav-item.disabled {
+  color: rgba(255,255,255,0.35);
+  cursor: default;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.side-nav-item.disabled small {
+  font-size: 0.65rem;
+  background: rgba(255,255,255,0.10);
+  padding: 1px 7px;
+  border-radius: 999px;
+}
+
+.side-nav-footer {
+  padding: 14px 16px;
+  border-top: 1px solid rgba(255,255,255,0.14);
+}
+
+.side-user-chip { margin-bottom: 10px; }
+.side-user-name { font-size: 0.88rem; font-weight: 600; }
+.side-user-role { font-size: 0.75rem; color: rgba(255,255,255,0.7); }
+
+.side-logout, .side-login-btn {
+  display: block;
+  text-align: center;
+  padding: 8px;
+  border-radius: 8px;
+  text-decoration: none;
+  font-size: 0.85rem;
+}
+.side-logout {
+  border: 1px solid rgba(255,255,255,0.4);
+  color: #fff;
+}
+.side-logout:hover { background: rgba(255,255,255,0.10); }
+.side-login-btn {
+  background: var(--mwa-sky);
+  color: #fff;
+  font-weight: 600;
+  border: none;
+  width: 100%;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.85rem;
+}
+.side-login-btn:hover { background: #fff; color: var(--mwa-navy-deep); }
+
+.app-main {
+  flex: 1;
+  min-width: 0;
+}
+
+@media (max-width: 780px) {
+  .app-shell { flex-direction: column; }
+  .side-nav { width: 100%; height: auto; position: static; }
+  .side-nav-groups { display: flex; flex-wrap: wrap; gap: 4px; padding: 10px; }
+  .side-nav-group { margin-bottom: 0; }
+  .side-nav-label { display: none; }
+}
+
+/* ===================== Login Popup Modal ===================== */
+
+.login-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 25, 40, 0.55);
+  backdrop-filter: blur(2px);
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 20px;
+}
+.login-overlay.open { display: flex; }
+
+.login-modal-box {
+  position: relative;
+  background: var(--panel);
+  border-radius: 14px;
+  padding: 38px 36px 30px;
+  width: 100%;
+  max-width: 360px;
+  box-shadow: 0 24px 60px rgba(5, 25, 40, 0.4);
+}
+
+.login-modal-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  background: none;
+  border: 1px solid var(--line);
+  color: var(--ink-soft);
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+.login-modal-close:hover { color: var(--ink); border-color: var(--ink-soft); }
+
+.login-modal-box .badge-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid var(--mwa-navy);
+  color: var(--mwa-navy-deep);
+  font-weight: 800;
+  font-size: 0.85rem;
+}
+
+.login-modal-box h1 {
+  font-size: 1.3rem;
+  margin: 0 0 2px;
+  color: var(--ink);
+}
+
+.login-modal-box .subtitle {
+  margin: 0 0 20px;
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+}

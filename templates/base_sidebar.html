@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}NRW Job Management{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  {% block extra_head %}{% endblock %}
+</head>
+<body {% block body_attrs %}{% endblock %}>
+  <div class="app-shell">
+    <aside class="side-nav">
+      <a href="{{ url_for('monitoring') }}" class="side-brand">
+        <span class="badge-icon">กปน</span>
+        <span class="side-brand-text">NRW<small>Job Management</small></span>
+      </a>
+
+      {% if user %}
+      <nav class="side-nav-groups">
+        <div class="side-nav-group">
+          <div class="side-nav-label">ภาพรวม</div>
+          <a href="{{ url_for('monitoring') }}"
+             class="side-nav-item {{ 'active' if active_page == 'monitoring' }}">NRW Dashboard</a>
+          <a href="{{ url_for('dashboard') }}"
+             class="side-nav-item {{ 'active' if active_page == 'dashboard' }}">Job Dashboard</a>
+        </div>
+        <div class="side-nav-group">
+          <div class="side-nav-label">การบัญชาการ</div>
+          <a href="{{ url_for('new_incident') }}"
+             class="side-nav-item {{ 'active' if active_page == 'new_incident' }}">แจ้งเหตุการณ์ใหม่</a>
+        </div>
+        <div class="side-nav-group">
+          <div class="side-nav-label">การจัดการงาน</div>
+          <span class="side-nav-item disabled">มอบหมาย/ติดตามงาน<small>เร็วๆ นี้</small></span>
+        </div>
+        <div class="side-nav-group">
+          <div class="side-nav-label">ปฏิบัติการภาคสนาม</div>
+          <span class="side-nav-item disabled">งานของฉัน<small>เร็วๆ นี้</small></span>
+        </div>
+        <div class="side-nav-group">
+          <div class="side-nav-label">ผู้ดูแลระบบ</div>
+          <span class="side-nav-item disabled">ผู้ใช้ / Master data<small>เร็วๆ นี้</small></span>
+        </div>
+      </nav>
+
+      <div class="side-nav-footer">
+        <div class="side-user-chip">
+          <div class="side-user-name">{{ user.Name }}</div>
+          <div class="side-user-role">{{ user.Role }}</div>
+        </div>
+        <a class="side-logout" href="{{ url_for('logout') }}">ออกจากระบบ</a>
+      </div>
+      {% else %}
+      <nav class="side-nav-groups">
+        <div class="side-nav-group">
+          <div class="side-nav-label">ภาพรวม</div>
+          <a href="{{ url_for('monitoring') }}"
+             class="side-nav-item {{ 'active' if active_page == 'monitoring' }}">NRW Dashboard</a>
+        </div>
+      </nav>
+      <div class="side-nav-footer">
+        <button type="button" id="loginOpenBtn" class="side-login-btn">เข้าสู่ระบบ</button>
+      </div>
+      {% endif %}
+    </aside>
+
+    <main class="app-main">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+
+  {% if not user %}
+  <div class="login-overlay" id="loginOverlay">
+    <div class="login-modal-box">
+      <button type="button" class="login-modal-close" id="loginCloseBtn">✕</button>
+      <div class="badge-icon" style="margin-bottom:14px;">กปน</div>
+      <h1>NRW Job Management</h1>
+      <p class="subtitle">เข้าสู่ระบบเพื่อจัดการงานและเหตุการณ์</p>
+
+      <div class="flash error" id="loginErrorBox" style="display:none;"></div>
+
+      <form id="loginForm">
+        <div class="field">
+          <label for="loginUsername">ชื่อผู้ใช้</label>
+          <input type="text" id="loginUsername" name="username" autocomplete="username" required>
+        </div>
+        <div class="field">
+          <label for="loginPassword">รหัสผ่าน</label>
+          <input type="password" id="loginPassword" name="password" autocomplete="current-password" required>
+        </div>
+        <button type="submit" class="btn-primary" id="loginSubmitBtn">เข้าสู่ระบบ</button>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      var overlay = document.getElementById('loginOverlay');
+      var openBtn = document.getElementById('loginOpenBtn');
+      var closeBtn = document.getElementById('loginCloseBtn');
+      var form = document.getElementById('loginForm');
+      var errorBox = document.getElementById('loginErrorBox');
+      var submitBtn = document.getElementById('loginSubmitBtn');
+
+      function openModal() {
+        overlay.classList.add('open');
+        document.getElementById('loginUsername').focus();
+      }
+      function closeModal() {
+        overlay.classList.remove('open');
+        errorBox.style.display = 'none';
+      }
+
+      if (openBtn) openBtn.addEventListener('click', openModal);
+      if (closeBtn) closeBtn.addEventListener('click', closeModal);
+      if (overlay) {
+        overlay.addEventListener('click', function (e) {
+          if (e.target === overlay) closeModal();
+        });
+      }
+
+      if (form) {
+        form.addEventListener('submit', function (e) {
+          e.preventDefault();
+          errorBox.style.display = 'none';
+          submitBtn.disabled = true;
+          submitBtn.textContent = 'กำลังเข้าสู่ระบบ...';
+
+          var formData = new FormData(form);
+          fetch('{{ url_for("login") }}', {
+            method: 'POST',
+            body: formData,
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+          })
+            .then(function (res) { return res.json(); })
+            .then(function (data) {
+              if (data.success) {
+                window.location = data.redirect;
+              } else {
+                errorBox.textContent = data.error || 'เข้าสู่ระบบไม่สำเร็จ';
+                errorBox.style.display = 'block';
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'เข้าสู่ระบบ';
+              }
+            })
+            .catch(function () {
+              errorBox.textContent = 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง';
+              errorBox.style.display = 'block';
+              submitBtn.disabled = false;
+              submitBtn.textContent = 'เข้าสู่ระบบ';
+            });
+        });
+      }
+    })();
+  </script>
+  {% endif %}
+
+  {% block extra_scripts %}{% endblock %}
+</body>
+</html>

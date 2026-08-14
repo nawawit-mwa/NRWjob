@@ -1,0 +1,1570 @@
+{% extends "base_sidebar.html" %}
+{% block title %}NRW Dashboard — ศูนย์เฝ้าระวังน้ำสูญเสีย{% endblock %}
+
+{% block body_attrs %}data-theme="light"{% endblock %}
+
+{% block extra_head %}
+<style>
+  :root{
+    --bg:#0a121f;
+    --panel:#101b2d;
+    --panel-2:#0d1626;
+    --border:#22314a;
+    --text:#e7edf6;
+    --text-dim:#8ca0be;
+    --text-faint:#5b6b85;
+    --teal:#38bfc7;
+    --teal-soft:rgba(56,191,199,.14);
+    --green:#57c785;
+    --amber:#e8a33d;
+    --amber-soft:rgba(232,163,61,.14);
+    --red:#e5484d;
+    --red-soft:rgba(229,72,77,.14);
+    --gray:#8ca0be;
+    --gray-soft:rgba(140,160,190,.14);
+    --remark:#9199a8;
+    --remark-soft:rgba(107,114,128,.22);
+    --grid-line:#1a2740;
+  }
+  body[data-theme="light"]{
+    --bg:#f4f6fa;
+    --panel:#ffffff;
+    --panel-2:#eef1f6;
+    --border:#dbe1ea;
+    --text:#101b2d;
+    --text-dim:#4b5a72;
+    --text-faint:#7c8aa0;
+    --teal:#0f8a92;
+    --teal-soft:rgba(15,138,146,.10);
+    --green:#1f9d5c;
+    --amber:#b5730a;
+    --amber-soft:rgba(181,115,10,.10);
+    --red:#c22b30;
+    --red-soft:rgba(194,43,48,.10);
+    --gray:#5b6b85;
+    --gray-soft:rgba(91,107,133,.10);
+    --remark:#4b5563;
+    --remark-soft:rgba(75,85,99,.14);
+    --grid-line:#e4e9f1;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:
+      radial-gradient(1200px 600px at 15% -10%, rgba(56,191,199,.08), transparent 60%),
+      var(--bg);
+    color:var(--text);
+    font-family:'Sarabun','Segoe UI',sans-serif;
+    -webkit-font-smoothing:antialiased;
+    transition:background-color .2s, color .2s;
+  }
+  body[data-theme="light"]{
+    background:
+      radial-gradient(1200px 600px at 15% -10%, rgba(15,138,146,.06), transparent 60%),
+      var(--bg);
+  }
+  .mono{font-family:'Sarabun','Segoe UI',sans-serif;}
+  .wrap{max-width:1180px;margin:0 auto;padding:20px 18px 60px;}
+
+  /* theme toggle */
+  .theme-toggle{
+    display:inline-flex;align-items:center;gap:6px;background:var(--panel);border:1px solid var(--border);
+    border-radius:99px;padding:5px 12px;font-size:12px;color:var(--text-dim);cursor:pointer;
+    transition:border-color .15s, color .15s;
+  }
+  .theme-toggle:hover{border-color:var(--teal);color:var(--text);}
+
+  /* header */
+  header{display:flex;flex-wrap:wrap;gap:14px;justify-content:space-between;align-items:flex-end;margin-bottom:6px;}
+  h1{font-family:'Sarabun','Segoe UI',sans-serif;font-weight:700;font-size:clamp(20px,2.6vw,28px);margin:0 0 4px;letter-spacing:.2px;}
+  .sub{color:var(--text-dim);font-size:13.5px;margin:0;max-width:560px;line-height:1.55;}
+  .live{display:flex;align-items:center;gap:8px;color:var(--teal);font-size:12.5px;}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--teal);box-shadow:0 0 0 3px var(--teal-soft);animation:pulse 2s infinite;}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+  .banner{
+    margin-top:16px;background:var(--panel-2);border:1px dashed var(--border);
+    border-radius:10px;padding:10px 14px;font-size:12.5px;color:var(--text-dim);
+    display:flex;gap:10px;align-items:flex-start;
+  }
+  .banner b{color:var(--amber);}
+
+  /* KPI row */
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:20px 0;}
+  .kpi{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:14px 16px;cursor:pointer;transition:border-color .15s,transform .1s;}
+  .kpi:hover{border-color:var(--teal);}
+  .kpi.active{border-color:var(--teal);box-shadow:0 0 0 1px var(--teal) inset;}
+  .kpi .label{font-size:11.5px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;}
+  .kpi .val{font-family:'Sarabun','Segoe UI',sans-serif;font-size:26px;font-weight:700;}
+  .kpi .val small{font-size:13px;color:var(--text-dim);font-weight:500;margin-left:4px;}
+  .kpi.alert .val{color:var(--red);}
+  .kpi.watch .val{color:var(--amber);}
+  .kpi.ok .val{color:var(--green);}
+  .kpi.no_data .val{color:var(--gray);}
+  .kpi.remark .val{color:var(--remark);}
+
+  /* section title */
+  .section-title{display:flex;align-items:center;gap:10px;margin:30px 0 12px;}
+  .section-title h2{font-family:'Sarabun','Segoe UI',sans-serif;font-size:15px;font-weight:600;margin:0;}
+  .section-title .line{flex:1;height:1px;background:var(--border);}
+  .help-hint{font-size:12.5px;color:var(--text-dim);margin:2px 0 18px;display:flex;align-items:center;gap:6px;}
+  .help-hint a{color:var(--teal);text-decoration:underline;}
+  .help-hint a:hover{color:var(--text);}
+
+  .search-box{position:relative;max-width:320px;margin:0 0 16px;}
+  .search-box input{
+    width:100%;box-sizing:border-box;background:var(--panel);border:1px solid var(--border);border-radius:10px;
+    padding:9px 32px 9px 34px;font-size:13.5px;color:var(--text);font-family:inherit;outline:none;
+    transition:border-color .15s;
+  }
+  .search-box input:focus{border-color:var(--teal);}
+  .search-box input::placeholder{color:var(--text-faint);}
+  .search-box .icon{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--text-faint);font-size:13px;pointer-events:none;}
+  .search-box .clear-btn{
+    position:absolute;right:8px;top:50%;transform:translateY(-50%);cursor:pointer;color:var(--text-faint);
+    font-size:15px;line-height:1;padding:2px 4px;display:none;
+  }
+  .search-box .clear-btn:hover{color:var(--text);}
+  .search-box.has-value .clear-btn{display:block;}
+
+  .region-bar{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 16px;}
+  .region-pill{
+    background:var(--panel);border:1px solid var(--border);border-radius:999px;padding:7px 16px;
+    font-size:12.5px;font-weight:600;color:var(--text-dim);cursor:pointer;user-select:none;
+    transition:border-color .15s,color .15s,background .15s;
+  }
+  .region-pill:hover{border-color:var(--teal);color:var(--text);}
+  .region-pill.active{background:var(--teal);border-color:var(--teal);color:#08131a;}
+
+  /* priority table */
+  table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow:hidden;font-size:13px;}
+  thead th{text-align:left;font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.05em;font-weight:600;padding:10px 14px;background:var(--panel-2);border-bottom:1px solid var(--border);}
+  thead th.sortable{cursor:pointer;user-select:none;}
+  thead th.sortable:hover{color:var(--text);}
+  thead th .sort-ind{display:inline-block;width:10px;font-size:9px;opacity:.6;}
+  tbody td{padding:10px 14px;border-bottom:1px solid var(--border);vertical-align:middle;}
+  tbody tr:last-child td{border-bottom:none;}
+  tbody tr{cursor:pointer;transition:background .15s;}
+  tbody tr:hover{background:var(--panel-2);}
+  .badge{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:99px;font-size:11.5px;font-weight:600;}
+  .badge.alert{background:var(--red-soft);color:var(--red);}
+  .badge.watch{background:var(--amber-soft);color:var(--amber);}
+  .badge.ok{background:var(--teal-soft);color:var(--teal);}
+  .badge.no_data{background:var(--gray-soft);color:var(--gray);}
+  .badge.remark{background:var(--remark-soft);color:var(--remark);}
+  .badge .bdot{width:6px;height:6px;border-radius:50%;background:currentColor;}
+  .delta-pos{color:var(--red);}
+  .delta-flat{color:var(--text-dim);}
+
+  /* grid of DMA cards */
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px;}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:14px 14px 12px;cursor:pointer;position:relative;overflow:hidden;transition:border-color .15s,transform .15s;}
+  .card:hover{border-color:var(--teal);transform:translateY(-1px);}
+  .card .bar{position:absolute;left:0;top:0;bottom:0;width:3px;}
+  .card .bar.alert{background:var(--red);}
+  .card .bar.watch{background:var(--amber);}
+  .card .bar.ok{background:var(--teal);}
+  .card .bar.no_data{background:var(--gray);}
+  .card .bar.remark{background:var(--remark);}
+  .card .top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;}
+  .card .name{font-size:13.5px;font-weight:600;}
+  .card .code{font-size:11px;color:var(--text-faint);}
+  .card svg{width:100%;height:36px;display:block;margin:8px 0 6px;}
+  .card .metrics{display:flex;justify-content:space-between;align-items:baseline;font-size:11.5px;color:var(--text-dim);}
+  .card .metrics .mnf{font-family:'Sarabun','Segoe UI',sans-serif;color:var(--text);font-size:13px;}
+
+  /* modal */
+  .overlay{position:fixed;inset:0;background:rgba(4,8,15,.72);backdrop-filter:blur(2px);display:none;align-items:flex-start;justify-content:center;padding:26px 14px;overflow-y:auto;z-index:50;}
+  .overlay.open{display:flex;}
+  .modal{background:var(--panel);border:1px solid var(--border);border-radius:16px;max-width:760px;width:100%;padding:22px 22px 24px;position:relative;}
+  .modal .close{position:absolute;top:16px;right:16px;background:none;border:1px solid var(--border);color:var(--text-dim);width:30px;height:30px;border-radius:8px;cursor:pointer;font-size:15px;}
+  .modal .close:hover{color:var(--text);border-color:var(--text-dim);}
+  .modal h3{font-family:'Sarabun','Segoe UI',sans-serif;font-size:19px;margin:0 0 2px;}
+  .modal .mcode{color:var(--text-faint);font-size:12.5px;margin-bottom:14px;}
+  .modal .mkpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:18px;}
+  .modal .mkpi{background:var(--panel-2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;}
+  .modal .mkpi .l{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.05em;}
+  .modal .mkpi .v{font-family:'Sarabun','Segoe UI',sans-serif;font-size:16px;margin-top:3px;}
+  .chart-box{background:var(--panel-2);border:1px solid var(--border);border-radius:12px;padding:14px 14px 6px;margin-bottom:14px;}
+  .chart-box .ct{font-size:12.5px;font-weight:600;margin-bottom:6px;}
+  .chart-box canvas{max-height:190px;}
+  .note{font-size:11.5px;color:var(--text-faint);line-height:1.6;margin-top:8px;}
+
+  /* modal tabs (Job Management) */
+  .modal-tabs{display:flex;gap:8px;margin-bottom:16px;border-bottom:1px solid var(--border);}
+  .mtab{background:none;border:none;border-bottom:2px solid transparent;padding:8px 4px 10px;margin-bottom:-1px;
+    font-size:13px;font-weight:600;color:var(--text-dim);cursor:pointer;transition:color .15s,border-color .15s;}
+  .mtab:hover{color:var(--text);}
+  .mtab.active{color:var(--teal);border-bottom-color:var(--teal);}
+  .mtab-panel{display:none;}
+  .mtab-panel.active{display:block;}
+
+  .job-form{background:var(--panel-2);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:16px;}
+  .job-form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:10px;}
+  .job-field label{display:block;font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px;}
+  .job-field select,.job-field textarea{
+    width:100%;box-sizing:border-box;background:var(--panel);border:1px solid var(--border);border-radius:8px;
+    padding:8px 10px;font-size:13px;color:var(--text);font-family:inherit;
+  }
+  .job-field select:focus,.job-field textarea:focus{outline:none;border-color:var(--teal);}
+  .job-field textarea{resize:vertical;min-height:64px;}
+  .job-submit-row{display:flex;align-items:center;gap:10px;justify-content:flex-end;}
+  .job-submit-btn{
+    display:inline-flex;align-items:center;gap:8px;background:var(--teal);color:#08131a;border:none;
+    border-radius:8px;padding:9px 18px;font-size:13px;font-weight:700;cursor:pointer;transition:opacity .15s;
+  }
+  .job-submit-btn:hover{opacity:.88;}
+  .job-submit-btn:disabled{opacity:.6;cursor:not-allowed;}
+  .job-spinner{width:13px;height:13px;border-radius:50%;border:2px solid rgba(8,19,26,.35);border-top-color:#08131a;
+    animation:jobspin .7s linear infinite;display:none;}
+  @keyframes jobspin{to{transform:rotate(360deg);}}
+  .job-log-note{font-size:11.5px;color:var(--amber);background:var(--amber-soft);border:1px solid var(--amber);
+    border-radius:8px;padding:8px 12px;margin-bottom:12px;display:none;}
+  .job-log-table tbody tr{cursor:default;}
+  .job-log-table tbody tr:hover{background:transparent;}
+  .job-log-empty{text-align:center;color:var(--text-faint);font-size:12.5px;padding:18px 10px;}
+
+  footer{margin-top:36px;color:var(--text-faint);font-size:11.5px;text-align:center;line-height:1.7;}
+
+  footer{margin-top:36px;color:var(--text-faint);font-size:11.5px;text-align:center;line-height:1.7;}
+
+  /* ==== Override ให้ตรงกับชุดสี MWA ของระบบหลัก ==== */
+  body[data-theme="light"]{
+    --bg:#f4f8fc;
+    --panel:#ffffff;
+    --panel-2:#e4f2fc;
+    --border:#d9e6f2;
+    --text:#14263a;
+    --text-dim:#5c7488;
+    --text-faint:#8095a8;
+    --teal:#009cff;
+    --teal-soft:rgba(0,156,255,.12);
+    --green:#079c00;
+    --amber:#b5790f;
+    --red:#a6402a;
+    --grid-line:#e4e9f1;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+  <div style="max-width:1180px; margin:16px auto 0; padding:0 18px;">
+    {% for category, message in messages %}
+      <div class="flash {{ category }}">{{ message }}</div>
+    {% endfor %}
+  </div>
+  {% endif %}
+{% endwith %}
+<div class="wrap">
+
+  <header>
+    <div>
+      <h1>Smart MNF : Monitoring</h1>
+      <p class="sub">คัดกรองพื้นที่ที่มีแนวโน้มน้ำสูญเสีย/ท่อแตกรั่ว จากสถิติ Minimum Night Flow (MNF) <br>และ Statistical Process Control ต่อพื้นที่ DMA</p>
+    </div>
+    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;">
+      <div class="live"><span class="dot"></span><span id="sourceLabel">กำลังโหลด...</span></div>
+      <div style="font-size:11px;color:var(--text-faint);">อัปเดตล่าสุด: <span id="ts" class="mono"></span></div>
+    </div>
+  </header>
+
+  <div class="banner" id="banner">⏳ <div>กำลังพยายามโหลด <code class="mono" id="csvPathLabel">flow_log.csv</code> ...</div></div>
+
+  <div class="search-box" id="searchBox">
+    <span class="icon">🔎</span>
+    <input type="text" id="rtuSearchInput" placeholder="ค้นหา RTU / DM..." oninput="setSearchQuery(this.value)">
+    <span class="clear-btn" onclick="clearSearchQuery()">✕</span>
+  </div>
+
+  <div class="help-hint">💡 พิมพ์ค้นหา RTU ด้านบน หรือคลิกการ์ดสถานะเพื่อกรอง (คลิกซ้ำเพื่อล้าง) · คลิกหัวตารางเพื่อเรียงลำดับ (คลิกซ้ำเพื่อสลับทิศทางมาก↔น้อย) · ผู้ใช้งานสามารถกำหนดรายการ RTU ที่มีหมายเหตุ ได้ตาม <a href="https://docs.google.com/spreadsheets/d/1s18pk_eUVLAIdkAX3I3KLOF1VDmAZEin2xcqygbHzRs/edit?gid=0#gid=0" target="_blank" rel="noopener noreferrer">LINK นี้</a></div>
+
+  <div class="region-bar" id="regionBar"></div>
+
+  <div class="kpis" id="kpis"></div>
+  <div id="statusFilterNote" style="display:none;font-size:12.5px;color:var(--teal);margin:-10px 0 16px;"></div>
+
+  <div class="section-title"><h2>รายการเฝ้าระวังตามความรุนแรง</h2><div class="line"></div></div>
+  <table>
+    <thead><tr>
+      <th class="sortable" data-key="status" onclick="sortPriorityBy('status')">สถานะ <span class="sort-ind"></span></th>
+      <th class="sortable" data-key="code" onclick="sortPriorityBy('code')">RTU <span class="sort-ind"></span></th>
+      <th class="sortable" data-key="currentMnf" onclick="sortPriorityBy('currentMnf')">MNF ปัจจุบัน <span class="sort-ind"></span></th>
+      <th class="sortable" data-key="mean" onclick="sortPriorityBy('mean')">MNF ฐาน (Baseline) <span class="sort-ind"></span></th>
+      <th class="sortable" data-key="excessPerHour" onclick="sortPriorityBy('excessPerHour')">ส่วนต่าง <span class="sort-ind"></span></th>
+      <th class="sortable" data-key="estLossPerDay" onclick="sortPriorityBy('estLossPerDay')">ปริมาณสูญเสียประเมิน <span class="sort-ind"></span></th>
+      <th>รูปแบบ</th>
+    </tr></thead>
+    <tbody id="priorityBody"></tbody>
+  </table>
+
+  <div class="section-title"><h2>ภาพรวมทุกจุดวัด DM</h2><div class="line"></div></div>
+  <div class="grid" id="cardGrid"></div>
+
+  <footer>
+    วิธีคำนวณ: MNF = ค่าเฉลี่ย flow ในช่วงเวลาใช้น้ำต่ำสุดของแต่ละจุดวัด RTU(ตรวจจับอัตโนมัติต่อพื้นที่จากข้อมูลจริงย้อนหลัง 28 วัน ไม่ใช่ช่วงเวลาคงที่เดียวกันทุกจุดวัด DM) · Baseline = ค่าเฉลี่ย ± 2SD ของ MNF ช่วง 14 วันแรก · สถานะ "แจ้งเตือน" ต้องเกินเกณฑ์ต่อเนื่องอย่างน้อย 3 ใน 5 วันล่าสุด เพื่อกรอง event ใช้น้ำชั่วคราวออก
+  </footer>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="modal">
+    <button class="close" id="closeBtn">✕</button>
+    <h3 id="mName"></h3>
+    <div class="mcode mono" id="mCode"></div>
+
+    <div class="modal-tabs">
+      <button type="button" class="mtab active" data-tab="analysis" onclick="switchModalTab('analysis')">📊 กราฟและข้อมูลวิเคราะห์</button>
+      <button type="button" class="mtab" data-tab="job" onclick="switchModalTab('job')">🛠️ การดำเนินการ</button>
+    </div>
+
+    <div id="tabAnalysis" class="mtab-panel active">
+      <div id="mHardBanner" style="display:none;margin-bottom:12px;padding:10px 14px;border-radius:10px;background:var(--red-soft);border:1px solid var(--red);color:var(--red);font-size:12.5px;font-weight:600;">⚡ <span id="mHardBannerText"></span></div>
+      <div id="mRemarkPanel" style="display:none;margin-bottom:12px;padding:10px 14px;border-radius:10px;background:var(--remark-soft);border:1px solid var(--remark);color:var(--remark);font-size:12.5px;">
+        <div style="font-weight:700;margin-bottom:4px;">📌 หมายเหตุจากระบบ / Remark<span id="mRemarkCategory" class="mono" style="font-weight:400;font-size:11px;"></span></div>
+        <div id="mRemarkText" style="font-weight:400;white-space:pre-wrap;"></div>
+      </div>
+      <div class="mkpis" id="mKpis"></div>
+
+      <div class="chart-box">
+        <div class="ct">MNF รายวัน (30 วันล่าสุด) เทียบเกณฑ์ฐาน</div>
+        <canvas id="chartMnf"></canvas>
+        <div class="note">เส้นทึบ = MNF จริงรายวัน · เส้นประฟ้า = ค่าเฉลี่ยฐาน · เส้นประแดง = ค่าเฉลี่ยฐาน + 2SD (จุดตัดที่คงอยู่ต่อเนื่องหลายวัน คือสัญญาณรั่วที่น่าเชื่อถือ)</div>
+      </div>
+
+      <!--<div class="chart-box">
+        <div class="ct">CUSUM — การสะสมของส่วนเบี่ยงเบนจากฐาน <span id="mkBadge" class="mono" style="font-size:11px;font-weight:400;"></span></div>
+        <canvas id="chartCusum"></canvas>
+        <div class="note" id="cusumNote"></div>
+      </div>-->
+
+      <div class="chart-box">
+        <div class="ct">รูปแบบการไหลรายวัน (ราย 15 นาที) — ล่าสุด เทียบช่วงปกติ</div>
+        <canvas id="chartHourly"></canvas>
+        <div class="note" id="hourlyNote">แถบเทา = ช่วง flow ปกติ (min–max ย้อนหลัง) · เส้นฟ้า = วันล่าสุด · ความละเอียด 15 นาที/จุด (96 จุด/วัน) ตามข้อมูล RTU</div>
+      </div>
+
+      <div class="chart-box">
+        <div class="ct">แรงดันน้ำรายวัน (ราย 15 นาที) — ล่าสุด เทียบช่วงปกติ</div>
+        <canvas id="chartPressure"></canvas>
+        <div class="note" id="pressureNote">ใช้ยืนยันร่วมกับ flow สูง: ถ้าแรงดันตกพร้อมกับ flow เพิ่มขึ้นอย่างต่อเนื่อง = สัญญาณท่อแตกที่น่าเชื่อถือกว่าดู flow อย่างเดียว</div>
+      </div>
+    </div>
+
+    <div id="tabJob" class="mtab-panel">
+      <div class="job-log-note" id="jobModeNote">⚠️ ยังไม่ได้ตั้งค่า Apps Script URL (<code class="mono">JOB_API_URL</code>) — ตอนนี้ทำงานใน <b>โหมดจำลอง</b>: บันทึกไว้ในหน่วยความจำเบราว์เซอร์ชั่วคราวเท่านั้น (หายเมื่อรีเฟรชหน้า ไม่ถูกแชร์กับผู้ใช้อื่น) ดูวิธีตั้งค่าใน <code class="mono">Code.gs</code> ที่แนบมา</div>
+
+      <div class="job-form">
+        <div class="job-form-grid">
+          <div class="job-field">
+            <label for="jobAssignee">ผู้รับผิดชอบ / ทีมงาน</label>
+            <select id="jobAssignee"><option value="">— เลือก —</option></select>
+          </div>
+          <div class="job-field">
+            <label for="jobStatus">สถานะงาน</label>
+            <select id="jobStatus"><option value="">— เลือก —</option></select>
+          </div>
+          <div class="job-field">
+            <label for="jobStep">ขั้นตอนที่ดำเนินการ</label>
+            <select id="jobStep"><option value="">— เลือก —</option></select>
+          </div>
+        </div>
+        <div class="job-field" style="margin-bottom:12px;">
+          <label for="jobRemark">รายละเอียด / ผลการดำเนินงาน</label>
+          <textarea id="jobRemark" placeholder="บันทึกรายละเอียดการตรวจสอบ/ซ่อมแซม..."></textarea>
+        </div>
+        <div class="job-submit-row">
+          <span class="job-spinner" id="jobSubmitSpinner"></span>
+          <button type="button" class="job-submit-btn" id="jobSubmitBtn" onclick="submitJobLog()">
+            <span id="jobSubmitBtnLabel">บันทึกและอัปเดตข้อมูล</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="section-title" style="margin:0 0 10px;"><h2 style="font-size:14px;">ประวัติการบันทึกงาน (Audit Log)</h2><div class="line"></div></div>
+      <table class="job-log-table">
+        <thead><tr>
+          <th>วัน-เวลา</th>
+          <th>ผู้ดำเนินการ</th>
+          <th>สถานะ</th>
+          <th>ขั้นตอน</th>
+          <th>รายละเอียด</th>
+        </tr></thead>
+        <tbody id="jobLogBody"></tbody>
+      </table>
+      <div class="job-log-empty" id="jobLogEmpty" style="display:none;">ยังไม่มีประวัติงานสำหรับ RTU นี้</div>
+    </div>
+  </div>
+</div>
+
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script>
+if (typeof Chart !== 'undefined') {
+  Chart.defaults.font.family = "'Sarabun','Segoe UI',sans-serif";
+}
+
+/* ---------------------------------------------------------------------
+   CONFIG
+   3 ไฟล์นี้มาจาก prepare_dma_csv.py ทั้งหมด — HTML แค่โหลดมาวาดกราฟ ไม่คำนวณเอง
+   (ยกเว้น "โหมดจำลอง" ที่ใช้เมื่อหาไฟล์จริงไม่เจอ ซึ่งยังคำนวณฝั่ง JS อยู่เพื่อให้เดโมได้ในตัว)
+--------------------------------------------------------------------- */
+const FLOW_CSV_URL    = '{{ url_for("static", filename="data/flow_log.csv") }}';           // ข้อมูลดิบรายชั่วโมง (long format)
+const SERIES_CSV_URL  = '{{ url_for("static", filename="data/dma_daily_series.csv") }}';   // MNF / daily total / CUSUM รายวัน
+const SUMMARY_CSV_URL = '{{ url_for("static", filename="data/dma_status_summary.csv") }}'; // สถานะล่าสุดต่อ DMA (คำนวณไว้แล้วจาก Python)
+const IGNORE_CSV_URL  = '{{ url_for("static", filename="data/rtu_ignore.csv") }}';         // รายชื่อ RTU ที่ไม่ต้องการแสดงใน dashboard (optional,
+                                                    // ไม่มีไฟล์นี้ = ไม่ซ่อนอะไรเลย) แก้ไขผ่าน Excel ได้เลย
+                                                    // ต้องมีคอลัมน์ rtu_id เป็นอย่างน้อย (ดูตัวอย่างในไฟล์ template)
+const REMARK_SHEET_ID  = '1s18pk_eUVLAIdkAX3I3KLOF1VDmAZEin2xcqygbHzRs';   // Google Sheet: หมายเหตุต่อ RTU (แบบเดิม)
+const REMARK_SHEET_GID = '0';
+const REMARK_CSV_URL = `https://docs.google.com/spreadsheets/d/${REMARK_SHEET_ID}/export?format=csv&gid=${REMARK_SHEET_GID}`;
+// ⚠️ ชุดค่าคงที่ REMARK_* / REMARK_CSV_URL ด้านบนนี้ไม่ได้ถูกใช้กำหนด "RTU มีหมายเหตุ" แล้ว (superseded) —
+// ตอนนี้ badge 📌 remark / ตัวกรอง / ตัวนับ KPI ทั่วทั้งหน้า อ่านจาก job_log ที่ยังไม่ปิดงานแทน (ดู
+// loadRemarksMapFromJobLog() ด้านล่าง) เก็บค่าคงที่ชุดนี้ไว้เฉยๆ เผื่ออยากย้อนกลับไปใช้ชีทเดิมในอนาคต
+const REFRESH_MINUTES = 5;                         // ความถี่ในการ fetch ไฟล์ใหม่ (มีผลเฉพาะตอน AUTO_REFRESH_ENABLED = true)
+const AUTO_REFRESH_ENABLED = true;                 // false = โหลดข้อมูลครั้งเดียวตอนเปิดหน้า ไม่ตั้ง setInterval รีเฟรชอัตโนมัติ
+const HISTORY_DAYS = 30;                           // จำนวนวันย้อนหลังที่ใช้แสดงผล (โหมดจำลองเท่านั้น)
+
+/* ---------------------------------------------------------------------
+   JOB MANAGEMENT (ติดตามงานซ่อม) — เชื่อมต่อ Google Sheets ผ่าน Apps Script Web App
+   ---------------------------------------------------------------------
+   ⚠️ สำคัญด้านความปลอดภัย: ห้ามฝัง service_account.json หรือ credential ใดๆ ไว้ใน
+   ไฟล์ HTML/JS ฝั่งเบราว์เซอร์นี้เด็ดขาด เพราะใครก็ตามที่เปิดดู "View Source" จะเห็นและ
+   นำ credential ไปใช้เขียน/ลบข้อมูลใน Google Sheet ได้ทันที โค้ดชุดนี้จึงเรียกผ่าน
+   Google Apps Script Web App (ผูกกับสิทธิ์เจ้าของชีทโดยตรง ไม่ต้องมีไฟล์ credential แยก)
+   แทน — ดูวิธี deploy และโค้ดฝั่ง backend ทั้งหมดในไฟล์ Code.gs ที่แนบมาให้แยกต่างหาก
+--------------------------------------------------------------------- */
+const JOB_SHEET_ID   = '1s18pk_eUVLAIdkAX3I3KLOF1VDmAZEin2xcqygbHzRs'; // Google Sheet เดียวกับ Remark (คนละแท็บ)
+const JOB_SHEET_NAME = 'job_log';
+const JOB_API_URL    = 'https://script.google.com/macros/s/AKfycbyDwcnc_RRAaeZ4VRTdSLqb-ROx-tyMQCw0wXjQZT2Euajmi7DjwTRFOG2BTqgoFBBQJA/exec';
+                              // Apps Script Web App ที่ deploy แล้ว — ใช้เชื่อมต่อ job_log จริงบน Google Sheets
+                              // (ปล่อยว่างไว้ '' = กลับไปทำงานโหมดจำลอง เก็บ log ในหน่วยความจำเบราว์เซอร์ชั่วคราวแทน)
+
+const ASSIGNEE_OPTIONS = ['ทีม สปน. สาขา','ทีม ฝจส.','ทีม บริหารข้อมูล'];
+const JOBSTATUS_OPTIONS = ['อยู่ระหว่างดำเนินการ','ดำเนินการแล้ว','ปิดงาน'];
+const JOBSTEP_OPTIONS = ['ตรวจสอบ RTU','ตรวจสอบภาคสนาม','ยกหีบประตูน้ำ','Step Testing','เดินสำรวจ Pin-Point','ดำเนินการซ่อมท่อ','ตรวจสอบ MNF หลังซ่อม'];
+
+/* ---------------------------------------------------------------------
+   DATA LAYER (fallback synthetic generator — โหมดจำลองเมื่อไม่พบไฟล์ CSV จริง)
+   หมายเหตุ: analyze()/mannKendall()/cusum() ด้านล่างนี้ใช้เฉพาะตอน "ไม่พบไฟล์จริง" เท่านั้น
+   เมื่อโหลดข้อมูลจริงจาก 3 ไฟล์ CSV สำเร็จ จะข้ามฟังก์ชันเหล่านี้ไปเลย
+   dma.hourly = Array(30) ของ Array(24) ค่า flow (m3/hr)
+--------------------------------------------------------------------- */
+function seededRng(seed){
+  let s = seed;
+  return function(){ s = (s*9301+49297)%233280; return s/233280; };
+}
+const DIURNAL = [.55,.45,.35,.32,.34,.45,.65,.95,1.15,1.05,.9,.85,.9,.85,.8,.8,.85,.95,1.1,1.2,1.15,.95,.8,.65];
+const NIGHT_HOURS = [2,3,4];
+const DAYS = 30;
+
+const DMA_DEFS = [
+  {code:'DMA-01', name:'ราชดำริ',   base:78,  seed:11, anomaly:null},
+  {code:'DMA-02', name:'พระราม 4',  base:95,  seed:23, anomaly:null},
+  {code:'DMA-03', name:'เจริญกรุง', base:52,  seed:37, anomaly:{type:'gradual', startDay:15, maxExtra:13}},
+  {code:'DMA-04', name:'สุขุมวิท',  base:110, seed:41, anomaly:null},
+  {code:'DMA-05', name:'สีลม',      base:64,  seed:53, anomaly:null},
+  {code:'DMA-06', name:'ลาดพร้าว',  base:88,  seed:59, anomaly:{type:'step', startDay:20, extra:19}},
+  {code:'DMA-07', name:'บางนา',     base:70,  seed:61, anomaly:null},
+  {code:'DMA-08', name:'ปทุมวัน',   base:58,  seed:67, anomaly:{type:'spike', day:18, extra:34}},
+  {code:'DMA-09', name:'อ่อนนุช',   base:66,  seed:71, anomaly:{type:'step', startDay:25, extra:11}},
+  {code:'DMA-10', name:'ทองหล่อ',   base:82,  seed:79, anomaly:null},
+];
+
+// ฟังก์ชันอ่านเวลาแบบ Local Time ตรงๆ ไม่ผ่าน UTC
+function parseLocalDate(dateStr) {
+  if (!dateStr) return new Date();
+  
+  // ตัดตัว T หรือ Z ออกหากมี
+  const cleanStr = String(dateStr).replace('T', ' ').replace('Z', '').trim();
+  const [datePart, timePart] = cleanStr.split(' ');
+  const [yyyy, mm, dd] = datePart.split('-').map(Number);
+  const [hh, min, ss] = (timePart || '00:00:00').split(':').map(Number);
+  
+  // สร้าง Date โดยอิงเวลาเครื่องโดยตรง (เดือนใน JS เริ่มจาก 0 จึงต้อง mm - 1)
+  return new Date(yyyy, mm - 1, dd, hh, min, ss || 0);
+}
+
+function generateData(){
+  return DMA_DEFS.map(def=>{
+    const rng = seededRng(def.seed);
+    const hourly = [];
+    for(let d=0; d<DAYS; d++){
+      const dow = d % 7;
+      const weekendFactor = (dow===0||dow===6) ? 0.9 : 1.0;
+      const dayFlows = [];
+      for(let h=0; h<24; h++){
+        let extra = 0;
+        const a = def.anomaly;
+        if(a){
+          if(a.type==='step' && d>=a.startDay) extra = a.extra;
+          if(a.type==='gradual' && d>=a.startDay){
+            const prog = Math.min(1,(d-a.startDay)/(DAYS-a.startDay));
+            extra = a.maxExtra*prog;
+          }
+          if(a.type==='spike' && d===a.day) extra = a.extra;
+        }
+        const noise = (rng()-0.5)*def.base*0.06;
+        const val = def.base*DIURNAL[h]*weekendFactor + extra + noise;
+        dayFlows.push(Math.max(2, val));
+      }
+      hourly.push(dayFlows);
+    }
+    // โหมดจำลอง: สร้างแรงดันคร่าวๆ (ลดลงเมื่อ flow สูง) แค่ให้กราฟ/โครงสร้างไม่พัง ไม่ใช่โมเดลจริง
+    const pressure = hourly.map(dayFlows => dayFlows.map(v => Math.max(0.3, 3.0 - (v/def.base-1)*0.6)));
+    return {...def, hourly:{flow:hourly, pressure}};
+  });
+}
+
+function mnfOf(dayFlows){
+  return NIGHT_HOURS.reduce((s,h)=>s+dayFlows[h],0)/NIGHT_HOURS.length;
+}
+function dailyTotal(dayFlows){ return dayFlows.reduce((s,v)=>s+v,0); }
+
+/* ---------------------------------------------------------------------
+   Mann-Kendall trend test — ตรวจว่าแนวโน้ม "ขึ้นต่อเนื่อง" มีนัยสำคัญทางสถิติ
+   หรือแค่ความผันผวนปกติ (ไม่ต้องสมมติการกระจายแบบปกติ ทนต่อ noise/outlier)
+--------------------------------------------------------------------- */
+function mannKendall(series){
+  const n = series.length;
+  if(n<4) return {S:0, Z:0, trend:'ข้อมูลน้อยเกินไป', significant:false};
+  let S = 0;
+  for(let i=0;i<n-1;i++){
+    for(let j=i+1;j<n;j++){
+      S += Math.sign(series[j]-series[i]);
+    }
+  }
+  const varS = n*(n-1)*(2*n+5)/18; // (ไม่ปรับ tie-correction เพื่อความง่าย เหมาะกับข้อมูล flow ต่อเนื่องที่ไม่ค่อยซ้ำกันเป๊ะ)
+  const Z = S>0 ? (S-1)/Math.sqrt(varS) : (S<0 ? (S+1)/Math.sqrt(varS) : 0);
+  const significant = Math.abs(Z) >= 1.645; // one-sided 95%
+  let trend = 'คงที่';
+  if(significant) trend = Z>0 ? 'เพิ่มขึ้นต่อเนื่อง (มีนัยสำคัญ)' : 'ลดลงต่อเนื่อง (มีนัยสำคัญ)';
+  else trend = Z>0 ? 'มีแนวโน้มเพิ่มขึ้นเล็กน้อย (ยังไม่ชัดเจนพอ)' : 'ไม่มีแนวโน้มชัดเจน';
+  return {S, Z, trend, significant};
+}
+
+/* ---------------------------------------------------------------------
+   CUSUM (Cumulative Sum Control Chart) — จับจุดเริ่มของการขยับฐานแบบสะสม
+   ไวกว่า threshold นิ่งๆ โดยเฉพาะกับรั่วแบบค่อยๆ ไต่ (gradual creep)
+   k = allowance (ระยะที่ยอมให้ขยับได้โดยไม่นับ) , h = จุดตัดแจ้งเตือน
+--------------------------------------------------------------------- */
+function cusum(series, target, sd, k=0.5, h=4){
+  const kAbs = k*sd, hAbs = h*sd;
+  let cPlus = 0, cMinus = 0, breachIndex = -1;
+  const cPlusSeries = [], cMinusSeries = [];
+  series.forEach((v,i)=>{
+    cPlus = Math.max(0, cPlus + (v-target-kAbs));
+    cMinus = Math.min(0, cMinus + (v-target+kAbs));
+    cPlusSeries.push(cPlus);
+    cMinusSeries.push(cMinus);
+    if(breachIndex===-1 && (cPlus>hAbs || cMinus< -hAbs)) breachIndex = i;
+  });
+  return {cPlusSeries, cMinusSeries, hAbs, breachIndex, breached: breachIndex!==-1};
+}
+
+function analyze(dma){
+  const flowDays = dma.hourly.flow;
+  const mnfSeries = flowDays.map(mnfOf);
+  const totalSeries = flowDays.map(dailyTotal);
+  const baseWinLen = Math.max(3, Math.min(14, mnfSeries.length - 3)); // เผื่อข้อมูลจริงยังสะสมไม่ครบ 14 วัน
+  const baselineWindow = mnfSeries.slice(0, baseWinLen);
+  const mean = baselineWindow.reduce((a,b)=>a+b,0)/baselineWindow.length;
+  const variance = baselineWindow.reduce((a,b)=>a+(b-mean)**2,0)/baselineWindow.length;
+  const sd = Math.sqrt(variance) || mean*0.05; // กัน sd=0 กรณีข้อมูลนิ่งเป๊ะ (เช่น demo สั้นๆ)
+  const threshold = mean + 2*sd;
+  const watchThreshold = mean + 1*sd;
+
+  const last5 = mnfSeries.slice(-5);
+  const daysOverAlert = last5.filter(v=>v>threshold).length;
+  const daysOverWatch = last5.filter(v=>v>watchThreshold).length;
+
+  // เทรนด์: ทดสอบ 10 วันล่าสุด (หรือทั้งหมดถ้าน้อยกว่า)
+  const mk = mannKendall(mnfSeries.slice(-Math.min(10, mnfSeries.length)));
+
+  // CUSUM: รันบนข้อมูลหลัง baseline window เพื่อจับการขยับฐานที่เกิดขึ้นทีหลัง
+  const postBaseline = mnfSeries.slice(baseWinLen);
+  const cs = cusum(postBaseline, mean, sd);
+  const cusumRecentBreach = cs.breached && (postBaseline.length - cs.breachIndex) <= 7; // breach เกิดใน 7 วันหลังสุด = ยังเกี่ยวข้อง
+
+  let status = 'ok', dcase = 'C';
+  if(daysOverAlert>=3 || (cs.breached && cusumRecentBreach)){ status = 'alert'; dcase = 'A'; }
+  else if(daysOverWatch>=2 || mk.significant){ status = 'watch'; dcase = 'B'; }
+
+  const currentMnf = mnfSeries[mnfSeries.length-1];
+  const avgLast3 = (mnfSeries.slice(-3).reduce((a,b)=>a+b,0))/3;
+  const excessPerHour = Math.max(0, avgLast3-mean);
+  const estLossPerDay = excessPerHour*24;
+
+  return {mnfSeries, totalSeries, mean, sd, threshold, watchThreshold, status,
+    currentMnf, avgLast3, excessPerHour, estLossPerDay, mk, cs, baseWinLen, cusumRecentBreach,
+    case: dcase, caseReason: 'โหมดจำลอง (fallback) — ประเมินแบบย่อจาก MNF/CUSUM เท่านั้น ไม่มีข้อมูลแรงดันจริง',
+    cusumStepRapid: cs.breached && cs.breachIndex<=2, sustainedFlowBreach: false, sustainedRunIntervals: 0,
+    pressureDropConfirmed: false, hardThresholdBreached: false, rEffMedian: null, lossFactorMedian: null, proximityEstimate: null,
+    favadVolumeTotal: null, userType: 'RESIDENTIAL', pipeMaterial: 'PVC'};
+}
+
+
+
+/* ---------------------------------------------------------------------
+   CSV LOADERS
+   flow_log.csv          → ใช้แค่วาดกราฟ "รูปแบบรายชั่วโมง" (ต้องใช้ raw hourly)
+   dma_daily_series.csv  → mnfSeries / totalSeries / cusum_cplus (คำนวณไว้แล้วจาก Python)
+   dma_status_summary.csv→ สถานะ/threshold/mk/cusum ปัจจุบัน (คำนวณไว้แล้วจาก Python)
+--------------------------------------------------------------------- */
+/* ---------------------------------------------------------------------
+   CSV LOADERS
+   flow_log.csv          → ราย 15 นาที (Q + P) ใช้วาดกราฟ "รูปแบบรายวัน" ความละเอียดสูง
+   dma_daily_series.csv  → mnfSeries / totalSeries / cusum_cplus (คำนวณไว้แล้วจาก Python)
+   dma_status_summary.csv→ Case A/B/C, hydraulic metrics, threshold/mk/cusum (คำนวณไว้แล้วจาก Python)
+--------------------------------------------------------------------- */
+const INTERVALS_PER_DAY = 96; // ราย 15 นาที ตามสเปก RTU
+
+function hourlyFromFlowCsv(rows){
+  const byDma = {};
+  rows.forEach(r=>{
+    if(!r.dma_code || !r.timestamp || r.flow_m3hr===undefined || r.flow_m3hr===null || r.flow_m3hr==='') return;
+    
+    // 1. แยก วันที่ (YYYY-MM-DD) และ เวลา (HH:MM) จากข้อความโดยตรง (แก้ปัญหา Timezone +7 ชม.)
+    const str = String(r.timestamp).trim().replace('T', ' ');
+    const parts = str.split(' ');
+    if(parts.length < 2) return;
+    
+    const dayKey = parts[0]; // เช่น '2026-07-08'
+    const timeParts = parts[1].split(':');
+    const hh = parseInt(timeParts[0], 10);
+    const mm = parseInt(timeParts[1], 10);
+    if(isNaN(hh) || isNaN(mm)) return;
+    
+    // 2. คำนวณลำดับจุด 0..95 บนกราฟจาก HH:MM โดยตรง
+    const idx = hh * 4 + Math.floor(mm / 15);
+    if(idx < 0 || idx >= INTERVALS_PER_DAY) return;
+
+    if(!byDma[r.dma_code]) byDma[r.dma_code] = {q:{}, p:{}};
+    if(!byDma[r.dma_code].q[dayKey]){
+      byDma[r.dma_code].q[dayKey] = new Array(INTERVALS_PER_DAY).fill(null);
+      byDma[r.dma_code].p[dayKey] = new Array(INTERVALS_PER_DAY).fill(null);
+    }
+    byDma[r.dma_code].q[dayKey][idx] = Number(r.flow_m3hr);
+    if(r.pressure_bar!==undefined && r.pressure_bar!=='') byDma[r.dma_code].p[dayKey][idx] = Number(r.pressure_bar);
+  });
+
+  // ส่วนจัดการเติมค่าว่าง (Gaps) คงเดิม
+  const fillGaps = arr => {
+    for(let i=0;i<arr.length;i++){
+      if(arr[i]===null){
+        const prev = arr[(i-1+arr.length)%arr.length], next = arr[(i+1)%arr.length];
+        arr[i] = (prev!==null && next!==null) ? (prev+next)/2 : (prev ?? next ?? 0);
+      }
+    }
+    return arr;
+  };
+
+  // ส่วนส่งออกข้อมูลตามประวัติวัน คงเดิม
+  const out = {};
+  Object.entries(byDma).forEach(([code, d])=>{
+    const dayKeys = Object.keys(d.q).sort().slice(-HISTORY_DAYS);
+    out[code] = {
+      flow: dayKeys.map(k=>fillGaps(d.q[k])),
+      pressure: dayKeys.map(k=>fillGaps(d.p[k])),
+    };
+  });
+  return out;
+}
+
+function seriesFromCsv(rows){
+  const byDma = {};
+  rows.forEach(r=>{
+    if(!r.dma_code || !r.date) return;
+    if(!byDma[r.dma_code]) byDma[r.dma_code] = [];
+    byDma[r.dma_code].push(r);
+  });
+  const out = {};
+  Object.entries(byDma).forEach(([code, list])=>{
+    list.sort((a,b)=> a.date < b.date ? -1 : 1);
+    out[code] = {
+      mnfSeries: list.map(r=>Number(r.mnf)),
+      totalSeries: list.map(r=>Number(r.daily_total)),
+      cPlusSeries: list.filter(r=>r.cusum_cplus!=='' && r.cusum_cplus!=null).map(r=>Number(r.cusum_cplus)),
+    };
+  });
+  return out;
+}
+
+const CASE_META = {
+  A: {label:'ท่อแตกรั่ว (Pipe Burst)', icon:'🔴', cls:'alert'},
+  B: {label:'รั่วซึมสะสม (Developing Leak)', icon:'🟠', cls:'watch'},
+  C: {label:'ไม่พบ MNF ผิดปกติเชิงสถิติ', icon:'🟡', cls:'ok'},
+  N: {label:'ไม่มีข้อมูล (RTU เสีย/สื่อสารขาด)', icon:'⚫', cls:'no_data'},
+};
+
+function summaryFromCsv(rows){
+  const out = {};
+  rows.forEach(r=>{
+    if(!r.dma_code) return;
+    out[r.dma_code] = {
+      name: r.dma_name || r.dma_code,
+      status: r.status, case: r.case, caseReason: r.case_reason,
+      noDataDays: (r.no_data_days!==undefined && r.no_data_days!=='') ? Number(r.no_data_days) : null,
+      mnfStart: r.mnf_start || null, mnfEnd: r.mnf_end || null,
+      currentMnf: Number(r.current_mnf),
+      mean: Number(r.baseline_mean),
+      sd: Number(r.baseline_sd),
+      threshold: Number(r.threshold),
+      watchThreshold: Number(r.watch_threshold),
+      excessPerHour: Number(r.excess_per_hour),
+      estLossPerDay: Number(r.est_loss_per_day),
+      baseWinLen: Number(r.base_win_len),
+      mk: {
+        Z: Number(r.mk_z), trend: r.mk_trend,
+        significant: String(r.mk_significant).toLowerCase()==='true',
+      },
+      cusumH: Number(r.cusum_h),
+      cusumBreached: String(r.cusum_breached).toLowerCase()==='true',
+      cusumRecentBreach: String(r.cusum_recent_breach).toLowerCase()==='true',
+      cusumStepRapid: String(r.cusum_step_rapid).toLowerCase()==='true',
+      sustainedFlowBreach: String(r.sustained_flow_breach).toLowerCase()==='true',
+      sustainedRunIntervals: Number(r.sustained_run_intervals||0),
+      pressureDropConfirmed: String(r.pressure_drop_confirmed).toLowerCase()==='true',
+      hardThresholdBreached: String(r.hard_threshold_breached).toLowerCase()==='true',
+      rEffMedian: r.r_eff_median!==''? Number(r.r_eff_median): null,
+      lossFactorMedian: r.loss_factor_median!==''? Number(r.loss_factor_median): null,
+      proximityEstimate: r.proximity_estimate || null,
+      favadVolumeTotal: Number(r.favad_volume_total||0),
+      userType: r.user_type, pipeMaterial: r.pipe_material, favadN1: r.favad_n1!==undefined? Number(r.favad_n1): null,
+    };
+  });
+  return out;
+}
+
+function loadCsv(url){
+  return new Promise((resolve,reject)=>{
+    Papa.parse(url, {
+      download:true, header:true, dynamicTyping:false, skipEmptyLines:true,
+      complete: res => {
+        if(!res.data || !res.data.length) return reject(new Error(`${url} ว่างเปล่าหรืออ่านไม่ได้`));
+        resolve(res.data);
+      },
+      error: err => reject(err),
+    });
+  });
+}
+
+function loadIgnoreList(url){
+  // ไฟล์นี้เป็น optional โดยเจตนา — ไม่มีไฟล์/อ่านไม่ได้/ว่างเปล่า = ไม่ ignore อะไรเลย
+  // (ไม่ throw ต่อ ไม่ทำให้ทั้งหน้าพังเหมือน loadCsv ของ 3 ไฟล์หลัก)
+  return loadCsv(url)
+    .then(rows => new Set(rows.map(r => (r.rtu_id||'').trim()).filter(Boolean)))
+    .catch(() => new Set());
+}
+
+function loadRemarksMap(url){
+  // ⚠️ ฟังก์ชันนี้ไม่ได้ถูกเรียกใช้แล้ว (superseded โดย loadRemarksMapFromJobLog ด้านล่าง) — เก็บไว้เผื่อ
+  // อยากย้อนกลับไปอิงชีท remark เดิมแทน job_log ในอนาคต ไม่ได้ลบทิ้งเพื่อไม่ให้เสียของเดิม
+  // Google Sheet หมายเหตุต่อ RTU — เป็น optional โดยเจตนาเหมือน loadIgnoreList: fetch ไม่ผ่าน/ชีทว่าง/
+  // ไม่มีคอลัมน์ที่ต้องการ = ไม่มี DM ไหน "มีหมายเหตุ" เลย ไม่ throw ต่อ ไม่ทำให้ทั้งหน้าพัง
+  // เลเยอร์นี้เป็น UI display เท่านั้น ไม่แตะการคำนวณ backend ใดๆ
+  return loadCsv(url)
+    .then(rows => {
+      const map = {};
+      rows.forEach(r => {
+        const code = (r.RTU_ID || r.DM_ID || r.rtu_id || r.dm_id || '').toString().trim();
+        if(!code) return;
+        const text = (r.Remark_Text || r.remark_text || r.Remark || r.remark || '').toString().trim();
+        const category = (r.Category || r.category || '').toString().trim();
+        if(text || category) map[code] = {text, category};
+      });
+      return map;
+    })
+    .catch(() => ({}));
+}
+
+async function fetchAllJobLogs(){
+  // ดึง job_log "ทุกแถวทุก RTU" (ไม่ส่ง rtuId) มาใช้กำหนดว่า RTU ไหน "มีหมายเหตุ" ทั่วทั้งหน้า
+  // (ต่างจาก fetchJobLogs ที่ดึงเฉพาะ RTU เดียวไว้ใช้ในตาราง audit log ของ modal)
+  if(!JOB_API_URL){
+    return Object.values(jobLogMemoryStore).flat(); // โหมดจำลอง — รวม log ทุก RTU ที่มีใน memory ตอนนี้
+  }
+  try{
+    const res = await fetch(`${JOB_API_URL}?action=list`);
+    if(!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json();
+    if(json && json.ok === false) throw new Error(json.error || 'โหลด job_log ทั้งหมดไม่สำเร็จ');
+    return Array.isArray(json) ? json : (json.data || []);
+  }catch(err){
+    console.warn('โหลด job_log ทั้งหมดไม่สำเร็จ (ใช้กำหนด "มีหมายเหตุ" ทั่วทั้งหน้า):', err.message);
+    return [];
+  }
+}
+
+function loadRemarksMapFromJobLog(){
+  // "RTU มีหมายเหตุ" ทั่วทั้งหน้า (badge 📌 บนการ์ด/ตัวกรอง/ตัวนับ KPI) เปลี่ยนมาอิงจาก job_log แทนชีท
+  // remark เดิม: ดูสถานะของ "รายการล่าสุด" (ตาม timestamp) ต่อ RTU — ถ้ายังไม่ใช่ 'ปิดงาน' ถือว่า RTU นั้น
+  // "มีหมายเหตุ" (ยังมีงานค้าง/กำลังตรวจสอบอยู่) เป็น optional โดยเจตนาเช่นเดิม: fetch ไม่ผ่าน/ไม่มี log เลย
+  // = ไม่มี RTU ไหน "มีหมายเหตุ" เลย ไม่ throw ต่อ ไม่ทำให้ทั้งหน้าพัง
+  return fetchAllJobLogs().then(rows => {
+    const latestByRtu = {};
+    rows.forEach(r => {
+      const code = (r.rtuId || '').toString().trim();
+      if(!code) return;
+      const ts = new Date(r.timestamp).getTime();
+      const tsSafe = isNaN(ts) ? 0 : ts;
+      if(!latestByRtu[code] || tsSafe > latestByRtu[code]._ts){
+        latestByRtu[code] = { ...r, _ts: tsSafe };
+      }
+    });
+    const map = {};
+    Object.entries(latestByRtu).forEach(([code, row]) => {
+      if(row.status !== 'ปิดงาน'){   // ยังไม่ปิดงาน = ยังถือว่า "มีหมายเหตุ"
+        const metaParts = [row.status, row.jobStep].filter(Boolean);
+        map[code] = { text: row.remark || '', category: metaParts.join(' · ') };
+      }
+    });
+    return map;
+  }).catch(() => ({}));
+}
+
+/* ---------------------------------------------------------------------
+   RENDER PIPELINE
+--------------------------------------------------------------------- */
+let data = [];
+let pipelineGeneratedAt = null;   // เวลาที่ prepare_dma_csv.py รันเสร็จจริง (จาก generated_at ใน dma_status_summary.csv)
+                                    // ไม่ใช่เวลาที่ browser เปิดหน้า — null = ไม่มีคอลัมน์นี้ (ไฟล์เก่า/ยังไม่ได้อัปเดต pipeline)
+const STATUS_LABEL = {alert:'แจ้งเตือน', watch:'เฝ้าระวัง', ok:'ปกติ', no_data:'ไม่มีข้อมูล', remark:'มีหมายเหตุ'};
+
+function dStatus(d){
+  // "สถานะที่ใช้แสดงผล/นับ KPI" — ถ้า DM มีหมายเหตุ (มีงานใน job_log ที่ยังไม่ปิดงาน) ให้ถือเป็นกลุ่ม
+  // "มีหมายเหตุ" แทนสถานะเดิม (แจ้งเตือน/เฝ้าระวัง/ปกติ) เฉพาะตอนจัดกลุ่ม/กรอง/เรียงบนหน้าเว็บเท่านั้น —
+  // ไม่กระทบ d.a.status/case ที่มาจาก Python เลย (ยังคง badge สถานะเดิมโชว์คู่กับ badge หมายเหตุตามปกติ)
+  return d.a.hasRemark ? 'remark' : d.a.status;
+}
+
+const STATUS_ORDER = {alert:0, watch:1, ok:2, remark:3, no_data:4};
+
+function severityThenCodeCmp(a, b){
+  // ใช้เป็นค่าเริ่มต้นตอนกดปุ่มกรองภาค — เรียงตามความรุนแรงก่อน (แจ้งเตือน>เฝ้าระวัง>ปกติ>มีหมายเหตุ>ไม่มีข้อมูล)
+  // แล้วเรียงตามรหัส DM จากน้อยไปมากเป็นตัวรองภายในกลุ่มความรุนแรงเดียวกัน
+  return STATUS_ORDER[dStatus(a)] - STATUS_ORDER[dStatus(b)] || a.code.localeCompare(b.code);
+}
+
+function displayExcess(d){
+  // ค่า "ส่วนต่าง" ที่ใช้เรียงต้องตรงกับที่โชว์บนตาราง — แถวสถานะ "ปกติ" โชว์ "—" (ไม่ใช่ตัวเลขจริง) ทั้งที่
+  // Python คำนวณ excessPerHour ไว้ให้ทุก DMA เสมอ (ไม่ใช่แค่ตัวที่ผิดปกติ) ถ้าเอาเลขจริงที่ซ่อนอยู่มาเรียง
+  // จะดูเหมือนเรียงผิด (แถว "—" แทรกกลางแถวที่มีตัวเลขแบบสุ่มๆ) จึงต้องตีเป็น 0 ให้ตรงกับสิ่งที่ตาเห็น
+  return d.a.status==='ok' ? 0 : d.a.excessPerHour;
+}
+
+function displayLoss(d){
+  return d.a.status==='ok' ? 0 : d.a.estLossPerDay;
+}
+
+const HOURLY_NOTE_DEFAULT = 'แถบเทา = ช่วง flow ปกติ (min–max ย้อนหลัง) · เส้นฟ้า = วันล่าสุด · ความละเอียด 15 นาที/จุด (96 จุด/วัน) ตามข้อมูล RTU';
+const HOURLY_NOTE_EMPTY = 'ไม่มีข้อมูลราย 15 นาทีสำหรับจุดวัด RTU นี้ — สถานะ "ปกติ" จึงไม่ถูกส่งเข้า flow_log.csv เพื่อลดขนาดไฟล์ (ดูกราฟรายวันได้เฉพาะ DMA ที่อยู่ในสถานะเฝ้าระวัง/แจ้งเตือน — MNF/CUSUM ด้านบนยังใช้งานได้ตามปกติ)';
+const PRESSURE_NOTE_DEFAULT = 'ใช้ยืนยันร่วมกับ flow สูง: ถ้าแรงดันตกพร้อมกับ flow เพิ่มขึ้นอย่างต่อเนื่อง = สัญญาณท่อแตกที่น่าเชื่อถือกว่าดู flow อย่างเดียว';
+const PRESSURE_NOTE_EMPTY = 'ไม่มีข้อมูลแรงดันราย 15 นาทีสำหรับจุดวัด RTUนี้ (เหตุผลเดียวกับกราฟการไหลด้านบน)';
+
+function renderAll(){
+  renderRegionBar();
+  renderKpis();
+  renderPriority();
+  renderCards();
+  document.getElementById('ts').textContent = pipelineGeneratedAt
+    ? parseLocalDate(pipelineGeneratedAt).toLocaleString('th-TH',{dateStyle:'medium',timeStyle:'short'}) + ' (ประมวลผลจริง)'
+    : parseLocalDate().toLocaleString('th-TH',{dateStyle:'medium',timeStyle:'short'}) + ' (เวลาที่หน้านี้โหลด — ยังไม่มี generated_at จาก pipeline)';
+}
+
+async function refreshFromCsv(isFirstLoad){
+  document.getElementById('csvPathLabel').textContent = `${FLOW_CSV_URL}, ${SERIES_CSV_URL}, ${SUMMARY_CSV_URL}`;
+  try{
+    const [flowRows, seriesRows, summaryRows, ignoreSet, remarksByDma] = await Promise.all([
+      loadCsv(FLOW_CSV_URL), loadCsv(SERIES_CSV_URL), loadCsv(SUMMARY_CSV_URL), loadIgnoreList(IGNORE_CSV_URL),
+      loadRemarksMapFromJobLog(),   // "มีหมายเหตุ" มาจาก job_log ที่ยังไม่ปิดงานแล้ว (เดิมมาจากชีท remark แยกต่างหาก)
+    ]);
+    const hourlyByDma = hourlyFromFlowCsv(flowRows);
+    const seriesByDma = seriesFromCsv(seriesRows);
+    const summaryByDma = summaryFromCsv(summaryRows);
+    pipelineGeneratedAt = (summaryRows[0] && summaryRows[0].generated_at) ? summaryRows[0].generated_at : null;
+
+    const codes = Object.keys(summaryByDma).filter(code => !ignoreSet.has(code));
+    if(!codes.length) throw new Error('อ่านไฟล์ได้แต่ไม่พบจุดวัด RTU ที่ใช้ได้ใน dma_status_summary.csv');
+
+    data = codes.map(code=>{
+      const s = summaryByDma[code], sr = seriesByDma[code] || {mnfSeries:[], totalSeries:[], cPlusSeries:[]};
+      const breachIdx = sr.cPlusSeries.findIndex(v=>v>s.cusumH);
+      const remark = remarksByDma[code] || null;   // UI display เท่านั้น — ไม่กระทบสถิติ/สถานะที่คำนวณจาก Python เลย
+      return {
+        code, name: s.name, hourly: hourlyByDma[code] || {flow:[], pressure:[]},
+        a: {
+          mnfSeries: sr.mnfSeries, totalSeries: sr.totalSeries,
+          mean: s.mean, sd: s.sd, threshold: s.threshold, watchThreshold: s.watchThreshold,
+          status: s.status, case: s.case, caseReason: s.caseReason, currentMnf: s.currentMnf,
+          noDataDays: s.noDataDays, mnfStart: s.mnfStart, mnfEnd: s.mnfEnd,
+          excessPerHour: s.excessPerHour, estLossPerDay: s.estLossPerDay, baseWinLen: s.baseWinLen,
+          mk: s.mk,
+          cs: {cPlusSeries: sr.cPlusSeries, hAbs: s.cusumH, breached: s.cusumBreached, breachIndex: breachIdx},
+          cusumRecentBreach: s.cusumRecentBreach, cusumStepRapid: s.cusumStepRapid,
+          sustainedFlowBreach: s.sustainedFlowBreach, sustainedRunIntervals: s.sustainedRunIntervals,
+          pressureDropConfirmed: s.pressureDropConfirmed, hardThresholdBreached: s.hardThresholdBreached,
+          rEffMedian: s.rEffMedian, lossFactorMedian: s.lossFactorMedian,
+          proximityEstimate: s.proximityEstimate, favadVolumeTotal: s.favadVolumeTotal,
+          userType: s.userType, pipeMaterial: s.pipeMaterial,
+          remark, hasRemark: !!remark,
+        },
+      };
+    });
+
+    document.getElementById('sourceLabel').textContent = AUTO_REFRESH_ENABLED
+      ? `CSV (คำนวณโดย Python) — รีเฟรชทุก ${REFRESH_MINUTES} นาที`
+      : `CSV (คำนวณโดย Python) — Auto-refresh ปิดอยู่ (ข้อมูล ณ ตอนโหลดหน้านี้)`;
+    document.getElementById('csvPathLabel').textContent = ignoreSet.size
+      ? `${FLOW_CSV_URL}, ${SERIES_CSV_URL}, ${SUMMARY_CSV_URL} · ซ่อนอยู่ ${ignoreSet.size} RTU ตาม ${IGNORE_CSV_URL}`
+      : `${FLOW_CSV_URL}, ${SERIES_CSV_URL}, ${SUMMARY_CSV_URL}`;
+    document.getElementById('banner').style.display = 'none';
+    renderAll();
+  }catch(err){
+    if(isFirstLoad){
+      data = generateData().map(d=>({...d, a:analyze(d)}));
+      document.getElementById('sourceLabel').textContent = 'ข้อมูลจำลอง (Synthetic — fallback, คำนวณใน JS)';
+      document.getElementById('banner').innerHTML =
+        `⚠️ <div><b>ไม่พบ/อ่านไฟล์ CSV ไม่สำเร็จ</b> (${err.message}) — กำลังแสดง<b>ข้อมูลจำลอง</b>แทน
+         รันสคริปต์ <code class="mono">prepare_dma_csv.py</code> ก่อนเพื่อสร้างไฟล์ทั้ง 3 ไฟล์
+         แล้วเปิดผ่าน local server เช่น <code class="mono">python -m http.server</code> เพื่อให้ fetch อ่านไฟล์ในเครื่องได้
+         (เปิดไฟล์ .html ตรงๆ จาก disk เบราว์เซอร์จะบล็อกด้วยข้อจำกัด CORS)</div>`;
+      renderAll();
+    } else {
+      console.warn('รีเฟรช CSV ไม่สำเร็จ ใช้ข้อมูลชุดล่าสุดต่อไป:', err.message);
+    }
+  }
+}
+
+refreshFromCsv(true);
+if(AUTO_REFRESH_ENABLED){
+  setInterval(()=>refreshFromCsv(false), REFRESH_MINUTES*60*1000);
+}
+
+let activeStatusFilter = null;   // null = แสดงทุกสถานะ, ไม่ก็เป็น 'alert'/'watch'/'ok'/'no_data'/'remark'
+let searchQuery = '';            // ค้นหาจากรหัส/ชื่อ RTU — ทำงานร่วมกับ activeStatusFilter แบบ AND
+
+const REGION_GROUPS = {   // จับคู่ DM_ID/RTU_ID ด้วย prefix — แก้ list นี้ที่เดียว มีผลทั้งปุ่ม กรอง และนับการ์ด
+  'ทั้งหมด': [],
+  'ภาค 1': ['DM-05', 'DM-07', 'DM-13', 'DM-17'],
+  'ภาค 2': ['DM-03', 'DM-06', 'DM-12'],
+  'ภาค 3': ['DM-15', 'DM-16', 'DM-53', 'DM-55'],
+  'ภาค 4': ['DM-01', 'DM-02', 'DM-11', 'DM-14'],
+  'ภาค 5': ['DM-04', 'DM-54', 'DM-56'],
+};
+let activeRegion = 'ทั้งหมด';   // ค่าเริ่มต้น active ตามสเปก
+
+function matchesRegion(d){
+  const prefixes = REGION_GROUPS[activeRegion];
+  if(!prefixes || !prefixes.length) return true;   // "ทั้งหมด" = ไม่กรอง
+  return prefixes.some(p => d.code.startsWith(p));
+}
+
+function setRegion(region){
+  if(!(region in REGION_GROUPS)) return;
+  activeRegion = region;
+  prioritySort = {key: 'severity_code', dir: 1};   // กดกรองตามภาคแล้ว เรียงตามความรุนแรงก่อน แล้วตาม RTUน้อยไปมาก
+  renderRegionBar();
+  renderKpis();
+  renderCards();
+  renderPriority();
+}
+
+function renderRegionBar(){
+  document.getElementById('regionBar').innerHTML = Object.keys(REGION_GROUPS).map(region => `
+    <div class="region-pill ${activeRegion===region?'active':''}" onclick="setRegion('${region}')">${region}</div>
+  `).join('');
+}
+
+function setStatusFilter(status){
+  activeStatusFilter = (activeStatusFilter === status) ? null : status;   // กดซ้ำอันเดิม = ล้าง filter
+  renderKpis();
+  renderCards();
+  renderPriority();
+}
+
+function setSearchQuery(value){
+  searchQuery = (value || '').trim().toLowerCase();
+  document.getElementById('searchBox').classList.toggle('has-value', searchQuery.length>0);
+  renderCards();
+  renderPriority();
+}
+
+function clearSearchQuery(){
+  document.getElementById('rtuSearchInput').value = '';
+  setSearchQuery('');
+}
+
+function matchesFilters(d){
+  if(!matchesRegion(d)) return false;
+  if(activeStatusFilter && dStatus(d)!==activeStatusFilter) return false;
+  if(searchQuery && !(d.code.toLowerCase().includes(searchQuery) || (d.name||'').toLowerCase().includes(searchQuery))) return false;
+  return true;
+}
+
+function emptyFilterMessage(){
+  const parts = [];
+  if(activeRegion !== 'ทั้งหมด') parts.push(`เขต "${activeRegion}"`);
+  if(activeStatusFilter) parts.push(`สถานะ "${STATUS_LABEL[activeStatusFilter]}"`);
+  if(searchQuery) parts.push(`คำค้นหา "${searchQuery}"`);
+  return parts.length ? `ไม่พบ RTUที่ตรงกับ ${parts.join(' และ ')}` : 'ไม่มีข้อมูล DM';
+}
+
+function renderKpis(){
+  const regionData = data.filter(matchesRegion);
+  const remarkCount = regionData.filter(d=>d.a.hasRemark).length;
+  const alertCount = regionData.filter(d=>!d.a.hasRemark && d.a.status==='alert').length;
+  const watchCount = regionData.filter(d=>!d.a.hasRemark && d.a.status==='watch').length;
+  const okCount = regionData.length-alertCount-watchCount-remarkCount;
+  const totalLoss = regionData.reduce((s,d)=>s+ (d.a.status!=='ok' && d.a.status!=='no_data'? d.a.estLossPerDay:0),0);
+  const totalToday = regionData.reduce((s,d)=>s+(d.a.totalSeries[d.a.totalSeries.length-1]||0),0);
+
+  const kpis = [
+    {label:'RTU ที่ตรวจสอบ', val:regionData.length, cls:'', status:null},
+    {label:'สถานะแจ้งเตือน', val:alertCount, cls:'alert', status:'alert'},
+    {label:'สถานะเฝ้าระวัง', val:watchCount, cls:'watch', status:'watch'},
+    {label:'สถานะปกติ', val:okCount, cls:'ok', status:'ok'},
+    {label:'มีหมายเหตุ', val:remarkCount, cls:'remark', status:'remark'},
+    // {label:'ปริมาณจ่ายรวมวันนี้', val:Math.round(totalToday).toLocaleString(), unit:'m³', cls:''},
+    // {label:'สูญเสียประเมินรวม/วัน', val:Math.round(totalLoss).toLocaleString(), unit:'m³', cls: totalLoss>0?'alert':''},
+  ];
+  document.getElementById('kpis').innerHTML = kpis.map(k=>`
+    <div class="kpi ${k.cls} ${activeStatusFilter===k.status?'active':''}" onclick="setStatusFilter(${k.status===null?'null':`'${k.status}'`})" title="คลิกเพื่อกรองเฉพาะสถานะนี้ (คลิกซ้ำเพื่อล้าง)">
+      <div class="label">${k.label}</div>
+      <div class="val mono">${k.val}${k.unit?`<small>${k.unit}</small>`:''}</div>
+    </div>`).join('');
+  const filterNote = document.getElementById('statusFilterNote');
+  if(filterNote){
+    filterNote.style.display = activeStatusFilter ? '' : 'none';
+    filterNote.textContent = activeStatusFilter ? `🔍 กำลังกรองเฉพาะ "${STATUS_LABEL[activeStatusFilter]}" — คลิกการ์ดเดิมอีกครั้งเพื่อล้างตัวกรอง` : '';
+  }
+}
+
+function sparklinePath(series, w=200, h=36){
+  const min = Math.min(...series), max = Math.max(...series);
+  const range = (max-min)||1;
+  const pts = series.map((v,i)=> {
+    const x = (i/(series.length-1))*w;
+    const y = h - ((v-min)/range)*h;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  });
+  return pts.join(' ');
+}
+
+let prioritySort = {key: null, dir: 1};   // key=null = ค่าเริ่มต้น (เรียงตามความรุนแรง+ส่วนต่างเหมือนเดิม)
+
+function sortPriorityBy(key){
+  if(prioritySort.key === key){
+    prioritySort.dir *= -1;               // กดซ้ำคอลัมน์เดิม = สลับทิศ (มาก→น้อย / น้อย→มาก)
+  } else {
+    prioritySort.key = key;
+    prioritySort.dir = 1;
+  }
+  renderPriority();
+}
+
+function updateSortIndicators(){
+  document.querySelectorAll('th.sortable').forEach(th=>{
+    const ind = th.querySelector('.sort-ind');
+    if(!ind) return;
+    ind.textContent = (th.dataset.key===prioritySort.key) ? (prioritySort.dir>0 ? '▲':'▼') : '';
+  });
+}
+
+function renderPriority(){
+  const cmp = {
+    status: (a,b)=> STATUS_ORDER[dStatus(a)]-STATUS_ORDER[dStatus(b)] || (b.a.excessPerHour-a.a.excessPerHour),
+    severity_code: severityThenCodeCmp,
+    code: (a,b)=> a.code.localeCompare(b.code),
+    currentMnf: (a,b)=> a.a.currentMnf-b.a.currentMnf,
+    mean: (a,b)=> a.a.mean-b.a.mean,
+    excessPerHour: (a,b)=> displayExcess(a)-displayExcess(b),
+    estLossPerDay: (a,b)=> displayLoss(a)-displayLoss(b),
+  };
+
+  const filteredData = data.filter(matchesFilters);
+  const activeRows = filteredData.filter(d=>d.a.status!=='no_data');
+  const noDataRows = filteredData.filter(d=>d.a.status==='no_data');
+
+  if(prioritySort.key && cmp[prioritySort.key]){
+    activeRows.sort((a,b)=> prioritySort.dir * cmp[prioritySort.key](a,b));
+  } else {
+    activeRows.sort(cmp.status);
+  }
+  const sorted = activeRows.concat(noDataRows);
+  updateSortIndicators();
+
+  if(!sorted.length){
+    document.getElementById('priorityBody').innerHTML =
+      `<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-dim);">${emptyFilterMessage()}</td></tr>`;
+    return;
+  }
+
+  document.getElementById('priorityBody').innerHTML = sorted.map(d=>{
+    if(d.a.status==='no_data'){
+      const daysTxt = d.a.noDataDays!=null? `${d.a.noDataDays.toFixed(1)} วัน` : '—';
+      return `<tr onclick="openModal('${d.code}')">
+        <td><span class="badge no_data"><span class="bdot"></span>${CASE_META.N.icon} ${STATUS_LABEL.no_data}</span></td>
+        <td><b>${d.code}</b></td>
+        <td class="mono" colspan="4" style="color:var(--gray);">ไม่มีข้อมูลมา ${daysTxt} — สงสัย RTU เสีย/สื่อสารขาด</td>
+        <td></td>
+      </tr>`;
+    }
+    const spark = sparklinePath(d.a.mnfSeries.slice(-14),120,26);
+    const deltaClass = d.a.status==='ok' ? 'delta-flat' : 'delta-pos';
+    const deltaTxt = d.a.status==='ok' ? '—' : `+${d.a.excessPerHour.toFixed(1)} m³/hr`;
+    const lossTxt = d.a.status==='ok' ? '—' : `≈ ${Math.round(d.a.estLossPerDay)} m³/วัน`;
+    return `<tr onclick="openModal('${d.code}')">
+      <td><span class="badge ${d.a.status}"><span class="bdot"></span>${(CASE_META[d.a.case]||CASE_META.C).icon} ${(CASE_META[d.a.case]||CASE_META.C).label}</span>${d.a.hardThresholdBreached?' <span class="mono" style="font-size:10.5px;color:#e5484d;" title="เกิน Hard Flow Threshold ตรงๆ เตือนทันที">⚡hard</span>':''}${d.a.mk.significant?' <span class="mono" style="font-size:10.5px;color:#e8a33d;" title="Mann-Kendall: แนวโน้มเพิ่มขึ้นมีนัยสำคัญ">▲trend</span>':''}${d.a.cusumRecentBreach?' <span class="mono" style="font-size:10.5px;color:#e5484d;" title="CUSUM: ฐานการไหลขยับขึ้นถาวรในช่วงล่าสุด">⚑cusum</span>':''}${d.a.hasRemark?` <span class="mono" style="font-size:10.5px;color:var(--remark);" title="${(d.a.remark.text||d.a.remark.category||'').replace(/"/g,'&quot;')}">📌 remark</span>`:''}</td>
+      <td><b>${d.code}</b> <!--· ${d.name}--></td>
+      <td class="mono">${d.a.currentMnf.toFixed(1)} m³/hr</td>
+      <td class="mono">${d.a.mean.toFixed(1)} ± ${(2*d.a.sd).toFixed(1)}</td>
+      <td class="${deltaClass} mono">${deltaTxt}</td>
+      <td class="mono">${lossTxt}</td>
+      <td><svg viewBox="0 0 120 26" width="90" height="20"><polyline points="${spark}" fill="none" stroke="${d.a.status==='alert'?'#e5484d':d.a.status==='watch'?'#e8a33d':'#38bfc7'}" stroke-width="2"/></svg></td>
+    </tr>`;
+  }).join('');
+}
+
+function renderCards(){
+  const filteredData = data.filter(matchesFilters).sort(severityThenCodeCmp);
+  if(!filteredData.length){
+    document.getElementById('cardGrid').innerHTML = `<div style="grid-column:1/-1;padding:24px;text-align:center;color:var(--text-dim);">${emptyFilterMessage()}</div>`;
+    return;
+  }
+  document.getElementById('cardGrid').innerHTML = filteredData.map(d=>{
+    if(d.a.status==='no_data'){
+      const daysTxt = d.a.noDataDays!=null? `${d.a.noDataDays.toFixed(1)} วัน` : '—';
+      return `<div class="card" onclick="openModal('${d.code}')">
+        <div class="bar no_data"></div>
+        <div class="top">
+          <div><div class="name">${d.name}</div><div class="code">${d.code}</div></div>
+          <span class="badge no_data"><span class="bdot"></span>${CASE_META.N.icon} ${STATUS_LABEL.no_data}</span>
+        </div>
+        <div class="metrics">
+          <span style="color:var(--gray);">ไม่มีข้อมูลมา ${daysTxt}</span>
+        </div>
+        <div style="font-size:11px;color:var(--text-faint);margin-top:4px;">Night Flow ที่ตั้งไว้: ${d.a.mnfStart && d.a.mnfEnd ? `${d.a.mnfStart}–${d.a.mnfEnd}` : '—'}</div>
+      </div>`;
+    }
+    const spark = sparklinePath(d.a.totalSeries.slice(-14),200,36);
+    const color = d.a.status==='alert'?'#e5484d':d.a.status==='watch'?'#e8a33d':'#38bfc7';
+    return `<div class="card" onclick="openModal('${d.code}')">
+      <div class="bar ${d.a.status}"></div>
+      <div class="top">
+        <div><div class="name">${d.name}</div><div class="code">${d.code}</div></div>
+        <span class="badge ${d.a.status}"><span class="bdot"></span>${(CASE_META[d.a.case]||CASE_META.C).icon} ${STATUS_LABEL[d.a.status]}</span>
+      </div>
+      <svg viewBox="0 0 200 36" preserveAspectRatio="none"><polyline points="${spark}" fill="none" stroke="${color}" stroke-width="2"/></svg>
+      <div class="metrics">
+        <span>MNF ปัจจุบัน <span class="mnf">${d.a.currentMnf.toFixed(1)}</span></span>
+        <span>ฐาน <span class="mnf">${d.a.mean.toFixed(1)}</span></span>
+      </div>
+      <div style="font-size:11px;color:var(--text-faint);margin-top:4px;">Night Flow: ${d.a.mnfStart && d.a.mnfEnd ? `${d.a.mnfStart}–${d.a.mnfEnd}` : '—'}</div>
+    </div>`;
+  }).join('');
+}
+
+let mnfChart, hourlyChart, cusumChart, pressureChart;
+let currentJobRtuId = null;   // RTU/DMA ที่กำลังเปิด modal อยู่ (ใช้อ้างอิงตอนบันทึก/โหลด job log)
+let jobLogsCache = [];        // ประวัติ job log ของ RTU ที่เปิดอยู่ (ใช้ทำ optimistic UI update)
+const jobLogMemoryStore = {}; // fallback เมื่อยังไม่ตั้งค่า JOB_API_URL — key: rtuId, value: array ของ log
+function openModal(code){
+  const d = data.find(x=>x.code===code);
+  window._lastOpenedDmaCode = code;
+  const cm = CASE_META[d.a.case] || CASE_META.C;
+  document.getElementById('mName').textContent = d.name;
+  document.getElementById('mCode').textContent = `${d.code} · ${cm.icon} ${cm.label}`;
+  document.getElementById('mCode').title = d.a.caseReason || '';
+
+  // เปิด modal ใหม่ทุกครั้ง = กลับไป tab กราฟก่อนเสมอ + รีเซ็ต/โหลดฟอร์ม-ประวัติ job ของ RTU นี้
+  currentJobRtuId = d.code;
+  switchModalTab('analysis');
+  populateJobFormOptions();
+  document.getElementById('jobAssignee').value = '';
+  document.getElementById('jobStatus').value = '';
+  document.getElementById('jobStep').value = '';
+  document.getElementById('jobRemark').value = '';
+  document.getElementById('mRemarkPanel').style.display = 'none'; // จะถูกเซ็ตใหม่โดย updateRemarkPanelFromJobLog() หลัง fetchJobLogs โหลดเสร็จ
+  fetchJobLogs(d.code);
+
+  if(d.a.status==='no_data'){
+    // ไม่มีข้อมูลราย 15 นาที/รายวันให้ RTU นี้เลย (ถูกตัดออกจาก compute_metrics ตั้งแต่ต้น) — แสดงข้อความ
+    // อธิบายตรงๆ แทนที่จะพยายามวาดกราฟจากข้อมูลว่างเปล่า แล้วเคลียร์กราฟเก่าที่อาจค้างจาก DMA ก่อนหน้าทิ้ง
+    const daysTxt = d.a.noDataDays!=null ? `${d.a.noDataDays.toFixed(1)} วัน` : 'ไม่ทราบจำนวนวันแน่ชัด';
+    const windowTxt = d.a.mnfStart && d.a.mnfEnd ? `${d.a.mnfStart}–${d.a.mnfEnd}` : 'ไม่ทราบ';
+    document.getElementById('mKpis').innerHTML = `
+      <div class="mkpi" style="grid-column:1/-1;">
+        <div class="l">สถานะ</div>
+        <div class="v mono" style="font-size:14px;color:var(--gray);">
+          ⚫ ไม่มีข้อมูลจาก RTU นี้มา ${daysTxt} (flow = 0 ติดต่อกัน) — สงสัย RTU เสีย/สื่อสารขาด ไม่ได้คำนวณ MNF/CUSUM ให้
+          เนื่องจากไม่มีข้อมูลจริงให้วิเคราะห์ กรุณาตรวจสอบ RTU ในสนาม
+        </div>
+      </div>
+      <div class="mkpi"><div class="l">ช่วง Night Flow (MNF Window) ที่ตั้งไว้</div><div class="v mono">${windowTxt}</div></div>`;
+    document.getElementById('mHardBanner').style.display = 'none';
+
+    [mnfChart, cusumChart, hourlyChart, pressureChart].forEach(c => { if(c) c.destroy(); });
+    mnfChart = cusumChart = hourlyChart = pressureChart = null;
+    ['chartMnf','chartHourly','chartPressure'].forEach(id => {   // chartCusum comment ไว้ก่อน (ดู chart-box ที่ comment ไว้ด้านบน)
+      document.getElementById(id).style.display = 'none';
+    });
+    document.getElementById('hourlyNote').textContent = HOURLY_NOTE_EMPTY;
+    document.getElementById('pressureNote').textContent = PRESSURE_NOTE_EMPTY;
+    // document.getElementById('cusumNote').textContent = 'ไม่มีข้อมูลให้คำนวณ CUSUM';
+    // document.getElementById('mkBadge').textContent = '';
+
+    document.getElementById('overlay').classList.add('open');
+    return;
+  }
+
+  document.getElementById('mKpis').innerHTML = `
+    <div class="mkpi"><div class="l">MNF ปัจจุบัน</div><div class="v mono">${d.a.currentMnf.toFixed(1)} m³/hr</div></div>
+    <div class="mkpi"><div class="l">ช่วง Night Flow (MNF Window)</div><div class="v mono">${d.a.mnfStart && d.a.mnfEnd ? `${d.a.mnfStart}–${d.a.mnfEnd}` : '—'}</div></div>
+    <div class="mkpi"><div class="l">ค่าเฉลี่ยฐาน</div><div class="v mono">${d.a.mean.toFixed(1)} m³/hr</div></div>
+    <div class="mkpi"><div class="l">เกณฑ์แจ้งเตือน (+2SD)</div><div class="v mono">${d.a.threshold.toFixed(1)} m³/hr</div></div>
+    <div class="mkpi"><div class="l">สูญเสียประเมิน</div><div class="v mono">${d.a.case==='C'?'—':Math.round(d.a.estLossPerDay)+' m³/วัน'}</div></div>
+    <div class="mkpi"><div class="l">Mann-Kendall (10 วัน)</div><div class="v mono" style="font-size:13px;">${d.a.mk.trend}</div></div>
+    <div class="mkpi"><div class="l">CUSUM</div><div class="v mono" style="font-size:13px;">${d.a.cs.breached?`ตัดเกณฑ์ที่วันหลัง baseline #${d.a.cs.breachIndex+1}`:'ยังไม่ตัดเกณฑ์'}</div></div>
+    <!--<div class="mkpi"><div class="l">Sustained Flow วันนี้</div><div class="v mono" style="font-size:13px;">${d.a.sustainedRunIntervals} จาก 96 intervals${d.a.sustainedFlowBreach?' ⚠️':''}</div></div>-->
+    <div class="mkpi"><div class="l">แรงดันตกยืนยัน</div><div class="v mono" style="font-size:13px;">${d.a.pressureDropConfirmed?'ใช่ — ตกร่วมกับ flow สูง':'ไม่พบ'}</div></div>
+    <div class="mkpi"><div class="l">ประมาณระยะจุดรั่วจาก RTU</div><div class="v mono" style="font-size:12.5px;">${d.a.proximityEstimate || '— (ยังไม่พบสัญญาณให้ประมาณ)'}</div></div>
+    <!--<div class="mkpi"><div class="l">R_eff (System Resistance)</div><div class="v mono">${d.a.rEffMedian!=null? d.a.rEffMedian.toFixed(4): '—'}</div></div>-->
+    <div class="mkpi"><div class="l">FAVAD ปริมาณรั่วประมาณ (ท่อ ${d.a.pipeMaterial})</div><div class="v mono">${d.a.favadVolumeTotal? d.a.favadVolumeTotal.toFixed(1)+' m³/วัน':'—'}</div></div>
+  `;
+  const hardBanner = document.getElementById('mHardBanner');
+  if(d.a.hardThresholdBreached){
+    hardBanner.style.display = 'block';
+    document.getElementById('mHardBannerText').textContent = d.a.caseReason || 'เกิน Hard Flow Threshold — เตือนทันทีโดยไม่รอผลสถิติ';
+  } else {
+    hardBanner.style.display = 'none';
+  }
+  // mkBadge/cusumNote อยู่ใน CUSUM chart-box ที่ comment ไว้ด้านบน — comment ตามไปด้วยกัน
+  // document.getElementById('mkBadge').textContent = d.a.mk.significant ? `(Z=${d.a.mk.Z.toFixed(2)}, มีนัยสำคัญ)` : `(Z=${d.a.mk.Z.toFixed(2)}, ยังไม่ชัดเจน)`;
+  // document.getElementById('mkBadge').style.color = d.a.mk.significant ? '#e8a33d' : '#5b6b85';
+  // document.getElementById('cusumNote').textContent =
+  //   `เส้นทึบ = C+ (การไต่ขึ้นสะสม) · เส้นประ = จุดตัดเกณฑ์ (h = 4×SD) · เริ่มนับหลังช่วง baseline (${d.a.baseWinLen} วันแรก) — ` +
+  //   (d.a.cusumRecentBreach ? 'พบจุดที่เส้นสะสมทะลุเกณฑ์ในช่วงล่าสุด ชี้ว่าฐานการไหลขยับขึ้นถาวร ไม่ใช่ความผันผวนชั่วคราว'
+  //     : d.a.cs.breached ? 'เคยทะลุเกณฑ์ในอดีตแต่ไม่ใช่ช่วงล่าสุด (มักมาจาก event ใช้น้ำชั่วคราวที่จบไปแล้ว) จึงไม่ถูกนับเป็นสถานะแจ้งเตือนตอนนี้'
+  //     : 'ยังไม่พบจุดที่ทะลุเกณฑ์ในช่วงข้อมูลปัจจุบัน') +
+  //   (d.a.cusumStepRapid ? ' · เส้นสะสมพุ่งขึ้นเร็ว (≤3 วัน) = ลักษณะ burst ฉับพลัน ไม่ใช่รั่วค่อยๆ ไต่' : '');
+
+  ['chartMnf','chartHourly','chartPressure'].forEach(id => {   // chartCusum comment ไว้ก่อน
+    document.getElementById(id).style.display = '';
+  });
+
+  const labels = Array.from({length:d.a.mnfSeries.length},(_,i)=>`D${i+1}`);
+  if(mnfChart) mnfChart.destroy();
+  mnfChart = new Chart(document.getElementById('chartMnf'), {
+    type:'line',
+    data:{ labels, datasets:[
+      {label:'MNF จริง', data:d.a.mnfSeries, borderColor:'#38bfc7', backgroundColor:'transparent', borderWidth:2, pointRadius:0, tension:.25},
+      {label:'ค่าเฉลี่ยฐาน', data:labels.map(()=>d.a.mean), borderColor:'#5b6b85', borderDash:[4,4], borderWidth:1.5, pointRadius:0},
+      {label:'เกณฑ์ +2SD', data:labels.map(()=>d.a.threshold), borderColor:'#e5484d', borderDash:[4,4], borderWidth:1.5, pointRadius:0},
+    ]},
+    options:chartOpts(true)
+  });
+
+  // CUSUM chart comment ไว้ก่อน (ดู chart-box ที่ comment ไว้ด้านบนคู่กัน)
+  // const cusumLabels = Array.from({length:d.a.cs.cPlusSeries.length},(_,i)=>`D${d.a.baseWinLen+i+1}`);
+  // if(cusumChart) cusumChart.destroy();
+  // cusumChart = new Chart(document.getElementById('chartCusum'), {
+  //   type:'line',
+  //   data:{ labels:cusumLabels, datasets:[
+  //     {label:'C+ (สะสมขาขึ้น)', data:d.a.cs.cPlusSeries, borderColor:'#e8a33d', backgroundColor:'rgba(232,163,61,.12)', fill:true, borderWidth:2, pointRadius:0, tension:.2},
+  //     {label:'เกณฑ์ตัด (h)', data:cusumLabels.map(()=>d.a.cs.hAbs), borderColor:'#e5484d', borderDash:[4,4], borderWidth:1.5, pointRadius:0},
+  //   ]},
+  //   options:chartOpts(true)
+  // });
+
+  const hasHourly = !!(d.hourly.flow && d.hourly.flow.length);
+  const hourlyCanvas = document.getElementById('chartHourly');
+  const hourlyNoteEl = document.getElementById('hourlyNote');
+  if(hourlyChart){ hourlyChart.destroy(); hourlyChart = null; }
+
+  if(hasHourly){
+    hourlyCanvas.style.display = '';
+    hourlyNoteEl.textContent = HOURLY_NOTE_DEFAULT;
+    const lastDayFlow = d.hourly.flow[d.hourly.flow.length-1] || [];
+    const histFlowDays = d.hourly.flow.slice(0,14);
+    const flowMin = Array.from({length:INTERVALS_PER_DAY},(_,i)=>Math.min(...histFlowDays.map(day=>day[i]).filter(v=>v!=null)));
+    const flowMax = Array.from({length:INTERVALS_PER_DAY},(_,i)=>Math.max(...histFlowDays.map(day=>day[i]).filter(v=>v!=null)));
+    const intervalLabels = Array.from({length:INTERVALS_PER_DAY},(_,i)=>{
+      const h = Math.floor(i/4).toString().padStart(2,'0'), m = ((i%4)*15).toString().padStart(2,'0');
+      return `${h}:${m}`;
+    });
+
+    hourlyChart = new Chart(hourlyCanvas, {
+      type:'line',
+      data:{ labels:intervalLabels, datasets:[
+        {label:'ช่วงปกติ (สูงสุด)', data:flowMax, borderColor:'transparent', backgroundColor:'rgba(139,160,190,.16)', fill:'+1', pointRadius:0},
+        {label:'ช่วงปกติ (ต่ำสุด)', data:flowMin, borderColor:'transparent', backgroundColor:'transparent', fill:false, pointRadius:0},
+        {label:'วันล่าสุด', data:lastDayFlow, borderColor:'#38bfc7', backgroundColor:'transparent', borderWidth:2, pointRadius:0, tension:.2},
+      ]},
+      options:chartOpts(false)
+    });
+  } else {
+    hourlyCanvas.style.display = 'none';
+    hourlyNoteEl.textContent = HOURLY_NOTE_EMPTY;
+  }
+
+  const intervalLabelsForPressure = Array.from({length:INTERVALS_PER_DAY},(_,i)=>{
+    const h = Math.floor(i/4).toString().padStart(2,'0'), m = ((i%4)*15).toString().padStart(2,'0');
+    return `${h}:${m}`;
+  });
+  const lastDayPressure = (d.hourly.pressure[d.hourly.pressure.length-1]) || [];
+  const histPressureDays = d.hourly.pressure.slice(0,14);
+  const pMin = Array.from({length:INTERVALS_PER_DAY},(_,i)=>Math.min(...histPressureDays.map(day=>day[i]).filter(v=>v!=null)));
+  const pMax = Array.from({length:INTERVALS_PER_DAY},(_,i)=>Math.max(...histPressureDays.map(day=>day[i]).filter(v=>v!=null)));
+
+  const pressureCanvas = document.getElementById('chartPressure');
+  const pressureNoteEl = document.getElementById('pressureNote');
+  if(pressureChart){ pressureChart.destroy(); pressureChart = null; }
+
+  if(lastDayPressure.length){
+    pressureCanvas.style.display = '';
+    pressureNoteEl.textContent = PRESSURE_NOTE_DEFAULT;
+    pressureChart = new Chart(pressureCanvas, {
+      type:'line',
+      data:{ labels:intervalLabelsForPressure, datasets:[
+        {label:'ช่วงปกติ (สูงสุด)', data:pMax, borderColor:'transparent', backgroundColor:'rgba(139,160,190,.16)', fill:'+1', pointRadius:0},
+        {label:'ช่วงปกติ (ต่ำสุด)', data:pMin, borderColor:'transparent', backgroundColor:'transparent', fill:false, pointRadius:0},
+        {label:'วันล่าสุด', data:lastDayPressure, borderColor:'#e8a33d', backgroundColor:'transparent', borderWidth:2, pointRadius:0, tension:.2},
+      ]},
+      options:chartOpts(false)
+    });
+  } else {
+    pressureCanvas.style.display = 'none';
+    pressureNoteEl.textContent = PRESSURE_NOTE_EMPTY;
+  }
+
+  document.getElementById('overlay').classList.add('open');
+}
+
+/* ---------------------------------------------------------------------
+   JOB MANAGEMENT — tab switching + Google Sheets fetch/submit (Apps Script)
+--------------------------------------------------------------------- */
+function switchModalTab(tab){
+  document.querySelectorAll('.mtab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  document.getElementById('tabAnalysis').classList.toggle('active', tab === 'analysis');
+  document.getElementById('tabJob').classList.toggle('active', tab === 'job');
+  if(tab === 'analysis'){
+    // canvas ที่โดนซ่อนด้วย display:none ระหว่างอยู่ tab อื่น ทำให้ Chart.js คำนวณขนาดผิดตอนโผล่กลับมา
+    // ต้องสั่ง resize()+update() หลัง browser reflow เสร็จ ไม่งั้นกราฟจะเพี้ยน/แบนผิดสัดส่วน
+    requestAnimationFrame(() => {
+      [mnfChart, hourlyChart, pressureChart].forEach(c => { if(c){ c.resize(); c.update(); } });
+    });
+  }
+}
+
+function populateJobFormOptions(){
+  const assigneeSel = document.getElementById('jobAssignee');
+  const statusSel = document.getElementById('jobStatus');
+  const stepSel = document.getElementById('jobStep');
+  if(assigneeSel.options.length <= 1){ ASSIGNEE_OPTIONS.forEach(v => assigneeSel.add(new Option(v, v))); }
+  if(statusSel.options.length <= 1){ JOBSTATUS_OPTIONS.forEach(v => statusSel.add(new Option(v, v))); }
+  if(stepSel.options.length <= 1){ JOBSTEP_OPTIONS.forEach(v => stepSel.add(new Option(v, v))); }
+}
+
+function escapeHtml(str){
+  return String(str ?? '').replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
+}
+
+function fmtJobTimestamp(iso){
+  const dt = new Date(iso);
+  if(isNaN(dt.getTime())) return String(iso ?? '—');
+  const pad = n => String(n).padStart(2, '0');
+  return `${pad(dt.getDate())}/${pad(dt.getMonth()+1)}/${dt.getFullYear()} ${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
+}
+
+function jobStatusColor(status){
+  if(status === 'ดำเนินการแล้ว') return 'var(--green)';
+  if(status === 'ปิดงาน') return 'var(--gray)';
+  return 'var(--amber)'; // อยู่ระหว่างดำเนินการ / ค่าอื่นๆ ที่ไม่รู้จัก
+}
+
+/**
+ * ป้าย "หมายเหตุจากระบบ" ด้านบน modal เปลี่ยนมาใช้ฟิลด์ remark จากรายการ job_log
+ * ล่าสุด (เรียงตาม timestamp) ของ RTU ที่เปิดอยู่ แทนแหล่งข้อมูล Google Sheet เดิม
+ * (ไม่กระทบ badge "📌 remark" ที่การ์ด/ตัวกรอง/ตัวนับ KPI ซึ่งยังอิงชีท remark เดิมตามปกติ)
+ */
+function updateRemarkPanelFromJobLog(rtuId){
+  if(currentJobRtuId !== rtuId) return; // กันข้อมูลเก่าจาก fetch ที่ค้างมาทับ modal ที่เปิดใหม่แล้ว
+  const remarkPanel = document.getElementById('mRemarkPanel');
+  const catEl = document.getElementById('mRemarkCategory');
+  const textEl = document.getElementById('mRemarkText');
+
+  const latest = [...jobLogsCache].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))[0];
+  if(!latest || latest.status === 'ปิดงาน'){   // ไม่มี log เลย หรือ งานล่าสุดปิดไปแล้ว = ไม่ต้องโชว์ panel นี้
+    remarkPanel.style.display = 'none';
+    return;
+  }
+  remarkPanel.style.display = 'block';
+  const metaParts = [latest.status, latest.jobStep].filter(Boolean);
+  catEl.textContent = ` · ${metaParts.length ? metaParts.join(' · ') + ' · ' : ''}${fmtJobTimestamp(latest.timestamp)}${latest._pending ? ' (กำลังบันทึก…)' : ''}`;
+  textEl.textContent = latest.remark && latest.remark.trim() ? latest.remark : '(บันทึกงานล่าสุดไม่มีข้อความรายละเอียด)';
+}
+
+async function fetchJobLogs(rtuId){
+  const tbody = document.getElementById('jobLogBody');
+  const emptyMsg = document.getElementById('jobLogEmpty');
+  const modeNote = document.getElementById('jobModeNote');
+  tbody.innerHTML = `<tr><td colspan="5" class="job-log-empty">⏳ กำลังโหลดประวัติ...</td></tr>`;
+  emptyMsg.style.display = 'none';
+
+  if(!JOB_API_URL){
+    modeNote.style.display = 'block';
+    jobLogsCache = jobLogMemoryStore[rtuId] ? [...jobLogMemoryStore[rtuId]] : [];
+    if(currentJobRtuId === rtuId){ renderJobTable(jobLogsCache); updateRemarkPanelFromJobLog(rtuId); }
+    return;
+  }
+  modeNote.style.display = 'none';
+
+  try{
+    const url = `${JOB_API_URL}?action=list&rtuId=${encodeURIComponent(rtuId)}`;
+    const res = await fetch(url);
+    if(!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json();
+    if(json && json.ok === false) throw new Error(json.error || 'โหลดข้อมูลไม่สำเร็จ');
+    if(currentJobRtuId !== rtuId) return; // ผู้ใช้เปิด modal อื่นไปแล้วระหว่างรอ fetch — ไม่ต้องอัปเดตหน้าจอปัจจุบัน
+    jobLogsCache = Array.isArray(json) ? json : (json.data || []);
+    renderJobTable(jobLogsCache);
+    updateRemarkPanelFromJobLog(rtuId);
+  }catch(err){
+    if(currentJobRtuId !== rtuId) return;
+    jobLogsCache = [];
+    tbody.innerHTML = `<tr><td colspan="5" class="job-log-empty" style="color:var(--red);">⚠️ โหลดประวัติไม่สำเร็จ (${escapeHtml(err.message)}) — ตรวจสอบว่า deploy Apps Script Web App แล้วและตั้งค่า JOB_API_URL ถูกต้อง</td></tr>`;
+    document.getElementById('mRemarkPanel').style.display = 'none';
+  }
+}
+
+function renderJobTable(logs){
+  const tbody = document.getElementById('jobLogBody');
+  const emptyMsg = document.getElementById('jobLogEmpty');
+  const sorted = [...logs].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+  if(sorted.length === 0){
+    tbody.innerHTML = '';
+    emptyMsg.style.display = 'block';
+    return;
+  }
+  emptyMsg.style.display = 'none';
+  tbody.innerHTML = sorted.map(row => `
+    <tr style="${row._pending ? 'opacity:.6;' : ''}${row._error ? 'background:var(--red-soft);' : ''}">
+      <td class="mono" style="white-space:nowrap;">${fmtJobTimestamp(row.timestamp)}</td>
+      <td>${escapeHtml(row.assignee || '—')}</td>
+      <td><span class="badge" style="background:transparent;border:1px solid ${jobStatusColor(row.status)};color:${jobStatusColor(row.status)};">${escapeHtml(row.status || '—')}</span></td>
+      <td>${escapeHtml(row.jobStep || '—')}</td>
+      <td style="white-space:pre-wrap;">${escapeHtml(row.remark || '')}${row._pending ? ' <span class="mono" style="color:var(--text-faint);">(กำลังบันทึก…)</span>' : ''}</td>
+    </tr>
+  `).join('');
+}
+
+async function submitJobLog(){
+  if(!currentJobRtuId) return;
+  const assigneeEl = document.getElementById('jobAssignee');
+  const statusEl = document.getElementById('jobStatus');
+  const stepEl = document.getElementById('jobStep');
+  const remarkEl = document.getElementById('jobRemark');
+  const assignee = assigneeEl.value, status = statusEl.value, jobStep = stepEl.value, remark = remarkEl.value.trim();
+
+  if(!assignee || !status || !jobStep){
+    alert('กรุณาเลือกผู้รับผิดชอบ / สถานะงาน / ขั้นตอน ให้ครบก่อนบันทึก');
+    return;
+  }
+
+  const btn = document.getElementById('jobSubmitBtn');
+  const spinner = document.getElementById('jobSubmitSpinner');
+  const label = document.getElementById('jobSubmitBtnLabel');
+  btn.disabled = true;
+  spinner.style.display = 'inline-block';
+  label.textContent = 'กำลังบันทึก...';
+
+  const payload = { rtuId: currentJobRtuId, timestamp: new Date().toISOString(), assignee, status, jobStep, remark };
+
+  // Optimistic UI: แทรกแถวใหม่ในตารางทันที ไม่รอผล fetch/response
+  const optimisticRow = { ...payload, _pending: true };
+  jobLogsCache = [optimisticRow, ...jobLogsCache];
+  renderJobTable(jobLogsCache);
+  updateRemarkPanelFromJobLog(currentJobRtuId); // แสดง remark ล่าสุดทันที (แถวที่เพิ่งกดบันทึก)
+
+  try{
+    if(JOB_API_URL){
+      const res = await fetch(JOB_API_URL, {
+        method: 'POST',
+        // ใช้ text/plain แทน application/json โดยตั้งใจ — เลี่ยง CORS preflight (OPTIONS) ที่ Apps Script
+        // Web App ไม่รองรับ ฝั่ง Code.gs จะ parse JSON จาก e.postData.contents เอง (ดูตัวอย่างในไฟล์ที่แนบ)
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: 'create', ...payload })
+      });
+      if(!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json();
+      if(json && json.ok === false) throw new Error(json.error || 'บันทึกไม่สำเร็จ');
+    } else {
+      jobLogMemoryStore[currentJobRtuId] = [payload, ...(jobLogMemoryStore[currentJobRtuId] || [])];
+    }
+    optimisticRow._pending = false;
+    renderJobTable(jobLogsCache);
+    updateRemarkPanelFromJobLog(currentJobRtuId);
+    remarkEl.value = '';
+  }catch(err){
+    jobLogsCache = jobLogsCache.filter(r => r !== optimisticRow);
+    renderJobTable(jobLogsCache);
+    updateRemarkPanelFromJobLog(currentJobRtuId); // เอาแถวที่บันทึกไม่สำเร็จออกแล้ว ต้องคืนป้าย remark กลับไปเป็นแถวล่าสุดก่อนหน้า
+    alert(`บันทึกไม่สำเร็จ: ${err.message}\nข้อมูลในฟอร์มยังอยู่ ลองกดบันทึกใหม่อีกครั้งได้เลย`);
+  }finally{
+    btn.disabled = false;
+    spinner.style.display = 'none';
+    label.textContent = 'บันทึกและอัปเดตข้อมูล';
+  }
+}
+
+function cssVar(name){
+  return getComputedStyle(document.body).getPropertyValue(name).trim();
+}
+
+function chartOpts(showLegend){
+  const textDim = cssVar('--text-dim'), textFaint = cssVar('--text-faint');
+  const grid = cssVar('--grid-line'), panel2 = cssVar('--panel-2'), border = cssVar('--border'), text = cssVar('--text');
+  return {
+    responsive:true,
+    interaction:{mode:'index', intersect:false},
+    plugins:{
+      legend:{display:showLegend, labels:{color:textDim, boxWidth:12, font:{size:10.5}}},
+      tooltip:{backgroundColor:panel2, borderColor:border, borderWidth:1, titleColor:text, bodyColor:text},
+    },
+    scales:{
+      x:{ticks:{color:textFaint, font:{size:10}, maxTicksLimit:8}, grid:{color:grid}},
+      y:{ticks:{color:textFaint, font:{size:10}}, grid:{color:grid}},
+    },
+    elements:{point:{hoverRadius:4}}
+  };
+}
+
+/* ---------------------------------------------------------------------
+   THEME: ล็อคเป็นโหมดสว่างอย่างเดียว ให้ตรงกับระบบหลัก (ตัดการสลับมืด/สว่างออก)
+--------------------------------------------------------------------- */
+function applyTheme(theme){
+  document.body.setAttribute('data-theme', 'light');
+  if(document.getElementById('overlay').classList.contains('open') && window._lastOpenedDmaCode){
+    openModal(window._lastOpenedDmaCode);
+  }
+}
+
+(function initTheme(){
+  applyTheme('light');
+})();
+
+document.getElementById('closeBtn').onclick = ()=>{ document.getElementById('overlay').classList.remove('open'); window._lastOpenedDmaCode = null; };
+document.getElementById('overlay').onclick = (e)=>{ if(e.target.id==='overlay'){ e.currentTarget.classList.remove('open'); window._lastOpenedDmaCode = null; } };
+
+renderKpis();
+renderPriority();
+renderCards();
+
+</script>
+{% endblock %}

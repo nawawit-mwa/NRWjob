@@ -1,0 +1,40 @@
+{% extends "base_sidebar.html" %}
+{% block title %}แปลงเหตุการณ์เป็นงาน — NRW Job Management{% endblock %}
+{% block content %}
+<div class="container" style="max-width: 640px;">
+  <a href="{{ url_for('dashboard') }}">&larr; กลับไป Dashboard</a>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, message in messages %}
+        <div class="flash {{ category }}">{{ message }}</div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  <div class="section-title">เหตุการณ์ {{ incident.IncidentID }}</div>
+  <div class="panel" style="padding: 22px; margin-bottom: 24px;">
+    <p><strong>ประเภท:</strong> {{ incident.IncidentType }}</p>
+    <p><strong>รายละเอียด:</strong> {{ incident.Description or '—' }}</p>
+    <p><strong>ความรุนแรง:</strong> {{ incident.Severity }}</p>
+    <p><strong>สถานะการแปลง:</strong> {{ incident.ConversionStatus }}</p>
+  </div>
+
+  <div class="section-title">เลือกประเภทงานที่ต้องการสร้าง (เลือกได้หลายประเภท)</div>
+  <div class="panel" style="padding: 22px;">
+    {% if job_types %}
+    <form method="post">
+      {% for jt in job_types %}
+      <div class="field" style="display:flex; align-items:center; gap:10px;">
+        <input type="checkbox" id="jt_{{ jt.JobTypeID }}" name="job_type_ids" value="{{ jt.JobTypeID }}" style="width:auto;">
+        <label for="jt_{{ jt.JobTypeID }}" style="margin:0;">{{ jt.JobTypeName }}</label>
+      </div>
+      {% endfor %}
+      <button type="submit" class="btn-primary" style="margin-top: 10px;">สร้างงานจากที่เลือก</button>
+    </form>
+    {% else %}
+    <div class="empty-state">ยังไม่มีข้อมูลประเภทงาน (JobTypes) ในระบบ — ต้องตั้งค่าก่อน</div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

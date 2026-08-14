@@ -1,0 +1,11 @@
+service_account.json
+__pycache__/
+*.pyc
+*.pyo
+venv/
+env/
+.venv/
+static/data/*.csv
+.DS_Store
+Thumbs.db
+.vscode/
