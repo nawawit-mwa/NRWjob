@@ -10,7 +10,7 @@ import sheets_client as sc
 import org_service
 from auth_service import role_level
 from constants import (
-    ROLE_LEVELS, ROLE_FIELD_TECH, ROLE_CONTRACTOR, ROLE_ENGINEER,
+    ROLE_LEVELS, ROLE_ADMIN, ROLE_FIELD_TECH, ROLE_CONTRACTOR, ROLE_ENGINEER,
     ROLE_SECTION_CHIEF, ROLE_DIVISION_DIRECTOR,
     ASSIGNER_ROLES, BELOW_BRANCH_LEVEL_ROLES,
     STATUS_PENDING_ASSIGNMENT, STATUS_PENDING_ACCEPTANCE, STATUS_ACCEPTED,
@@ -63,10 +63,10 @@ def assign_job(job_id: str, to_user_id: str, by_user: dict):
     job = _get_job(job_id)
     to_user = _get_user(to_user_id)
 
-    if by_user.get("Role") not in ASSIGNER_ROLES and by_user.get("Role") != "Admin":
+    if by_user.get("Role") not in ASSIGNER_ROLES and by_user.get("Role") != ROLE_ADMIN:
         raise PermissionError("Role นี้ไม่มีสิทธิ์มอบหมายงาน")
 
-    if role_level(by_user["Role"]) >= role_level(to_user["Role"]):
+    if by_user.get("Role") != ROLE_ADMIN and role_level(by_user["Role"]) >= role_level(to_user["Role"]):
         raise PermissionError("มอบหมายได้เฉพาะให้ผู้ที่มีตำแหน่งต่ำกว่าตนเองเท่านั้น")
 
     valid_from = {
@@ -92,14 +92,15 @@ def lateral_transfer(job_id: str, to_user_id: str, by_user: dict):
     job = _get_job(job_id)
     to_user = _get_user(to_user_id)
 
-    if by_user.get("Role") not in BELOW_BRANCH_LEVEL_ROLES:
-        raise PermissionError("Role นี้ไม่อยู่ในเงื่อนไขที่โอนงานระดับเดียวกันได้")
+    if by_user.get("Role") != ROLE_ADMIN:
+        if by_user.get("Role") not in BELOW_BRANCH_LEVEL_ROLES:
+            raise PermissionError("Role นี้ไม่อยู่ในเงื่อนไขที่โอนงานระดับเดียวกันได้")
 
-    if not org_service.same_unit(by_user, to_user):
-        raise PermissionError("โอนงานได้เฉพาะบุคคลในหน่วยงานเดียวกันเท่านั้น")
+        if not org_service.same_unit(by_user, to_user):
+            raise PermissionError("โอนงานได้เฉพาะบุคคลในหน่วยงานเดียวกันเท่านั้น")
 
-    if job.get("CurrentAssigneeUserID") != by_user["UserID"]:
-        raise PermissionError("โอนงานได้เฉพาะงานที่ตนเองถือครองอยู่เท่านั้น")
+        if job.get("CurrentAssigneeUserID") != by_user["UserID"]:
+            raise PermissionError("โอนงานได้เฉพาะงานที่ตนเองถือครองอยู่เท่านั้น")
 
     sc.update_row("Jobs", "JobID", job_id, {
         "Status": STATUS_PENDING_ACCEPTANCE,
@@ -116,12 +117,13 @@ def lateral_transfer(job_id: str, to_user_id: str, by_user: dict):
 # ---------------------------------------------------------------------------
 def accept_job(job_id: str, user: dict):
     job = _get_job(job_id)
-    if job.get("CurrentAssigneeUserID") != user["UserID"]:
+    if user.get("Role") != ROLE_ADMIN and job.get("CurrentAssigneeUserID") != user["UserID"]:
         raise PermissionError("ไม่ใช่ผู้ที่ถูกมอบหมายงานนี้")
     if job["Status"] != STATUS_PENDING_ACCEPTANCE:
         raise ValueError("งานนี้ไม่ได้อยู่ในสถานะรอรับ")
 
-    is_field_worker = user.get("Role") in (ROLE_FIELD_TECH, ROLE_CONTRACTOR)
+    assignee_role = job.get("CurrentAssigneeRole") if user.get("Role") == ROLE_ADMIN else user.get("Role")
+    is_field_worker = assignee_role in (ROLE_FIELD_TECH, ROLE_CONTRACTOR)
     new_status = STATUS_IN_PROGRESS if is_field_worker else STATUS_ACCEPTED
 
     sc.update_row("Jobs", "JobID", job_id, {"Status": new_status})
@@ -131,7 +133,7 @@ def accept_job(job_id: str, user: dict):
 
 def reject_job(job_id: str, user: dict, reason: str):
     job = _get_job(job_id)
-    if job.get("CurrentAssigneeUserID") != user["UserID"]:
+    if user.get("Role") != ROLE_ADMIN and job.get("CurrentAssigneeUserID") != user["UserID"]:
         raise PermissionError("ไม่ใช่ผู้ที่ถูกมอบหมายงานนี้")
     if job["Status"] != STATUS_PENDING_ACCEPTANCE:
         raise ValueError("งานนี้ไม่ได้อยู่ในสถานะรอรับ")
@@ -149,7 +151,7 @@ def reject_job(job_id: str, user: dict, reason: str):
 # ---------------------------------------------------------------------------
 def submit_completion(job_id: str, user: dict, remarks: str = ""):
     job = _get_job(job_id)
-    if user.get("Role") not in (ROLE_FIELD_TECH, ROLE_CONTRACTOR):
+    if user.get("Role") != ROLE_ADMIN and user.get("Role") not in (ROLE_FIELD_TECH, ROLE_CONTRACTOR):
         raise PermissionError("เฉพาะช่างสนาม/ผู้รับจ้างเท่านั้นที่ส่งงานเสร็จได้")
     if job["Status"] != STATUS_IN_PROGRESS:
         raise ValueError("งานนี้ไม่ได้อยู่ระหว่างดำเนินการ")
@@ -166,7 +168,7 @@ def submit_completion(job_id: str, user: dict, remarks: str = ""):
 # ---------------------------------------------------------------------------
 def verify_job(job_id: str, user: dict, passed: bool, notes: str = ""):
     job = _get_job(job_id)
-    if user.get("Role") != ROLE_ENGINEER:
+    if user.get("Role") != ROLE_ADMIN and user.get("Role") != ROLE_ENGINEER:
         raise PermissionError("เฉพาะวิศวกรเท่านั้นที่ตรวจสอบผลงานได้")
     if job["Status"] != STATUS_COMPLETED_PENDING_VERIFY:
         raise ValueError("งานนี้ไม่ได้อยู่ในสถานะรอตรวจสอบ")

@@ -1,11 +1,11 @@
 {% extends "base.html" %}
-{% block title %}เข้าสู่ระบบ — NRW Job Management{% endblock %}
+{% block title %}เข้าสู่ระบบ — Smart NRW{% endblock %}
 {% block body %}
 <div class="login-wrap">
   <div class="login-card">
     <a href="{{ url_for('monitoring') }}" style="display:inline-block; font-size:0.8rem; color:var(--ink-soft); text-decoration:none; margin-bottom:14px;">&larr; กลับไป NRW Dashboard</a>
     <div class="badge-icon">กปน</div>
-    <h1>NRW Job Management</h1>
+    <h1>Smart NRW</h1>
     <p class="subtitle">เข้าสู่ระบบเพื่อจัดการงานและเหตุการณ์</p>
 
     {% with messages = get_flashed_messages(with_categories=true) %}

@@ -1,0 +1,184 @@
+{% extends "base_sidebar.html" %}
+{% block title %}ติดตามงานที่รับผิดชอบ — Smart NRW{% endblock %}
+
+{% macro status_badge(status) -%}
+  {%- if status == 'รอมอบหมาย' -%}status-pending
+  {%- elif status in ['มอบหมายแล้ว รอรับ', 'รับงานแล้ว', 'กำลังดำเนินการ', 'ตีกลับ'] -%}status-progress
+  {%- elif status == 'เสร็จ รอตรวจสอบ' -%}status-verify
+  {%- elif status == 'ปิดงาน' -%}status-done
+  {%- elif status == 'ยกเลิกงาน' -%}status-cancel
+  {%- elif status == 'ปฏิเสธ' -%}status-reject
+  {%- else -%}status-pending
+  {%- endif -%}
+{%- endmacro %}
+
+{% block extra_head %}
+<style>
+  .job-card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+    margin-bottom: 12px;
+  }
+  .job-card .jc-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .job-card .jc-id { font-weight: 700; color: var(--mwa-navy-deep); }
+  .job-card .jc-meta { font-size: 0.82rem; color: var(--ink-soft); margin-top: 2px; }
+  .job-card .jc-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--line);
+  }
+  .job-card .jc-actions form { display: flex; gap: 6px; align-items: center; }
+  .job-card .jc-actions input[type="text"] {
+    padding: 6px 10px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    font-size: 0.82rem;
+    font-family: var(--font-ui);
+    min-width: 180px;
+  }
+  .btn-sm {
+    padding: 6px 14px;
+    border-radius: 6px;
+    border: none;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: var(--font-ui);
+  }
+  .btn-sm.accept { background: var(--mwa-green); color: #fff; }
+  .btn-sm.reject { background: var(--danger); color: #fff; }
+  .btn-sm.submit { background: var(--mwa-sky); color: #fff; }
+  .btn-sm.pass { background: var(--mwa-green); color: #fff; }
+  .btn-sm.fail { background: var(--danger); color: #fff; }
+  .btn-sm.close { background: var(--mwa-navy-deep); color: #fff; }
+  .btn-sm.transfer { background: var(--mwa-purple); color: #fff; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, message in messages %}
+        <div class="flash {{ category }}">{{ message }}</div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  <div class="section-title">งานที่ต้องดำเนินการของฉัน</div>
+  {% if assigned_to_me %}
+    {% for job in assigned_to_me %}
+    <div class="job-card">
+      <div class="jc-head">
+        <div>
+          <div class="jc-id">{{ job.JobID }} — {{ job_type_name_map.get(job.JobType, job.JobType) }}</div>
+          <div class="jc-meta">กำหนดเสร็จ: {{ job.DueDate or '—' }} · ความสำคัญ: {{ job.Priority or '—' }}</div>
+        </div>
+        <span class="badge {{ status_badge(job.Status) }}">{{ job.Status }}</span>
+      </div>
+
+      {% if job.Status == 'มอบหมายแล้ว รอรับ' %}
+      <div class="jc-actions">
+        <form method="post" action="{{ url_for('job_accept', job_id=job.JobID) }}">
+          <button type="submit" class="btn-sm accept">รับงาน</button>
+        </form>
+        <form method="post" action="{{ url_for('job_reject', job_id=job.JobID) }}">
+          <input type="text" name="reason" placeholder="เหตุผลที่ปฏิเสธ" required>
+          <button type="submit" class="btn-sm reject">ปฏิเสธ</button>
+        </form>
+      </div>
+      {% elif job.Status == 'กำลังดำเนินการ' %}
+      <div class="jc-actions">
+        <form method="post" action="{{ url_for('job_submit_completion', job_id=job.JobID) }}">
+          <input type="text" name="remarks" placeholder="บันทึกผลการดำเนินงาน (ถ้ามี)">
+          <button type="submit" class="btn-sm submit">ส่งงานเสร็จ</button>
+        </form>
+      </div>
+      {% elif job.Status == 'รับงานแล้ว' %}
+      <div class="jc-actions">
+        <span style="font-size:0.82rem; color:var(--ink-soft);">
+          รับงานแล้ว — ไปที่เมนู "มอบหมาย/ติดตามงาน" เพื่อมอบหมายต่อ
+        </span>
+      </div>
+      {% endif %}
+
+      {% if lateral_candidates and job.Status in ['รับงานแล้ว', 'กำลังดำเนินการ'] %}
+      <div class="jc-actions">
+        <form method="post" action="{{ url_for('job_transfer', job_id=job.JobID) }}">
+          <select name="to_user_id" required>
+            <option value="">— โอนงานนี้ให้เพื่อนร่วมระดับ —</option>
+            {% for c in lateral_candidates %}
+            <option value="{{ c.UserID }}">{{ c.Name }} ({{ c.Role }})</option>
+            {% endfor %}
+          </select>
+          <button type="submit" class="btn-sm transfer">โอนงาน</button>
+        </form>
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  {% else %}
+  <div class="panel"><div class="empty-state">ไม่มีงานที่มอบหมายมาถึงคุณตอนนี้</div></div>
+  {% endif %}
+
+  {% if pending_verify %}
+  <div class="section-title">งานรอตรวจสอบในส่วนของฉัน</div>
+  {% for job in pending_verify %}
+  <div class="job-card">
+    <div class="jc-head">
+      <div>
+        <div class="jc-id">{{ job.JobID }} — {{ job_type_name_map.get(job.JobType, job.JobType) }}</div>
+        <div class="jc-meta">ผู้ดำเนินการ: {{ job.CurrentAssigneeRole or '—' }} · หมายเหตุ: {{ job.Remarks or '—' }}</div>
+      </div>
+      <span class="badge {{ status_badge(job.Status) }}">{{ job.Status }}</span>
+    </div>
+    <div class="jc-actions">
+      <form method="post" action="{{ url_for('job_verify', job_id=job.JobID) }}">
+        <input type="hidden" name="passed" value="1">
+        <input type="text" name="notes" placeholder="หมายเหตุ (ถ้ามี)">
+        <button type="submit" class="btn-sm pass">ตรวจผ่าน</button>
+      </form>
+      <form method="post" action="{{ url_for('job_verify', job_id=job.JobID) }}">
+        <input type="hidden" name="passed" value="0">
+        <input type="text" name="notes" placeholder="เหตุผลที่ไม่ผ่าน" required>
+        <button type="submit" class="btn-sm fail">ไม่ผ่าน (ตีกลับ)</button>
+      </form>
+    </div>
+  </div>
+  {% endfor %}
+  {% endif %}
+
+  {% if pending_close %}
+  <div class="section-title">งานตรวจผ่านแล้ว รอปิดในส่วน/หน่วยงานของฉัน</div>
+  {% for job in pending_close %}
+  <div class="job-card">
+    <div class="jc-head">
+      <div>
+        <div class="jc-id">{{ job.JobID }} — {{ job_type_name_map.get(job.JobType, job.JobType) }}</div>
+        <div class="jc-meta">ผู้ดำเนินการ: {{ job.CurrentAssigneeRole or '—' }}</div>
+      </div>
+      <span class="badge {{ status_badge(job.Status) }}">{{ job.Status }}</span>
+    </div>
+    <div class="jc-actions">
+      <form method="post" action="{{ url_for('job_close', job_id=job.JobID) }}">
+        <button type="submit" class="btn-sm close">ปิดงาน</button>
+      </form>
+    </div>
+  </div>
+  {% endfor %}
+  {% endif %}
+</div>
+{% endblock %}

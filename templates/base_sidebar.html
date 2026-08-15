@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}NRW Job Management{% endblock %}</title>
+  <title>{% block title %}Smart NRW{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   {% block extra_head %}{% endblock %}
 </head>
@@ -12,7 +12,7 @@
     <aside class="side-nav">
       <a href="{{ url_for('monitoring') }}" class="side-brand">
         <span class="badge-icon">กปน</span>
-        <span class="side-brand-text">NRW<small>Job Management</small></span>
+        <span class="side-brand-text">Smart NRW<small>Job Management</small></span>
       </a>
 
       {% if user %}
@@ -20,9 +20,11 @@
         <div class="side-nav-group">
           <div class="side-nav-label">ภาพรวม</div>
           <a href="{{ url_for('monitoring') }}"
-             class="side-nav-item {{ 'active' if active_page == 'monitoring' }}">NRW Dashboard</a>
+             class="side-nav-item {{ 'active' if active_page == 'monitoring' }}">ติดตาม MNF/RTU</a>
           <a href="{{ url_for('dashboard') }}"
-             class="side-nav-item {{ 'active' if active_page == 'dashboard' }}">Job Dashboard</a>
+             class="side-nav-item {{ 'active' if active_page == 'dashboard' }}">ติดตามงาน NRW</a>
+          <a href="{{ url_for('incident_tree') }}"
+             class="side-nav-item {{ 'active' if active_page == 'incident_tree' }}">แสดงผังเหตุการณ์</a>
         </div>
         <div class="side-nav-group">
           <div class="side-nav-label">การบัญชาการ</div>
@@ -31,11 +33,13 @@
         </div>
         <div class="side-nav-group">
           <div class="side-nav-label">การจัดการงาน</div>
-          <span class="side-nav-item disabled">มอบหมาย/ติดตามงาน<small>เร็วๆ นี้</small></span>
+          <a href="{{ url_for('manage_jobs') }}"
+             class="side-nav-item {{ 'active' if active_page == 'manage_jobs' }}">มอบหมาย/ติดตามงาน</a>
         </div>
         <div class="side-nav-group">
           <div class="side-nav-label">ปฏิบัติการภาคสนาม</div>
-          <span class="side-nav-item disabled">งานของฉัน<small>เร็วๆ นี้</small></span>
+          <a href="{{ url_for('my_jobs') }}"
+             class="side-nav-item {{ 'active' if active_page == 'my_jobs' }}">ติดตามงานที่รับผิดชอบ</a>
         </div>
         <div class="side-nav-group">
           <div class="side-nav-label">ผู้ดูแลระบบ</div>
@@ -55,7 +59,7 @@
         <div class="side-nav-group">
           <div class="side-nav-label">ภาพรวม</div>
           <a href="{{ url_for('monitoring') }}"
-             class="side-nav-item {{ 'active' if active_page == 'monitoring' }}">NRW Dashboard</a>
+             class="side-nav-item {{ 'active' if active_page == 'monitoring' }}">ติดตาม MNF/RTU</a>
         </div>
       </nav>
       <div class="side-nav-footer">
@@ -74,7 +78,7 @@
     <div class="login-modal-box">
       <button type="button" class="login-modal-close" id="loginCloseBtn">✕</button>
       <div class="badge-icon" style="margin-bottom:14px;">กปน</div>
-      <h1>NRW Job Management</h1>
+      <h1>Smart NRW</h1>
       <p class="subtitle">เข้าสู่ระบบเพื่อจัดการงานและเหตุการณ์</p>
 
       <div class="flash error" id="loginErrorBox" style="display:none;"></div>

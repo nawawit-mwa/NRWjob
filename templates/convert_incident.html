@@ -1,5 +1,5 @@
 {% extends "base_sidebar.html" %}
-{% block title %}แปลงเหตุการณ์เป็นงาน — NRW Job Management{% endblock %}
+{% block title %}แปลงเหตุการณ์เป็นงาน — Smart NRW{% endblock %}
 {% block content %}
 <div class="container" style="max-width: 640px;">
   <a href="{{ url_for('dashboard') }}">&larr; กลับไป Dashboard</a>
@@ -17,7 +17,7 @@
     <p><strong>ประเภท:</strong> {{ incident.IncidentType }}</p>
     <p><strong>รายละเอียด:</strong> {{ incident.Description or '—' }}</p>
     <p><strong>ความรุนแรง:</strong> {{ incident.Severity }}</p>
-    <p><strong>สถานะการแปลง:</strong> {{ incident.ConversionStatus }}</p>
+    <p><strong>สถานะการจ่ายงาน:</strong> {{ incident.ConversionStatus }}</p>
   </div>
 
   <div class="section-title">เลือกประเภทงานที่ต้องการสร้าง (เลือกได้หลายประเภท)</div>

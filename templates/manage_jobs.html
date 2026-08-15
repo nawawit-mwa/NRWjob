@@ -1,0 +1,140 @@
+{% extends "base_sidebar.html" %}
+{% import "_job_popup_macro.html" as jp %}
+{% block title %}มอบหมาย/ติดตามงาน — Smart NRW{% endblock %}
+
+{% block extra_head %}
+<style>
+  .job-card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+    margin-bottom: 12px;
+  }
+  .job-card .jc-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .job-card .jc-id { font-weight: 700; color: var(--mwa-navy-deep); }
+  .job-card .jc-meta { font-size: 0.82rem; color: var(--ink-soft); margin-top: 2px; }
+  .job-card .jc-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--line);
+  }
+  .job-card .jc-actions form { display: flex; gap: 6px; align-items: center; }
+  .job-card .jc-actions select {
+    padding: 6px 10px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    font-size: 0.82rem;
+    font-family: var(--font-ui);
+    min-width: 220px;
+  }
+  .btn-sm {
+    padding: 6px 14px;
+    border-radius: 6px;
+    border: none;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: var(--font-ui);
+  }
+  .btn-sm.assign { background: var(--mwa-sky); color: #fff; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, message in messages %}
+        <div class="flash {{ category }}">{{ message }}</div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  <div class="section-title">งานที่รอมอบหมายในขอบเขตของคุณ</div>
+  {% if pending_jobs %}
+    {% for job in pending_jobs %}
+    <div class="job-card">
+      <div class="jc-head">
+        <div>
+          <div class="jc-id">{{ job.JobID }} — {{ job_type_name_map.get(job.JobType, job.JobType) }}</div>
+          <div class="jc-meta">
+            กำหนดเสร็จ: {{ job.DueDate or '—' }} · ความสำคัญ: {{ job.Priority or '—' }}
+            {% if job.CurrentAssigneeRole %} · ผู้ถือครองปัจจุบัน: {{ job.CurrentAssigneeRole }}{% endif %}
+          </div>
+        </div>
+        <span class="badge {{ job.Status|status_class }}">{{ job.Status }}</span>
+      </div>
+
+      {% set candidates = job_candidates.get(job.JobID, []) %}
+      <div class="jc-actions">
+        {% if candidates %}
+        <form method="post" action="{{ url_for('job_assign', job_id=job.JobID) }}">
+          <select name="to_user_id" required>
+            <option value="">— เลือกผู้รับมอบหมาย —</option>
+            {% for c in candidates %}
+            <option value="{{ c.UserID }}">{{ c.Name }} ({{ c.Role }})</option>
+            {% endfor %}
+          </select>
+          <button type="submit" class="btn-sm assign">มอบหมาย</button>
+        </form>
+        {% else %}
+        <span style="font-size:0.82rem; color:var(--danger);">
+          ไม่พบผู้รับมอบหมายที่เหมาะสมในขอบเขตนี้ (ตรวจสอบว่ามีผู้ใช้สังกัดส่วน/กองนี้ครบหรือยัง)
+        </span>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+  <div class="panel"><div class="empty-state">ไม่มีงานที่รอมอบหมายในขอบเขตของคุณตอนนี้</div></div>
+  {% endif %}
+
+  <div class="section-title">ภาพรวมงานทั้งหมดในขอบเขตของคุณ</div>
+  <div class="panel">
+    {% if tracking_jobs %}
+    <table>
+      <thead>
+        <tr>
+          <th>รหัสงาน</th>
+          <th>ประเภทงาน</th>
+          <th>สถานะ</th>
+          <th>ผู้รับผิดชอบปัจจุบัน</th>
+          <th>กำหนดเสร็จ</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for job in tracking_jobs %}
+        {% set perms = tracking_permissions.get(job.JobID, {}) %}
+        <tr>
+          <td>{{ job.JobID }}</td>
+          <td>{{ job_type_name_map.get(job.JobType, job.JobType) }}</td>
+          <td><span class="badge {{ job.Status|status_class }}">{{ job.Status }}</span></td>
+          <td>{{ job.CurrentAssigneeRole or '—' }}</td>
+          <td>{{ job.DueDate or '—' }}</td>
+          <td>
+            {% if perms.any %}{{ jp.edit_trigger(job) }}{% endif %}
+            {{ jp.job_popup(job, perms, lateral_candidates, url_for('manage_jobs'), job_type_name_map.get(job.JobType, job.JobType)) }}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">ไม่มีงานในขอบเขตของคุณตอนนี้</div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

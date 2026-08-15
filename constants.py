@@ -80,7 +80,7 @@ ALL_JOB_STATUSES = [
 
 # ---- Incident conversion status ----
 CONVERSION_NOT_CONVERTED = "ยังไม่แปลง"
-CONVERSION_PARTIAL = "แปลงบางส่วน"
+CONVERSION_PARTIAL = "จ่ายงานไปแล้ว"
 CONVERSION_FULL = "แปลงครบแล้ว"
 
 # ---- JobLogs ActionType ----

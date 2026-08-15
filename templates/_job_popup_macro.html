@@ -1,0 +1,90 @@
+{#
+  _job_popup_macro.html
+  Macro กลางสำหรับ popup แก้ไขงาน — ใช้ร่วมกันทุกหน้าที่มีตาราง/ผัง Job
+  (dashboard.html, manage_jobs.html, incident_tree.html) ลดการเขียนซ้ำ
+
+  พารามิเตอร์:
+    job              - dict ของงาน
+    perms            - dict จาก dashboard_service.get_job_permissions()
+    lateral_candidates - list ผู้ใช้ที่โอนงานให้ได้ (ใช้เมื่อ perms.can_transfer)
+    back_url         - URL ที่จะ redirect กลับมาหลังทำรายการ (หน้าปัจจุบัน)
+    type_label       - ชื่อประเภทงานที่แปลแล้ว (ไม่ใช่ JobTypeID ดิบ)
+#}
+{% macro job_popup(job, perms, lateral_candidates, back_url, type_label) %}
+{% if perms.any %}
+<div class="job-popup-overlay" id="popup-{{ job.JobID }}">
+  <div class="job-popup-box">
+    <button type="button" class="job-popup-close"
+            onclick="document.getElementById('popup-{{ job.JobID }}').classList.remove('open')">✕</button>
+    <h3>{{ job.JobID }} — {{ type_label }}</h3>
+    <div class="pp-row">สถานะ: <span class="badge {{ job.Status|status_class }}">{{ job.Status }}</span></div>
+    <div class="pp-row">ผู้รับผิดชอบปัจจุบัน: {{ job.CurrentAssigneeRole or '—' }}</div>
+    <div class="pp-row">กำหนดเสร็จ: {{ job.DueDate or '—' }}</div>
+    <div class="pp-row">ความสำคัญ: {{ job.Priority or '—' }}</div>
+
+    <div class="pp-actions">
+      {% if perms.can_accept %}
+      <form method="post" action="{{ url_for('job_accept', job_id=job.JobID) }}">
+        <input type="hidden" name="next" value="{{ back_url }}">
+        <button type="submit" class="btn-sm accept">รับงาน</button>
+      </form>
+      {% endif %}
+      {% if perms.can_reject %}
+      <form method="post" action="{{ url_for('job_reject', job_id=job.JobID) }}">
+        <input type="hidden" name="next" value="{{ back_url }}">
+        <input type="text" name="reason" placeholder="เหตุผลที่ปฏิเสธ" required>
+        <button type="submit" class="btn-sm reject">ปฏิเสธ</button>
+      </form>
+      {% endif %}
+      {% if perms.can_submit %}
+      <form method="post" action="{{ url_for('job_submit_completion', job_id=job.JobID) }}">
+        <input type="hidden" name="next" value="{{ back_url }}">
+        <input type="text" name="remarks" placeholder="บันทึกผลการดำเนินงาน (ถ้ามี)">
+        <button type="submit" class="btn-sm submit">ส่งงานเสร็จ</button>
+      </form>
+      {% endif %}
+      {% if perms.can_verify %}
+      <form method="post" action="{{ url_for('job_verify', job_id=job.JobID) }}">
+        <input type="hidden" name="next" value="{{ back_url }}">
+        <input type="hidden" name="passed" value="1">
+        <input type="text" name="notes" placeholder="หมายเหตุ (ถ้ามี)">
+        <button type="submit" class="btn-sm pass">ตรวจผ่าน</button>
+      </form>
+      <form method="post" action="{{ url_for('job_verify', job_id=job.JobID) }}">
+        <input type="hidden" name="next" value="{{ back_url }}">
+        <input type="hidden" name="passed" value="0">
+        <input type="text" name="notes" placeholder="เหตุผลที่ไม่ผ่าน" required>
+        <button type="submit" class="btn-sm fail">ไม่ผ่าน (ตีกลับ)</button>
+      </form>
+      {% endif %}
+      {% if perms.can_close %}
+      <form method="post" action="{{ url_for('job_close', job_id=job.JobID) }}">
+        <input type="hidden" name="next" value="{{ back_url }}">
+        <button type="submit" class="btn-sm close">ปิดงาน</button>
+      </form>
+      {% endif %}
+      {% if perms.can_transfer and lateral_candidates %}
+      <form method="post" action="{{ url_for('job_transfer', job_id=job.JobID) }}">
+        <input type="hidden" name="next" value="{{ back_url }}">
+        <select name="to_user_id" required>
+          <option value="">— โอนให้เพื่อนร่วมระดับ —</option>
+          {% for c in lateral_candidates %}
+          <option value="{{ c.UserID }}">{{ c.Name }} ({{ c.Role }})</option>
+          {% endfor %}
+        </select>
+        <button type="submit" class="btn-sm transfer">โอนงาน</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endmacro %}
+
+
+{% macro edit_trigger(job) %}
+{% if job %}
+<button type="button" class="btn-edit-trigger"
+        onclick="document.getElementById('popup-{{ job.JobID }}').classList.add('open')">แก้ไข</button>
+{% endif %}
+{% endmacro %}

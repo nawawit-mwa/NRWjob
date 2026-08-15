@@ -1,0 +1,184 @@
+{% extends "base_sidebar.html" %}
+{% import "_job_popup_macro.html" as jp %}
+{% block title %}ผังเหตุการณ์ — Smart NRW{% endblock %}
+
+{% block extra_head %}
+<style>
+  /* ผังต้นไม้ CSS ล้วน (ไม่ใช้ library เพิ่ม) — เหตุการณ์เป็น root, งานเป็นกิ่งด้านล่าง */
+  .tree, .tree ul, .tree li {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    position: relative;
+  }
+  .tree {
+    margin: 30px 0 10px;
+    text-align: center;
+    overflow-x: auto;
+  }
+  .tree ul {
+    display: flex;
+    justify-content: center;
+    padding-top: 34px;
+    position: relative;
+  }
+  .tree li {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 34px 14px 0 14px;
+    position: relative;
+  }
+  .tree li::before, .tree li::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 50%;
+    border-top: 2px solid var(--line);
+    width: 50%;
+    height: 34px;
+  }
+  .tree li::after {
+    right: auto;
+    left: 50%;
+    border-left: 2px solid var(--line);
+  }
+  .tree li:only-child::after, .tree li:only-child::before { display: none; }
+  .tree li:only-child { padding-top: 0; }
+  .tree li:first-child::before, .tree li:last-child::after { border: 0 none; }
+  .tree li:last-child::before { border-right: 2px solid var(--line); border-radius: 0 6px 0 0; }
+  .tree li:first-child::after { border-radius: 6px 0 0 0; }
+  .tree > li { padding-top: 0; }
+  .tree > li::before, .tree > li::after { display: none; }
+
+  .tree-node {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 12px 16px;
+    background: var(--panel);
+    display: inline-block;
+    text-align: left;
+    min-width: 190px;
+    font-size: 0.85rem;
+  }
+  .tree-node.root {
+    border-top: 3px solid var(--mwa-sky);
+    min-width: 240px;
+  }
+  .tree-node .tn-id {
+    font-weight: 700;
+    color: var(--mwa-navy-deep);
+    margin-bottom: 4px;
+  }
+  .tree-node .tn-row {
+    color: var(--ink-soft);
+    font-size: 0.78rem;
+    margin-top: 3px;
+  }
+  .tree-node .tn-slowest {
+    display: inline-block;
+    margin-top: 6px;
+    font-size: 0.7rem;
+    color: var(--mwa-purple);
+    background: #f3e0fb;
+    padding: 2px 8px;
+    border-radius: 999px;
+  }
+
+  .tree-node.clickable {
+    cursor: pointer;
+    border-color: var(--mwa-sky);
+  }
+  .tree-node.clickable:hover {
+    box-shadow: 0 4px 14px rgba(0, 156, 255, 0.18);
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, message in messages %}
+        <div class="flash {{ category }}">{{ message }}</div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  <div class="section-title">ผังเหตุการณ์</div>
+  <div class="panel" style="padding: 20px 22px; margin-bottom: 24px;">
+    <form method="get" style="display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap;">
+      <div class="field" style="flex:1; min-width:260px; margin-bottom:0;">
+        <label for="incident_id">เลือกเหตุการณ์</label>
+        <select id="incident_id" name="incident_id" onchange="this.form.submit()">
+          <option value="">— เลือกเหตุการณ์ —</option>
+          {% for inc in incidents %}
+          <option value="{{ inc.IncidentID }}" {{ 'selected' if inc.IncidentID == selected_id }}>
+            {{ inc.IncidentID }} — {{ inc.IncidentType }} ({{ inc.Severity }})
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+    </form>
+  </div>
+
+  {% if selected_incident %}
+  {% set back_url = url_for('incident_tree', incident_id=selected_id) %}
+  <div class="panel" style="padding: 4px;">
+    <ul class="tree">
+      <li>
+        <div class="tree-node root">
+          <div class="tn-id">{{ selected_incident.IncidentID }}</div>
+          <div class="tn-row">ประเภท: {{ selected_incident.IncidentType }}</div>
+          <div class="tn-row">ความรุนแรง: {{ selected_incident.Severity }}</div>
+          <div class="tn-row">สถานะแปลง: {{ selected_incident.ConversionStatus }}</div>
+          <div class="tn-row">กำหนดเสร็จ (รวม): {{ selected_incident.DueDate or '—' }}</div>
+        </div>
+
+        {% if jobs %}
+        <ul>
+          {% for job in jobs %}
+          {% set perms = job_permissions.get(job.JobID, {}) %}
+          <li>
+            {% if perms.any %}
+            <div class="tree-node clickable" onclick="document.getElementById('popup-{{ job.JobID }}').classList.add('open')">
+            {% else %}
+            <div class="tree-node">
+            {% endif %}
+              <div class="tn-id">{{ job.JobID }}</div>
+              <div class="tn-row">ประเภทงาน: {{ job_type_name_map.get(job.JobType, job.JobType) }}</div>
+              <div class="tn-row">
+                <span class="badge {{ job.Status|status_class }}">{{ job.Status }}</span>
+              </div>
+              <div class="tn-row">ผู้รับผิดชอบ: {{ job.CurrentAssigneeRole or '—' }}</div>
+              <div class="tn-row">กำหนดเสร็จ: {{ job.DueDate or '—' }}</div>
+              {% if job.IsSlowestInGroup == True or job.IsSlowestInGroup == 'True' %}
+              <span class="tn-slowest">ตัวกำหนด DueDate ของเหตุการณ์</span>
+              {% endif %}
+              {% if perms.any %}
+              <span class="tn-editable-badge">แก้ไขได้</span>
+              {% endif %}
+            </div>
+          </li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+      </li>
+    </ul>
+
+    {% if not jobs %}
+    <div class="empty-state">เหตุการณ์นี้ยังไม่มีงานที่จ่ายเลย</div>
+    {% endif %}
+  </div>
+
+  {% for job in jobs %}
+  {{ jp.job_popup(job, job_permissions.get(job.JobID, {}), lateral_candidates, back_url, job_type_name_map.get(job.JobType, job.JobType)) }}
+  {% endfor %}
+
+  {% else %}
+  <div class="panel">
+    <div class="empty-state">เลือกเหตุการณ์ด้านบนเพื่อดูผังว่าแตกเป็นงานอะไรบ้าง</div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

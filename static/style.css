@@ -530,3 +530,116 @@ tr:last-child td { border-bottom: none; }
   color: var(--ink-soft);
   font-size: 0.85rem;
 }
+
+/* ===================== Job Popup (ใช้ร่วมกันทุกหน้า: dashboard, manage_jobs, incident_tree) ===================== */
+
+.job-popup-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 25, 40, 0.55);
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 20px;
+}
+.job-popup-overlay.open { display: flex; }
+
+.job-popup-box {
+  position: relative;
+  background: var(--panel);
+  border-radius: 14px;
+  padding: 26px 28px;
+  width: 100%;
+  max-width: 400px;
+  max-height: 85vh;
+  overflow-y: auto;
+  box-shadow: 0 24px 60px rgba(5, 25, 40, 0.4);
+}
+
+.job-popup-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  background: none;
+  border: 1px solid var(--line);
+  color: var(--ink-soft);
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.job-popup-box h3 {
+  margin: 0 0 12px;
+  font-size: 1.05rem;
+  color: var(--mwa-navy-deep);
+}
+
+.job-popup-box .pp-row {
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+  margin-bottom: 6px;
+}
+
+.job-popup-box .pp-actions {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.job-popup-box form { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.job-popup-box input[type="text"], .job-popup-box select {
+  flex: 1;
+  min-width: 140px;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 0.82rem;
+  font-family: var(--font-ui);
+}
+
+.btn-sm {
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: none;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: var(--font-ui);
+}
+.btn-sm.accept { background: var(--mwa-green); color: #fff; }
+.btn-sm.reject { background: var(--danger); color: #fff; }
+.btn-sm.submit { background: var(--mwa-sky); color: #fff; }
+.btn-sm.pass { background: var(--mwa-green); color: #fff; }
+.btn-sm.fail { background: var(--danger); color: #fff; }
+.btn-sm.close { background: var(--mwa-navy-deep); color: #fff; }
+.btn-sm.transfer { background: var(--mwa-purple); color: #fff; }
+
+.btn-edit-trigger {
+  padding: 4px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--mwa-sky);
+  background: #fff;
+  color: var(--mwa-sky);
+  font-size: 0.76rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: var(--font-ui);
+}
+.btn-edit-trigger:hover { background: var(--mwa-sky); color: #fff; }
+
+.tn-editable-badge {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: #fff;
+  background: var(--mwa-sky);
+  padding: 2px 8px;
+  border-radius: 999px;
+}

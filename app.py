@@ -1,6 +1,6 @@
 """
 app.py
-Flask Web App สำหรับ NRW Job Management
+Flask Web App สำหรับ Smart NRW (NRW Job Management)
 
 รันในเครื่อง (dev):   python app.py
 รันบนเซิร์ฟเวอร์จริง (production): gunicorn app:app --bind 0.0.0.0:$PORT
@@ -15,14 +15,54 @@ from flask import Flask, render_template, request, redirect, url_for, session, f
 import auth_service
 import dashboard_service
 import incident_service
+import job_service
+import org_service
 import sheets_client as sc
-from constants import ROLE_ADMIN, ROLE_DEPUTY_GOVERNOR, ROLE_ASSISTANT_GOVERNOR
+from constants import ROLE_ADMIN, ROLE_DEPUTY_GOVERNOR, ROLE_ASSISTANT_GOVERNOR, ASSIGNER_ROLES
 from schema_setup import SHEET_SCHEMAS
 
 app = Flask(__name__)
 # ในเครื่อง (dev): ไม่ตั้ง SECRET_KEY ก็ได้ จะใช้ค่า fallback ด้านล่างแทน
 # บน Render (production): ต้องตั้ง environment variable SECRET_KEY เป็นค่าสุ่มที่คาดเดาไม่ได้
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key-change-me-in-production")
+
+
+def _status_badge_class(status):
+    """แปลงสถานะงานเป็น CSS class ของ badge สี — ใช้เป็น Jinja filter |status_class
+    เพื่อไม่ต้องประกาศ macro status_badge ซ้ำในทุกไฟล์ template"""
+    progress_statuses = {"มอบหมายแล้ว รอรับ", "รับงานแล้ว", "กำลังดำเนินการ", "ตีกลับ"}
+    if status == "รอมอบหมาย":
+        return "status-pending"
+    if status in progress_statuses:
+        return "status-progress"
+    if status == "เสร็จ รอตรวจสอบ":
+        return "status-verify"
+    if status == "ปิดงาน":
+        return "status-done"
+    if status == "ยกเลิกงาน":
+        return "status-cancel"
+    if status == "ปฏิเสธ":
+        return "status-reject"
+    return "status-pending"
+
+
+app.jinja_env.filters["status_class"] = _status_badge_class
+
+
+def _user_short_display(user_id):
+    """แปลง UserID -> 'ชื่อ(คำแรก) / ตำแหน่ง' สำหรับแสดงในตาราง (เช่น ปิดงานโดย)
+    ถ้าหา user ไม่เจอ (เช่นถูกลบไปแล้ว) แสดง UserID ดิบแทน ไม่ error"""
+    if not user_id:
+        return "—"
+    user = sc.find_one("Users", "UserID", user_id)
+    if not user:
+        return user_id
+    name = (user.get("Name") or "").strip().split(" ")[0]
+    role = user.get("Role") or ""
+    return f"{name} / {role}" if name else user_id
+
+
+app.jinja_env.filters["user_short"] = _user_short_display
 
 # โหลดข้อมูลจาก Google Sheets เข้า cache ครั้งเดียวตอนโมดูลนี้ถูก import
 # (ต้องอยู่นอก "if __name__ == '__main__'" เพราะตอน deploy จริงจะใช้ gunicorn
@@ -106,6 +146,16 @@ def dashboard():
         "total_incidents": len(incidents),
     }
 
+    job_permissions = {j["JobID"]: dashboard_service.get_job_permissions(j, user) for j in jobs}
+    lateral_candidates = (
+        org_service.get_lateral_transfer_candidates(user)
+        if any(p["can_transfer"] for p in job_permissions.values())
+        else []
+    )
+    job_type_name_map = {
+        jt["JobTypeID"]: jt["JobTypeName"] for jt in sc.get_all_records("JobTypes")
+    }
+
     return render_template(
         "dashboard.html",
         user=user,
@@ -114,6 +164,9 @@ def dashboard():
         done_jobs=done_jobs,
         incidents=incidents,
         summary=summary,
+        job_permissions=job_permissions,
+        lateral_candidates=lateral_candidates,
+        job_type_name_map=job_type_name_map,
     )
 
 
@@ -178,7 +231,7 @@ def convert_incident(incident_id):
         else:
             try:
                 job_ids = incident_service.convert_incident_to_jobs(incident_id, job_type_ids, user)
-                flash(f"แปลงเป็นงานเรียบร้อย: {', '.join(job_ids)}", "info")
+                flash(f"จ่ายงานเรียบร้อย: {', '.join(job_ids)}", "info")
                 return redirect(url_for("dashboard"))
             except (PermissionError, ValueError) as e:
                 flash(str(e), "error")
@@ -186,6 +239,216 @@ def convert_incident(incident_id):
     job_types = sc.get_all_records("JobTypes")
     return render_template("convert_incident.html", user=user, active_page="new_incident",
                             incident=incident, job_types=job_types)
+
+
+@app.route("/incidents/tree")
+@login_required
+def incident_tree():
+    user = request.current_user
+    incidents = dashboard_service.get_dashboard_incidents(user)
+    incident_ids_visible = {i["IncidentID"] for i in incidents}
+
+    selected_id = request.args.get("incident_id", "")
+    selected_incident = None
+    jobs = []
+    job_permissions = {}
+    lateral_candidates = []
+
+    if selected_id:
+        if selected_id not in incident_ids_visible:
+            flash("ไม่พบเหตุการณ์นี้ในขอบเขตของคุณ", "error")
+        else:
+            selected_incident = sc.find_one("Incidents", "IncidentID", selected_id)
+            jobs = sc.find_many("Jobs", "SiblingJobGroup", selected_id)
+            job_permissions = {
+                job["JobID"]: dashboard_service.get_job_permissions(job, user) for job in jobs
+            }
+            if any(p["can_transfer"] for p in job_permissions.values()):
+                lateral_candidates = org_service.get_lateral_transfer_candidates(user)
+
+    job_type_name_map = {
+        jt["JobTypeID"]: jt["JobTypeName"] for jt in sc.get_all_records("JobTypes")
+    }
+
+    return render_template(
+        "incident_tree.html",
+        user=user,
+        active_page="incident_tree",
+        incidents=incidents,
+        selected_id=selected_id,
+        selected_incident=selected_incident,
+        jobs=jobs,
+        job_type_name_map=job_type_name_map,
+        job_permissions=job_permissions,
+        lateral_candidates=lateral_candidates,
+    )
+
+
+@app.route("/my-jobs")
+@login_required
+def my_jobs():
+    user = request.current_user
+    action_jobs = dashboard_service.get_my_action_jobs(user)
+    job_type_name_map = {
+        jt["JobTypeID"]: jt["JobTypeName"] for jt in sc.get_all_records("JobTypes")
+    }
+    lateral_candidates = org_service.get_lateral_transfer_candidates(user)
+    return render_template(
+        "my_jobs.html",
+        user=user,
+        active_page="my_jobs",
+        assigned_to_me=action_jobs["assigned_to_me"],
+        pending_verify=action_jobs["pending_verify"],
+        pending_close=action_jobs["pending_close"],
+        job_type_name_map=job_type_name_map,
+        lateral_candidates=lateral_candidates,
+    )
+
+
+def _safe_redirect(default_endpoint):
+    """redirect กลับไปที่ 'next' ถ้ามีและเป็น path ภายในเว็บเราเท่านั้น (กัน open redirect)
+    ถ้าไม่มีหรือไม่ปลอดภัย ใช้ default_endpoint แทน"""
+    next_url = request.form.get("next", "")
+    if next_url.startswith("/") and not next_url.startswith("//"):
+        return redirect(next_url)
+    return redirect(url_for(default_endpoint))
+
+
+@app.route("/jobs/<job_id>/accept", methods=["POST"])
+@login_required
+def job_accept(job_id):
+    user = request.current_user
+    try:
+        job_service.accept_job(job_id, user)
+        flash(f"รับงาน {job_id} เรียบร้อยแล้ว", "info")
+    except (PermissionError, ValueError) as e:
+        flash(str(e), "error")
+    return _safe_redirect("my_jobs")
+
+
+@app.route("/jobs/<job_id>/reject", methods=["POST"])
+@login_required
+def job_reject(job_id):
+    user = request.current_user
+    reason = request.form.get("reason", "").strip()
+    try:
+        job_service.reject_job(job_id, user, reason or "ไม่ระบุเหตุผล")
+        flash(f"ปฏิเสธงาน {job_id} แล้ว", "info")
+    except (PermissionError, ValueError) as e:
+        flash(str(e), "error")
+    return _safe_redirect("my_jobs")
+
+
+@app.route("/jobs/<job_id>/submit-completion", methods=["POST"])
+@login_required
+def job_submit_completion(job_id):
+    user = request.current_user
+    remarks = request.form.get("remarks", "").strip()
+    try:
+        job_service.submit_completion(job_id, user, remarks)
+        flash(f"ส่งงาน {job_id} เสร็จแล้ว รอตรวจสอบ", "info")
+    except (PermissionError, ValueError) as e:
+        flash(str(e), "error")
+    return _safe_redirect("my_jobs")
+
+
+@app.route("/jobs/<job_id>/verify", methods=["POST"])
+@login_required
+def job_verify(job_id):
+    user = request.current_user
+    passed = request.form.get("passed") == "1"
+    notes = request.form.get("notes", "").strip()
+    try:
+        job_service.verify_job(job_id, user, passed, notes)
+        flash(f"บันทึกผลตรวจสอบงาน {job_id} แล้ว ({'ผ่าน' if passed else 'ไม่ผ่าน - ตีกลับ'})", "info")
+    except (PermissionError, ValueError) as e:
+        flash(str(e), "error")
+    return _safe_redirect("my_jobs")
+
+
+@app.route("/jobs/<job_id>/close", methods=["POST"])
+@login_required
+def job_close(job_id):
+    user = request.current_user
+    try:
+        job_service.close_job(job_id, user)
+        flash(f"ปิดงาน {job_id} เรียบร้อยแล้ว", "info")
+    except (PermissionError, ValueError) as e:
+        flash(str(e), "error")
+    return _safe_redirect("my_jobs")
+
+
+@app.route("/jobs/<job_id>/transfer", methods=["POST"])
+@login_required
+def job_transfer(job_id):
+    user = request.current_user
+    to_user_id = request.form.get("to_user_id", "")
+    if not to_user_id:
+        flash("กรุณาเลือกผู้รับโอนงาน", "error")
+        return _safe_redirect("my_jobs")
+    try:
+        job_service.lateral_transfer(job_id, to_user_id, user)
+        flash(f"โอนงาน {job_id} เรียบร้อยแล้ว", "info")
+    except (PermissionError, ValueError) as e:
+        flash(str(e), "error")
+    return _safe_redirect("my_jobs")
+
+
+@app.route("/jobs/manage")
+@login_required
+def manage_jobs():
+    user = request.current_user
+    if user.get("Role") not in ASSIGNER_ROLES and user.get("Role") != ROLE_ADMIN:
+        flash("Role นี้ไม่มีสิทธิ์เข้าหน้ามอบหมายงาน", "error")
+        return redirect(url_for("dashboard"))
+
+    job_type_name_map = {
+        jt["JobTypeID"]: jt["JobTypeName"] for jt in sc.get_all_records("JobTypes")
+    }
+
+    pending_jobs = dashboard_service.get_assignable_jobs(user)
+    job_candidates = {
+        job["JobID"]: org_service.get_assignable_users_for_job(job, user)
+        for job in pending_jobs
+    }
+
+    tracking_jobs = dashboard_service.get_dashboard_jobs(user)
+    tracking_permissions = {
+        j["JobID"]: dashboard_service.get_job_permissions(j, user) for j in tracking_jobs
+    }
+    lateral_candidates = (
+        org_service.get_lateral_transfer_candidates(user)
+        if any(p["can_transfer"] for p in tracking_permissions.values())
+        else []
+    )
+
+    return render_template(
+        "manage_jobs.html",
+        user=user,
+        active_page="manage_jobs",
+        pending_jobs=pending_jobs,
+        job_candidates=job_candidates,
+        tracking_jobs=tracking_jobs,
+        tracking_permissions=tracking_permissions,
+        lateral_candidates=lateral_candidates,
+        job_type_name_map=job_type_name_map,
+    )
+
+
+@app.route("/jobs/<job_id>/assign", methods=["POST"])
+@login_required
+def job_assign(job_id):
+    user = request.current_user
+    to_user_id = request.form.get("to_user_id", "")
+    if not to_user_id:
+        flash("กรุณาเลือกผู้รับมอบหมาย", "error")
+        return redirect(url_for("manage_jobs"))
+    try:
+        job_service.assign_job(job_id, to_user_id, user)
+        flash(f"มอบหมายงาน {job_id} เรียบร้อยแล้ว", "info")
+    except (PermissionError, ValueError) as e:
+        flash(str(e), "error")
+    return redirect(url_for("manage_jobs"))
 
 
 if __name__ == "__main__":

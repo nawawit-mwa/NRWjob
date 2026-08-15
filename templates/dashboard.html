@@ -1,16 +1,6 @@
 {% extends "base_sidebar.html" %}
-{% block title %}Job Dashboard — NRW Job Management{% endblock %}
-
-{% macro status_badge(status) -%}
-  {%- if status == 'รอมอบหมาย' -%}status-pending
-  {%- elif status in ['มอบหมายแล้ว รอรับ', 'รับงานแล้ว', 'กำลังดำเนินการ', 'ตีกลับ'] -%}status-progress
-  {%- elif status == 'เสร็จ รอตรวจสอบ' -%}status-verify
-  {%- elif status == 'ปิดงาน' -%}status-done
-  {%- elif status == 'ยกเลิกงาน' -%}status-cancel
-  {%- elif status == 'ปฏิเสธ' -%}status-reject
-  {%- else -%}status-pending
-  {%- endif -%}
-{%- endmacro %}
+{% import "_job_popup_macro.html" as jp %}
+{% block title %}ติดตามงาน NRW — Smart NRW{% endblock %}
 
 {% block content %}
 <div class="container">
@@ -58,17 +48,23 @@
           <th>ผู้รับผิดชอบปัจจุบัน</th>
           <th>กำหนดเสร็จ</th>
           <th>ความสำคัญ</th>
+          <th></th>
         </tr>
       </thead>
       <tbody>
         {% for job in active_jobs %}
+        {% set perms = job_permissions.get(job.JobID, {}) %}
         <tr>
           <td>{{ job.JobID }}</td>
-          <td>{{ job.JobType }}</td>
-          <td><span class="badge {{ status_badge(job.Status) }}">{{ job.Status }}</span></td>
+          <td>{{ job_type_name_map.get(job.JobType, job.JobType) }}</td>
+          <td><span class="badge {{ job.Status|status_class }}">{{ job.Status }}</span></td>
           <td>{{ job.CurrentAssigneeRole or '—' }}</td>
           <td>{{ job.DueDate or '—' }}</td>
           <td>{{ job.Priority or '—' }}</td>
+          <td>
+            {% if perms.any %}{{ jp.edit_trigger(job) }}{% endif %}
+            {{ jp.job_popup(job, perms, lateral_candidates, url_for('dashboard'), job_type_name_map.get(job.JobType, job.JobType)) }}
+          </td>
         </tr>
         {% endfor %}
       </tbody>
@@ -87,7 +83,7 @@
           <th>รหัสเหตุการณ์</th>
           <th>ประเภทเหตุการณ์</th>
           <th>ความรุนแรง</th>
-          <th>สถานะการแปลงเป็นงาน</th>
+          <th>สถานะการจ่ายงาน</th>
           <th>กำหนดเสร็จ (รวม)</th>
           <th></th>
         </tr>
@@ -102,7 +98,7 @@
           <td>{{ inc.DueDate or '—' }}</td>
           <td>
             {% if inc.ConversionStatus != 'แปลงครบแล้ว' %}
-            <a href="{{ url_for('convert_incident', incident_id=inc.IncidentID) }}">แปลงเป็นงาน</a>
+            <a href="{{ url_for('convert_incident', incident_id=inc.IncidentID) }}">งานที่จ่าย</a>
             {% endif %}
           </td>
         </tr>
@@ -123,16 +119,16 @@
           <th>รหัสงาน</th>
           <th>ประเภทงาน</th>
           <th>สถานะ</th>
-          <th>ปิด/ยกเลิกโดย</th>
+          <th>ปิดงานโดย</th>
         </tr>
       </thead>
       <tbody>
         {% for job in done_jobs %}
         <tr>
           <td>{{ job.JobID }}</td>
-          <td>{{ job.JobType }}</td>
-          <td><span class="badge {{ status_badge(job.Status) }}">{{ job.Status }}</span></td>
-          <td>{{ job.ClosedBy or job.CancelledBy or '—' }}</td>
+          <td>{{ job_type_name_map.get(job.JobType, job.JobType) }}</td>
+          <td><span class="badge {{ job.Status|status_class }}">{{ job.Status }}</span></td>
+          <td>{{ (job.ClosedBy or job.CancelledBy)|user_short }}</td>
         </tr>
         {% endfor %}
       </tbody>
