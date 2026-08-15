@@ -47,13 +47,26 @@ def find_section_for_job(branch_id: str, job_type_id: str) -> dict:
 
 def get_assignable_users_for_job(job: dict, assigner: dict) -> list:
     """คืนรายชื่อผู้ใช้ที่ assigner คนนี้มอบหมายงาน job นี้ให้ได้
-    (ต้องเป็นระดับต่ำกว่า assigner + สังกัดหน่วยงานเดียวกับ job ตามระดับของ role นั้นๆ)"""
+    เงื่อนไข (ต้องผ่านทั้งหมด):
+    1. ระดับต่ำกว่า assigner เสมอ
+    2. ถ้างานนี้มีผู้ถือครองอยู่แล้ว (CurrentAssigneeUserID ไม่ว่าง) — ต้องเป็นระดับเดียวกัน
+       หรือต่ำกว่าผู้ถือครองปัจจุบันเท่านั้น (กันไม่ให้ Admin เผลอ 'มอบหมายขึ้น' ไปสูงกว่าคนที่ถืออยู่)
+       ถ้างานยังไม่มีใครถือครอง (สถานะรอมอบหมาย) ข้ามเงื่อนไขนี้ไป
+    3. สังกัดหน่วยงานตรงกับ job ตามระดับของ role นั้นๆ"""
     from constants import (
         ROLE_LEVELS, ROLE_SECTION_CHIEF, ROLE_ENGINEER, ROLE_FIELD_TECH,
         ROLE_CONTRACTOR, ROLE_DIVISION_DIRECTOR,
     )
 
     assigner_level = ROLE_LEVELS.get(assigner.get("Role"), 999)
+
+    holder_level = None
+    holder_id = job.get("CurrentAssigneeUserID")
+    if holder_id:
+        holder = sc.find_one("Users", "UserID", holder_id)
+        if holder:
+            holder_level = ROLE_LEVELS.get(holder.get("Role"))
+
     all_users = sc.get_all_records("Users")
     candidates = []
 
@@ -63,6 +76,8 @@ def get_assignable_users_for_job(job: dict, assigner: dict) -> list:
         u_level = ROLE_LEVELS.get(u.get("Role"), 999)
         if u_level <= assigner_level:
             continue  # มอบหมายได้เฉพาะให้ผู้ที่ระดับต่ำกว่าตนเองเท่านั้น (Admin level=0 ผ่านเงื่อนไขนี้เสมออยู่แล้ว)
+        if holder_level is not None and u_level < holder_level:
+            continue  # ห้ามมอบหมายให้คนที่ระดับ 'สูงกว่า' ผู้ถือครองงานปัจจุบัน
 
         role = u.get("Role")
         if role in (ROLE_SECTION_CHIEF, ROLE_ENGINEER, ROLE_FIELD_TECH, ROLE_CONTRACTOR):
@@ -81,43 +96,51 @@ def get_assignable_users_for_job(job: dict, assigner: dict) -> list:
     return candidates
 
 
-def get_lateral_transfer_candidates(user: dict) -> list:
-    """คืนรายชื่อ 'เพื่อนร่วมระดับในหน่วยงานเดียวกัน' ที่ user คนนี้โอนงานให้ได้
-    (Role เดียวกัน + สังกัดหน่วยงานเดียวกัน ตามกฎ Lateral Transfer — ไม่รวมตัวเอง)"""
-    from constants import BELOW_BRANCH_LEVEL_ROLES
+def get_lateral_transfer_candidates_for_job(job: dict, viewer: dict) -> list:
+    """คืนรายชื่อ 'เพื่อนร่วมระดับในกองเดียวกัน' ที่โอนงาน job นี้ให้ได้
+    (Role เดียวกัน + สังกัดกองเดียวกัน ตามกฎ Lateral Transfer ฉบับล่าสุด — ไม่รวมตัวเอง)
 
-    if user.get("Role") not in BELOW_BRANCH_LEVEL_ROLES:
+    คำนวณจาก 'ผู้ถือครองงานปัจจุบัน' เสมอ ไม่ใช่จากตัว viewer ตรงๆ:
+    - กรณีปกติ (ไม่ใช่ Admin): viewer คือผู้ถือครองงานอยู่แล้ว (job_service บังคับไว้) จึงเหมือนเดิม
+    - กรณี Admin: Admin ไม่มี Role/Division เป็นของตัวเอง ต้องอิงจากผู้ถือครองงานจริงแทน
+      (แก้ปัญหาที่ Admin เห็นปุ่มโอนงานแต่ dropdown ว่างเปล่าตลอด)
+    """
+    from constants import ROLE_ADMIN, BELOW_BRANCH_LEVEL_ROLES
+
+    if viewer.get("Role") == ROLE_ADMIN:
+        holder_id = job.get("CurrentAssigneeUserID")
+        if not holder_id:
+            return []
+        reference = sc.find_one("Users", "UserID", holder_id)
+        if not reference:
+            return []
+    else:
+        reference = viewer
+
+    if reference.get("Role") not in BELOW_BRANCH_LEVEL_ROLES:
         return []
 
     all_users = sc.get_all_records("Users")
     candidates = []
     for u in all_users:
-        if u.get("UserID") == user.get("UserID"):
+        if u.get("UserID") == reference.get("UserID"):
             continue
         if u.get("Status") != "Active":
             continue
-        if same_unit(user, u):
+        if same_unit(reference, u):
             candidates.append(u)
     return candidates
 
 
 def same_unit(user_a: dict, user_b: dict) -> bool:
     """เช็คว่าสองคนอยู่ 'หน่วยงานเดียวกัน' หรือไม่ สำหรับกฎ Lateral Transfer
-    - ระดับ ผู้อำนวยการ(กอง): เทียบ DivisionID
-    - ระดับ หัวหน้าส่วน/วิศวกร/ช่าง/ผู้รับจ้าง: เทียบ SectionID
-    """
-    from constants import ROLE_DIVISION_DIRECTOR
-
+    (ฉบับล่าสุด: ใช้ระดับ 'กอง' (DivisionID) เป็นขอบเขตเดียวกันหมดทุก Role
+    ไม่จำกัดแค่ระดับ 'ส่วน' (SectionID) เหมือนเดิม — เพื่อให้มีเพื่อนร่วมงานให้โอนได้จริง
+    แม้ส่วนงานนั้นจะมีคนอยู่แค่คนเดียว)"""
     if user_a.get("Role") != user_b.get("Role"):
         return False
 
-    if user_a.get("Role") == ROLE_DIVISION_DIRECTOR:
-        return (
-            user_a.get("DivisionID")
-            and user_a.get("DivisionID") == user_b.get("DivisionID")
-        )
-
     return (
-        user_a.get("SectionID")
-        and user_a.get("SectionID") == user_b.get("SectionID")
+        user_a.get("DivisionID")
+        and user_a.get("DivisionID") == user_b.get("DivisionID")
     )

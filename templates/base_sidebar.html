@@ -21,10 +21,10 @@
           <div class="side-nav-label">ภาพรวม</div>
           <a href="{{ url_for('monitoring') }}"
              class="side-nav-item {{ 'active' if active_page == 'monitoring' }}">ติดตาม MNF/RTU</a>
-          <a href="{{ url_for('dashboard') }}"
-             class="side-nav-item {{ 'active' if active_page == 'dashboard' }}">ติดตามงาน NRW</a>
           <a href="{{ url_for('incident_tree') }}"
-             class="side-nav-item {{ 'active' if active_page == 'incident_tree' }}">แสดงผังเหตุการณ์</a>
+             class="side-nav-item {{ 'active' if active_page == 'incident_tree' }}">ติดตามเหตุการณ์</a>
+          <a href="{{ url_for('dashboard') }}"
+             class="side-nav-item {{ 'active' if active_page == 'dashboard' }}">ติดตามงาน</a>
         </div>
         <div class="side-nav-group">
           <div class="side-nav-label">การบัญชาการ</div>

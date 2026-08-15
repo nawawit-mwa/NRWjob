@@ -1,6 +1,6 @@
 {% extends "base_sidebar.html" %}
 {% import "_job_popup_macro.html" as jp %}
-{% block title %}ติดตามงาน NRW — Smart NRW{% endblock %}
+{% block title %}ติดตามงาน — Smart NRW{% endblock %}
 
 {% block content %}
 <div class="container">
@@ -13,29 +13,41 @@
   {% endwith %}
 
   <div class="summary-grid">
-    <div class="summary-card">
+    <a href="{{ url_for('dashboard', view='active') }}"
+       class="summary-card summary-card-link {{ 'active-filter' if view == 'active' }}">
       <div class="num">{{ summary.active_jobs }}</div>
       <div class="label">งานที่กำลังดำเนินการ</div>
-    </div>
-    <div class="summary-card">
+    </a>
+    <a href="{{ url_for('dashboard', view='done') }}"
+       class="summary-card summary-card-link {{ 'active-filter' if view == 'done' }}">
       <div class="num">{{ summary.done_jobs }}</div>
       <div class="label">งานที่จบแล้ว (ปิด/ยกเลิก)</div>
-    </div>
-    <div class="summary-card">
+    </a>
+    <a href="{{ url_for('dashboard', view='all') }}"
+       class="summary-card summary-card-link {{ 'active-filter' if view == 'all' }}">
       <div class="num">{{ summary.total_jobs }}</div>
       <div class="label">งานทั้งหมดในขอบเขตของคุณ</div>
-    </div>
-    <div class="summary-card">
+    </a>
+    <a href="{{ url_for('dashboard', view='incidents') }}"
+       class="summary-card summary-card-link {{ 'active-filter' if view == 'incidents' }}">
       <div class="num">{{ summary.total_incidents }}</div>
       <div class="label">เหตุการณ์ที่เกี่ยวข้อง</div>
-    </div>
+    </a>
   </div>
+
+  {% if view != 'all' %}
+  <div class="flash info" style="display:flex; justify-content:space-between; align-items:center;">
+    <span>กำลังกรองอยู่</span>
+    <a href="{{ url_for('dashboard', view='all') }}" style="color:var(--mwa-green); font-weight:600;">ล้างตัวกรอง ✕</a>
+  </div>
+  {% endif %}
 
   <a href="{{ url_for('new_incident') }}" class="btn-primary"
      style="display:inline-block; width:auto; text-decoration:none; padding:10px 20px; margin-bottom: 10px;">
     + แจ้งเหตุการณ์ใหม่
   </a>
 
+  {% if view in ('all', 'active') %}
   <div class="section-title">งานที่กำลังติดตาม</div>
   <div class="panel">
     {% if active_jobs %}
@@ -63,7 +75,7 @@
           <td>{{ job.Priority or '—' }}</td>
           <td>
             {% if perms.any %}{{ jp.edit_trigger(job) }}{% endif %}
-            {{ jp.job_popup(job, perms, lateral_candidates, url_for('dashboard'), job_type_name_map.get(job.JobType, job.JobType)) }}
+            {{ jp.job_popup(job, perms, lateral_candidates_map.get(job.JobID, []), url_for('dashboard'), job_type_name_map.get(job.JobType, job.JobType)) }}
           </td>
         </tr>
         {% endfor %}
@@ -73,7 +85,9 @@
     <div class="empty-state">ไม่มีงานที่กำลังดำเนินการอยู่ในขอบเขตของคุณตอนนี้</div>
     {% endif %}
   </div>
+  {% endif %}
 
+  {% if view in ('all', 'incidents') %}
   <div class="section-title">เหตุการณ์ที่เกี่ยวข้อง</div>
   <div class="panel">
     {% if incidents %}
@@ -82,6 +96,7 @@
         <tr>
           <th>รหัสเหตุการณ์</th>
           <th>ประเภทเหตุการณ์</th>
+          <th>โซน / DMA</th>
           <th>ความรุนแรง</th>
           <th>สถานะการจ่ายงาน</th>
           <th>กำหนดเสร็จ (รวม)</th>
@@ -90,16 +105,20 @@
       </thead>
       <tbody>
         {% for inc in incidents %}
+        {% set iperms = incident_permissions.get(inc.IncidentID, {}) %}
         <tr>
           <td>{{ inc.IncidentID }}</td>
           <td>{{ inc.IncidentType }}</td>
+          <td>{{ zone_name_map.get(inc.ZoneID) or 'ไม่ระบุ DMA' }}</td>
           <td>{{ inc.Severity }}</td>
           <td>{{ inc.ConversionStatus }}</td>
           <td>{{ inc.DueDate or '—' }}</td>
           <td>
             {% if inc.ConversionStatus != 'แปลงครบแล้ว' %}
-            <a href="{{ url_for('convert_incident', incident_id=inc.IncidentID) }}">งานที่จ่าย</a>
+            <a href="{{ url_for('convert_incident', incident_id=inc.IncidentID) }}" class="btn-edit-trigger">จ่ายงาน</a>
             {% endif %}
+            {% if iperms.any %}{{ jp.incident_edit_trigger(inc) }}{% endif %}
+            {{ jp.incident_popup(inc, iperms, url_for('dashboard'), zone_name_map.get(inc.ZoneID) or 'ไม่ระบุ DMA', zones) }}
           </td>
         </tr>
         {% endfor %}
@@ -109,7 +128,9 @@
     <div class="empty-state">ไม่มีเหตุการณ์ในขอบเขตของคุณตอนนี้</div>
     {% endif %}
   </div>
+  {% endif %}
 
+  {% if view in ('all', 'done') %}
   <div class="section-title">งานที่จบแล้ว</div>
   <div class="panel">
     {% if done_jobs %}
@@ -137,5 +158,6 @@
     <div class="empty-state">ยังไม่มีงานที่จบในขอบเขตของคุณ</div>
     {% endif %}
   </div>
+  {% endif %}
 </div>
 {% endblock %}

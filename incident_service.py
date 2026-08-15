@@ -11,6 +11,7 @@ from auth_service import role_level
 from constants import (
     CONVERSION_NOT_CONVERTED, CONVERSION_PARTIAL, CONVERSION_FULL,
     STATUS_PENDING_ASSIGNMENT, ROLE_LEVELS, ROLE_SECTION_CHIEF,
+    ROLE_ADMIN, INCIDENT_EDIT_ROLES, INCIDENT_STATUS_NEW, INCIDENT_STATUS_CLOSED,
 )
 
 
@@ -49,7 +50,7 @@ def create_incident(incident_type: str, description: str, severity: str, reporte
         "BranchID": branch_id,
         "Description": description,
         "Severity": severity,
-        "Status": "ใหม่",
+        "Status": INCIDENT_STATUS_NEW,
         "ReportedBy": reported_by,
         "ReportedAt": _now(),
         "ConversionStatus": CONVERSION_NOT_CONVERTED,
@@ -58,6 +59,8 @@ def create_incident(incident_type: str, description: str, severity: str, reporte
         "ConvertedAt": "",
         "DueDate": "",
         "DueDateUpdatedAt": "",
+        "ClosedBy": "",
+        "ClosedAt": "",
     })
     return incident_id
 
@@ -133,3 +136,67 @@ def _update_converted_by(incident_id: str, user: dict):
             "ConvertedByRoleLevel": new_level,
             "ConvertedAt": _now(),
         })
+
+
+def get_incident_permissions(incident: dict, user: dict) -> dict:
+    """เช็คว่า user คนนี้แก้ไข/ปิด Incident นี้ได้ไหม ณ ตอนนี้
+    สิทธิ์: ผู้จัดการ (สาขา) + ผู้อำนวยการ (กอง) + Admin เท่านั้น
+    Guard: แก้ไข/ปิดได้ก็ต่อเมื่อ Status ยังไม่ใช่ 'ปิดแล้ว'"""
+    role = user.get("Role")
+    is_admin = role == ROLE_ADMIN
+    is_authorized = is_admin or role in INCIDENT_EDIT_ROLES
+    not_closed = incident.get("Status") != INCIDENT_STATUS_CLOSED
+
+    can_edit = is_authorized and not_closed
+    can_close = is_authorized and not_closed
+    return {"can_edit": can_edit, "can_close": can_close, "any": can_edit or can_close}
+
+
+def update_incident_details(incident_id: str, user: dict, description: str = None,
+                             severity: str = None, zone_id: str = None,
+                             due_date: str = None):
+    """แก้ไขรายละเอียดเหตุการณ์ - ส่งเฉพาะฟิลด์ที่จะแก้มา (None = ไม่แตะฟิลด์นั้น)
+    Guard DueDate: ค่าใหม่ต้องไม่น้อยกว่าค่าปัจจุบัน (เลื่อนออกไปได้อย่างเดียว ห้ามร่นเข้ามา)"""
+    incident = sc.find_one("Incidents", "IncidentID", incident_id)
+    if not incident:
+        raise ValueError("ไม่พบเหตุการณ์นี้")
+
+    perms = get_incident_permissions(incident, user)
+    if not perms["can_edit"]:
+        raise PermissionError("ไม่มีสิทธิ์แก้ไขเหตุการณ์นี้ (ต้องเป็นผู้จัดการ/ผู้อำนวยการ หรือเหตุการณ์ถูกปิดไปแล้ว)")
+
+    updates = {}
+    if description is not None:
+        updates["Description"] = description
+    if severity is not None:
+        updates["Severity"] = severity
+    if zone_id is not None:
+        updates["ZoneID"] = zone_id
+    if due_date is not None and due_date != "":
+        current_due_date = incident.get("DueDate") or ""
+        if current_due_date and due_date < current_due_date:
+            raise ValueError(
+                f"กำหนดเสร็จใหม่ ({due_date}) ต้องไม่น้อยกว่าค่าปัจจุบัน ({current_due_date})"
+            )
+        updates["DueDate"] = due_date
+        updates["DueDateUpdatedAt"] = _now()
+
+    if updates:
+        sc.update_row("Incidents", "IncidentID", incident_id, updates)
+
+
+def close_incident(incident_id: str, user: dict):
+    """ปิดเหตุการณ์ - ปิดได้ทันทีไม่ต้องรองานลูกปิดครบก่อน"""
+    incident = sc.find_one("Incidents", "IncidentID", incident_id)
+    if not incident:
+        raise ValueError("ไม่พบเหตุการณ์นี้")
+
+    perms = get_incident_permissions(incident, user)
+    if not perms["can_close"]:
+        raise PermissionError("ไม่มีสิทธิ์ปิดเหตุการณ์นี้ (ต้องเป็นผู้จัดการ/ผู้อำนวยการ หรือเหตุการณ์ถูกปิดไปแล้ว)")
+
+    sc.update_row("Incidents", "IncidentID", incident_id, {
+        "Status": INCIDENT_STATUS_CLOSED,
+        "ClosedBy": user["UserID"],
+        "ClosedAt": _now(),
+    })

@@ -55,6 +55,13 @@ CLOSE_JOB_MAX_LEVEL = ROLE_LEVELS[ROLE_SECTION_CHIEF]
 # Role ที่ยกเลิกงานได้ (ผู้อำนวยการ (กอง) ขึ้นไป)
 CANCEL_JOB_MAX_LEVEL = ROLE_LEVELS[ROLE_DIVISION_DIRECTOR]
 
+# Role ที่แก้ไขรายละเอียด/ปิด Incident ได้ (ผู้จัดการสาขา + ผู้อำนวยการกอง เท่านั้น — Admin bypass แยกต่างหาก)
+INCIDENT_EDIT_ROLES = {ROLE_BRANCH_MANAGER, ROLE_DIVISION_DIRECTOR}
+
+# ---- สถานะเหตุการณ์ (Incident Status) ----
+INCIDENT_STATUS_NEW = "ใหม่"
+INCIDENT_STATUS_CLOSED = "ปิดแล้ว"
+
 # ---- สถานะงาน (Job Status) ----
 STATUS_PENDING_ASSIGNMENT = "รอมอบหมาย"
 STATUS_PENDING_ACCEPTANCE = "มอบหมายแล้ว รอรับ"

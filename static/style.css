@@ -621,6 +621,8 @@ tr:last-child td { border-bottom: none; }
 .btn-sm.transfer { background: var(--mwa-purple); color: #fff; }
 
 .btn-edit-trigger {
+  text-decoration: none;
+  display: inline-block;
   padding: 4px 12px;
   border-radius: 6px;
   border: 1px solid var(--mwa-sky);
@@ -642,4 +644,21 @@ tr:last-child td { border-bottom: none; }
   background: var(--mwa-sky);
   padding: 2px 8px;
   border-radius: 999px;
+}
+
+/* ===================== Dashboard Summary Card ที่กดกรองได้ ===================== */
+
+.summary-card-link {
+  text-decoration: none;
+  color: inherit;
+  display: block;
+  transition: box-shadow 0.15s, border-color 0.15s;
+}
+.summary-card-link:hover {
+  box-shadow: 0 4px 14px rgba(0, 156, 255, 0.15);
+  border-color: var(--mwa-sky);
+}
+.summary-card-link.active-filter {
+  border-color: var(--mwa-sky);
+  background: #eaf6ff;
 }

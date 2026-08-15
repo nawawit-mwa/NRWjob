@@ -1,6 +1,6 @@
 {% extends "base_sidebar.html" %}
 {% import "_job_popup_macro.html" as jp %}
-{% block title %}ผังเหตุการณ์ — Smart NRW{% endblock %}
+{% block title %}ติดตามเหตุการณ์ — Smart NRW{% endblock %}
 
 {% block extra_head %}
 <style>
@@ -105,35 +105,70 @@
     {% endif %}
   {% endwith %}
 
-  <div class="section-title">ผังเหตุการณ์</div>
-  <div class="panel" style="padding: 20px 22px; margin-bottom: 24px;">
-    <form method="get" style="display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap;">
-      <div class="field" style="flex:1; min-width:260px; margin-bottom:0;">
-        <label for="incident_id">เลือกเหตุการณ์</label>
-        <select id="incident_id" name="incident_id" onchange="this.form.submit()">
-          <option value="">— เลือกเหตุการณ์ —</option>
-          {% for inc in incidents %}
-          <option value="{{ inc.IncidentID }}" {{ 'selected' if inc.IncidentID == selected_id }}>
-            {{ inc.IncidentID }} — {{ inc.IncidentType }} ({{ inc.Severity }})
-          </option>
-          {% endfor %}
-        </select>
-      </div>
-    </form>
+  <div class="section-title">เหตุการณ์ที่เกี่ยวข้อง</div>
+  <div class="panel" style="margin-bottom: 24px;">
+    {% if incidents %}
+    <table>
+      <thead>
+        <tr>
+          <th>รหัสเหตุการณ์</th>
+          <th>ประเภทเหตุการณ์</th>
+          <th>โซน / DMA</th>
+          <th>ความรุนแรง</th>
+          <th>สถานะการจ่ายงาน</th>
+          <th>กำหนดเสร็จ (รวม)</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for inc in incidents %}
+        <tr {{ 'style="background:#eaf6ff;"' if inc.IncidentID == selected_id }}>
+          <td>{{ inc.IncidentID }}</td>
+          <td>{{ inc.IncidentType }}</td>
+          <td>{{ zone_name_map.get(inc.ZoneID) or 'ไม่ระบุ DMA' }}</td>
+          <td>{{ inc.Severity }}</td>
+          <td>{{ inc.ConversionStatus }}</td>
+          <td>{{ inc.DueDate or '—' }}</td>
+          <td>
+            {% if inc.IncidentID == selected_id %}
+            <span class="btn-edit-trigger" style="opacity:0.6; cursor:default;">กำลังดู</span>
+            {% else %}
+            <a href="{{ url_for('incident_tree', incident_id=inc.IncidentID) }}" class="btn-edit-trigger">ดูผัง</a>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">ไม่มีเหตุการณ์ในขอบเขตของคุณตอนนี้</div>
+    {% endif %}
   </div>
 
   {% if selected_incident %}
   {% set back_url = url_for('incident_tree', incident_id=selected_id) %}
+  <div class="section-title">ผังเหตุการณ์: {{ selected_incident.IncidentID }}</div>
   <div class="panel" style="padding: 4px;">
     <ul class="tree">
       <li>
+        {% if incident_permissions.any %}
+        <div class="tree-node root clickable"
+             onclick="document.getElementById('incpopup-{{ selected_incident.IncidentID }}').classList.add('open')">
+        {% else %}
         <div class="tree-node root">
+        {% endif %}
           <div class="tn-id">{{ selected_incident.IncidentID }}</div>
           <div class="tn-row">ประเภท: {{ selected_incident.IncidentType }}</div>
+          <div class="tn-row">รายละเอียด: {{ selected_incident.Description or '—' }}</div>
+          <div class="tn-row">โซน / DMA: {{ zone_name_map.get(selected_incident.ZoneID) or 'ไม่ระบุ DMA' }}</div>
           <div class="tn-row">ความรุนแรง: {{ selected_incident.Severity }}</div>
           <div class="tn-row">สถานะแปลง: {{ selected_incident.ConversionStatus }}</div>
           <div class="tn-row">กำหนดเสร็จ (รวม): {{ selected_incident.DueDate or '—' }}</div>
+          {% if incident_permissions.any %}
+          <span class="tn-editable-badge">แก้ไขได้</span>
+          {% endif %}
         </div>
+        {{ jp.incident_popup(selected_incident, incident_permissions, back_url, zone_name_map.get(selected_incident.ZoneID) or 'ไม่ระบุ DMA', zones) }}
 
         {% if jobs %}
         <ul>
@@ -147,6 +182,8 @@
             {% endif %}
               <div class="tn-id">{{ job.JobID }}</div>
               <div class="tn-row">ประเภทงาน: {{ job_type_name_map.get(job.JobType, job.JobType) }}</div>
+              <div class="tn-row">รายละเอียด: {{ job.Description or '—' }}</div>
+              <div class="tn-row">โซน / DMA: {{ zone_name_map.get(job.ZoneID) or 'ไม่ระบุ DMA' }}</div>
               <div class="tn-row">
                 <span class="badge {{ job.Status|status_class }}">{{ job.Status }}</span>
               </div>
@@ -172,7 +209,7 @@
   </div>
 
   {% for job in jobs %}
-  {{ jp.job_popup(job, job_permissions.get(job.JobID, {}), lateral_candidates, back_url, job_type_name_map.get(job.JobType, job.JobType)) }}
+  {{ jp.job_popup(job, job_permissions.get(job.JobID, {}), lateral_candidates_map.get(job.JobID, []), back_url, job_type_name_map.get(job.JobType, job.JobType)) }}
   {% endfor %}
 
   {% else %}

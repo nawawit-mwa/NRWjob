@@ -115,12 +115,13 @@
       </div>
       {% endif %}
 
-      {% if lateral_candidates and job.Status in ['รับงานแล้ว', 'กำลังดำเนินการ'] %}
+      {% set candidates = lateral_candidates_map.get(job.JobID, []) %}
+      {% if candidates and job.Status in ['รับงานแล้ว', 'กำลังดำเนินการ'] %}
       <div class="jc-actions">
         <form method="post" action="{{ url_for('job_transfer', job_id=job.JobID) }}">
           <select name="to_user_id" required>
             <option value="">— โอนงานนี้ให้เพื่อนร่วมระดับ —</option>
-            {% for c in lateral_candidates %}
+            {% for c in candidates %}
             <option value="{{ c.UserID }}">{{ c.Name }} ({{ c.Role }})</option>
             {% endfor %}
           </select>

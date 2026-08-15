@@ -6,7 +6,7 @@
   พารามิเตอร์:
     job              - dict ของงาน
     perms            - dict จาก dashboard_service.get_job_permissions()
-    lateral_candidates - list ผู้ใช้ที่โอนงานให้ได้ (ใช้เมื่อ perms.can_transfer)
+    lateral_candidates - list ผู้ใช้ที่โอนงานให้ได้ (คำนวณแยกทีละ job จาก org_service.get_lateral_transfer_candidates_for_job)
     back_url         - URL ที่จะ redirect กลับมาหลังทำรายการ (หน้าปัจจุบัน)
     type_label       - ชื่อประเภทงานที่แปลแล้ว (ไม่ใช่ JobTypeID ดิบ)
 #}
@@ -86,5 +86,79 @@
 {% if job %}
 <button type="button" class="btn-edit-trigger"
         onclick="document.getElementById('popup-{{ job.JobID }}').classList.add('open')">แก้ไข</button>
+{% endif %}
+{% endmacro %}
+
+
+{#
+  macro incident_popup — popup แสดง/แก้ไขรายละเอียดเหตุการณ์ (Description, Severity, ZoneID, DueDate)
+  + ปุ่มปิดเหตุการณ์ — ใช้ร่วมกันทุกหน้าที่แสดงเหตุการณ์ (dashboard, convert_incident, incident_tree)
+
+  พารามิเตอร์:
+    incident   - dict ของเหตุการณ์
+    perms      - dict จาก incident_service.get_incident_permissions()
+    back_url   - URL ที่จะ redirect กลับมาหลังทำรายการ
+    zone_name  - ชื่อโซนที่แปลแล้ว (ไม่ใช่ ZoneID ดิบ)
+    zones      - list โซนทั้งหมด (สำหรับ dropdown แก้ไข)
+#}
+{% macro incident_popup(incident, perms, back_url, zone_name, zones) %}
+{% if perms.any %}
+<div class="job-popup-overlay" id="incpopup-{{ incident.IncidentID }}">
+  <div class="job-popup-box">
+    <button type="button" class="job-popup-close"
+            onclick="document.getElementById('incpopup-{{ incident.IncidentID }}').classList.remove('open')">✕</button>
+    <h3>{{ incident.IncidentID }}</h3>
+    <div class="pp-row">สถานะ: {{ incident.Status }}</div>
+
+    {% if perms.can_edit %}
+    <form method="post" action="{{ url_for('incident_update', incident_id=incident.IncidentID) }}">
+      <input type="hidden" name="next" value="{{ back_url }}">
+      <div class="field" style="margin-bottom:10px;">
+        <label style="font-size:0.78rem;">รายละเอียด</label>
+        <input type="text" name="description" value="{{ incident.Description or '' }}" style="width:100%;">
+      </div>
+      <div class="field" style="margin-bottom:10px;">
+        <label style="font-size:0.78rem;">ความรุนแรง</label>
+        <select name="severity" style="width:100%;">
+          {% for s in ['สูง', 'กลาง', 'ต่ำ'] %}
+          <option value="{{ s }}" {{ 'selected' if incident.Severity == s }}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field" style="margin-bottom:10px;">
+        <label style="font-size:0.78rem;">โซน / DMA</label>
+        <select name="zone_id" style="width:100%;">
+          <option value="">— ไม่ระบุ DMA —</option>
+          {% for z in zones %}
+          <option value="{{ z.ZoneID }}" {{ 'selected' if incident.ZoneID == z.ZoneID }}>{{ z.ZoneName }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field" style="margin-bottom:10px;">
+        <label style="font-size:0.78rem;">กำหนดเสร็จ (เลื่อนออกไปได้อย่างเดียว ห้ามร่นเข้ามา)</label>
+        <input type="date" name="due_date" value="{{ incident.DueDate or '' }}"
+               min="{{ incident.DueDate or '' }}" style="width:100%;">
+      </div>
+      <button type="submit" class="btn-sm submit">บันทึก</button>
+    </form>
+    {% endif %}
+
+    {% if perms.can_close %}
+    <form method="post" action="{{ url_for('incident_close', incident_id=incident.IncidentID) }}"
+          onsubmit="return confirm('ยืนยันปิดเหตุการณ์นี้? หลังปิดแล้วจะแก้ไขไม่ได้อีก');" style="margin-top:12px;">
+      <input type="hidden" name="next" value="{{ back_url }}">
+      <button type="submit" class="btn-sm close">ปิดเหตุการณ์</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+{% endmacro %}
+
+
+{% macro incident_edit_trigger(incident) %}
+{% if incident %}
+<button type="button" class="btn-edit-trigger"
+        onclick="document.getElementById('incpopup-{{ incident.IncidentID }}').classList.add('open')">แก้ไข</button>
 {% endif %}
 {% endmacro %}

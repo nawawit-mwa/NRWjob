@@ -139,6 +139,11 @@ def dashboard():
     active_jobs = [j for j in jobs if j.get("Status") not in ("ปิดงาน", "ยกเลิกงาน")]
     done_jobs = [j for j in jobs if j.get("Status") in ("ปิดงาน", "ยกเลิกงาน")]
 
+    # view: กด card สรุปแล้วกรองว่าจะโชว์ตารางไหน (all = โชว์ครบทุกตารางเหมือนเดิม)
+    view = request.args.get("view", "all")
+    if view not in ("all", "active", "done", "incidents"):
+        view = "all"
+
     summary = {
         "total_jobs": len(jobs),
         "active_jobs": len(active_jobs),
@@ -147,13 +152,20 @@ def dashboard():
     }
 
     job_permissions = {j["JobID"]: dashboard_service.get_job_permissions(j, user) for j in jobs}
-    lateral_candidates = (
-        org_service.get_lateral_transfer_candidates(user)
-        if any(p["can_transfer"] for p in job_permissions.values())
-        else []
-    )
+    lateral_candidates_map = {
+        j["JobID"]: (
+            org_service.get_lateral_transfer_candidates_for_job(j, user)
+            if job_permissions[j["JobID"]]["can_transfer"] else []
+        )
+        for j in jobs
+    }
     job_type_name_map = {
         jt["JobTypeID"]: jt["JobTypeName"] for jt in sc.get_all_records("JobTypes")
+    }
+    zone_name_map = {z["ZoneID"]: z["ZoneName"] for z in sc.get_all_records("Zones")}
+    zones = sc.get_all_records("Zones")
+    incident_permissions = {
+        i["IncidentID"]: incident_service.get_incident_permissions(i, user) for i in incidents
     }
 
     return render_template(
@@ -164,9 +176,13 @@ def dashboard():
         done_jobs=done_jobs,
         incidents=incidents,
         summary=summary,
+        view=view,
         job_permissions=job_permissions,
-        lateral_candidates=lateral_candidates,
+        lateral_candidates_map=lateral_candidates_map,
         job_type_name_map=job_type_name_map,
+        zone_name_map=zone_name_map,
+        zones=zones,
+        incident_permissions=incident_permissions,
     )
 
 
@@ -237,8 +253,45 @@ def convert_incident(incident_id):
                 flash(str(e), "error")
 
     job_types = sc.get_all_records("JobTypes")
+    zone_name_map = {z["ZoneID"]: z["ZoneName"] for z in sc.get_all_records("Zones")}
+    zones = sc.get_all_records("Zones")
+    incident_permissions = incident_service.get_incident_permissions(incident, user)
     return render_template("convert_incident.html", user=user, active_page="new_incident",
-                            incident=incident, job_types=job_types)
+                            incident=incident, job_types=job_types,
+                            zone_name_map=zone_name_map, zones=zones,
+                            incident_permissions=incident_permissions)
+
+
+@app.route("/incidents/<incident_id>/update", methods=["POST"])
+@login_required
+def incident_update(incident_id):
+    user = request.current_user
+    description = request.form.get("description")
+    severity = request.form.get("severity")
+    zone_id = request.form.get("zone_id")
+    due_date = request.form.get("due_date")
+    try:
+        incident_service.update_incident_details(
+            incident_id, user,
+            description=description, severity=severity,
+            zone_id=zone_id, due_date=due_date,
+        )
+        flash(f"บันทึกรายละเอียดเหตุการณ์ {incident_id} แล้ว", "info")
+    except (PermissionError, ValueError) as e:
+        flash(str(e), "error")
+    return _safe_redirect("dashboard")
+
+
+@app.route("/incidents/<incident_id>/close", methods=["POST"])
+@login_required
+def incident_close(incident_id):
+    user = request.current_user
+    try:
+        incident_service.close_incident(incident_id, user)
+        flash(f"ปิดเหตุการณ์ {incident_id} เรียบร้อยแล้ว", "info")
+    except (PermissionError, ValueError) as e:
+        flash(str(e), "error")
+    return _safe_redirect("dashboard")
 
 
 @app.route("/incidents/tree")
@@ -252,23 +305,32 @@ def incident_tree():
     selected_incident = None
     jobs = []
     job_permissions = {}
-    lateral_candidates = []
+    lateral_candidates_map = {}
+    incident_permissions = {}
 
     if selected_id:
         if selected_id not in incident_ids_visible:
             flash("ไม่พบเหตุการณ์นี้ในขอบเขตของคุณ", "error")
         else:
             selected_incident = sc.find_one("Incidents", "IncidentID", selected_id)
+            incident_permissions = incident_service.get_incident_permissions(selected_incident, user)
             jobs = sc.find_many("Jobs", "SiblingJobGroup", selected_id)
             job_permissions = {
                 job["JobID"]: dashboard_service.get_job_permissions(job, user) for job in jobs
             }
-            if any(p["can_transfer"] for p in job_permissions.values()):
-                lateral_candidates = org_service.get_lateral_transfer_candidates(user)
+            lateral_candidates_map = {
+                job["JobID"]: (
+                    org_service.get_lateral_transfer_candidates_for_job(job, user)
+                    if job_permissions[job["JobID"]]["can_transfer"] else []
+                )
+                for job in jobs
+            }
 
     job_type_name_map = {
         jt["JobTypeID"]: jt["JobTypeName"] for jt in sc.get_all_records("JobTypes")
     }
+    zone_name_map = {z["ZoneID"]: z["ZoneName"] for z in sc.get_all_records("Zones")}
+    zones = sc.get_all_records("Zones")
 
     return render_template(
         "incident_tree.html",
@@ -280,7 +342,10 @@ def incident_tree():
         jobs=jobs,
         job_type_name_map=job_type_name_map,
         job_permissions=job_permissions,
-        lateral_candidates=lateral_candidates,
+        lateral_candidates_map=lateral_candidates_map,
+        zone_name_map=zone_name_map,
+        zones=zones,
+        incident_permissions=incident_permissions,
     )
 
 
@@ -292,7 +357,10 @@ def my_jobs():
     job_type_name_map = {
         jt["JobTypeID"]: jt["JobTypeName"] for jt in sc.get_all_records("JobTypes")
     }
-    lateral_candidates = org_service.get_lateral_transfer_candidates(user)
+    lateral_candidates_map = {
+        job["JobID"]: org_service.get_lateral_transfer_candidates_for_job(job, user)
+        for job in action_jobs["assigned_to_me"]
+    }
     return render_template(
         "my_jobs.html",
         user=user,
@@ -301,7 +369,7 @@ def my_jobs():
         pending_verify=action_jobs["pending_verify"],
         pending_close=action_jobs["pending_close"],
         job_type_name_map=job_type_name_map,
-        lateral_candidates=lateral_candidates,
+        lateral_candidates_map=lateral_candidates_map,
     )
 
 
@@ -416,11 +484,13 @@ def manage_jobs():
     tracking_permissions = {
         j["JobID"]: dashboard_service.get_job_permissions(j, user) for j in tracking_jobs
     }
-    lateral_candidates = (
-        org_service.get_lateral_transfer_candidates(user)
-        if any(p["can_transfer"] for p in tracking_permissions.values())
-        else []
-    )
+    lateral_candidates_map = {
+        j["JobID"]: (
+            org_service.get_lateral_transfer_candidates_for_job(j, user)
+            if tracking_permissions[j["JobID"]]["can_transfer"] else []
+        )
+        for j in tracking_jobs
+    }
 
     return render_template(
         "manage_jobs.html",
@@ -430,7 +500,7 @@ def manage_jobs():
         job_candidates=job_candidates,
         tracking_jobs=tracking_jobs,
         tracking_permissions=tracking_permissions,
-        lateral_candidates=lateral_candidates,
+        lateral_candidates_map=lateral_candidates_map,
         job_type_name_map=job_type_name_map,
     )
 
