@@ -135,6 +135,13 @@ def dashboard():
     jobs = dashboard_service.get_dashboard_jobs(user)
     incidents = dashboard_service.get_dashboard_incidents(user)
 
+    # filter: ภาค (กลุ่มสาขา) + สาขา + DMA (โซน) — ทำงานร่วมกับ view ได้ ไม่รีเซ็ตกัน
+    branch_group_filter = request.args.get("branch_group", "")
+    branch_filter = request.args.get("branch", "")
+    zone_filter = request.args.get("zone", "")
+    jobs = dashboard_service.filter_by_branch_group_and_zone(jobs, branch_group_filter, branch_filter, zone_filter)
+    incidents = dashboard_service.filter_by_branch_group_and_zone(incidents, branch_group_filter, branch_filter, zone_filter)
+
     # เรียงงานที่ยังไม่จบก่อน (สถานะไม่ใช่ ปิดงาน/ยกเลิกงาน) เพื่อให้เห็นงานที่ต้องติดตามก่อน
     active_jobs = [j for j in jobs if j.get("Status") not in ("ปิดงาน", "ยกเลิกงาน")]
     done_jobs = [j for j in jobs if j.get("Status") in ("ปิดงาน", "ยกเลิกงาน")]
@@ -163,10 +170,14 @@ def dashboard():
         jt["JobTypeID"]: jt["JobTypeName"] for jt in sc.get_all_records("JobTypes")
     }
     zone_name_map = {z["ZoneID"]: z["ZoneName"] for z in sc.get_all_records("Zones")}
+    branch_name_map = {b["BranchID"]: b["BranchName"] for b in sc.get_all_records("Branches")}
     zones = sc.get_all_records("Zones")
     incident_permissions = {
         i["IncidentID"]: incident_service.get_incident_permissions(i, user) for i in incidents
     }
+    branch_group_options = dashboard_service.get_branch_group_options(user)
+    branch_options = dashboard_service.get_branch_options(user, branch_group_filter)
+    zone_options = dashboard_service.get_zone_options(user, branch_group_filter, branch_filter)
 
     return render_template(
         "dashboard.html",
@@ -177,10 +188,17 @@ def dashboard():
         incidents=incidents,
         summary=summary,
         view=view,
+        branch_group_filter=branch_group_filter,
+        branch_filter=branch_filter,
+        zone_filter=zone_filter,
+        branch_group_options=branch_group_options,
+        branch_options=branch_options,
+        zone_options=zone_options,
         job_permissions=job_permissions,
         lateral_candidates_map=lateral_candidates_map,
         job_type_name_map=job_type_name_map,
         zone_name_map=zone_name_map,
+        branch_name_map=branch_name_map,
         zones=zones,
         incident_permissions=incident_permissions,
     )
@@ -254,12 +272,13 @@ def convert_incident(incident_id):
 
     job_types = sc.get_all_records("JobTypes")
     zone_name_map = {z["ZoneID"]: z["ZoneName"] for z in sc.get_all_records("Zones")}
+    branch_name_map = {b["BranchID"]: b["BranchName"] for b in sc.get_all_records("Branches")}
     zones = sc.get_all_records("Zones")
     incident_permissions = incident_service.get_incident_permissions(incident, user)
     return render_template("convert_incident.html", user=user, active_page="new_incident",
                             incident=incident, job_types=job_types,
-                            zone_name_map=zone_name_map, zones=zones,
-                            incident_permissions=incident_permissions)
+                            zone_name_map=zone_name_map, branch_name_map=branch_name_map,
+                            zones=zones, incident_permissions=incident_permissions)
 
 
 @app.route("/incidents/<incident_id>/update", methods=["POST"])
@@ -330,6 +349,7 @@ def incident_tree():
         jt["JobTypeID"]: jt["JobTypeName"] for jt in sc.get_all_records("JobTypes")
     }
     zone_name_map = {z["ZoneID"]: z["ZoneName"] for z in sc.get_all_records("Zones")}
+    branch_name_map = {b["BranchID"]: b["BranchName"] for b in sc.get_all_records("Branches")}
     zones = sc.get_all_records("Zones")
 
     return render_template(
@@ -344,6 +364,7 @@ def incident_tree():
         job_permissions=job_permissions,
         lateral_candidates_map=lateral_candidates_map,
         zone_name_map=zone_name_map,
+        branch_name_map=branch_name_map,
         zones=zones,
         incident_permissions=incident_permissions,
     )

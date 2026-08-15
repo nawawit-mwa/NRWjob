@@ -1,4 +1,5 @@
 {% extends "base_sidebar.html" %}
+{% import "_job_popup_macro.html" as jp %}
 {% block title %}แปลงเหตุการณ์เป็นงาน — Smart NRW{% endblock %}
 {% block content %}
 <div class="container" style="max-width: 640px;">
@@ -16,8 +17,14 @@
   <div class="panel" style="padding: 22px; margin-bottom: 24px;">
     <p><strong>ประเภท:</strong> {{ incident.IncidentType }}</p>
     <p><strong>รายละเอียด:</strong> {{ incident.Description or '—' }}</p>
+    <p><strong>สาขา:</strong> {{ branch_name_map.get(incident.BranchID) or '—' }}</p>
+    <p><strong>โซน / DMA:</strong> {{ zone_name_map.get(incident.ZoneID) or 'ไม่ระบุ DMA' }}</p>
     <p><strong>ความรุนแรง:</strong> {{ incident.Severity }}</p>
     <p><strong>สถานะการจ่ายงาน:</strong> {{ incident.ConversionStatus }}</p>
+    {% if incident_permissions.any %}
+    {{ jp.incident_edit_trigger(incident) }}
+    {{ jp.incident_popup(incident, incident_permissions, url_for('convert_incident', incident_id=incident.IncidentID), zone_name_map.get(incident.ZoneID) or 'ไม่ระบุ DMA', zones, branch_name_map.get(incident.BranchID) or '-') }}
+    {% endif %}
   </div>
 
   <div class="section-title">เลือกประเภทงานที่ต้องการสร้าง (เลือกได้หลายประเภท)</div>

@@ -113,6 +113,7 @@
         <tr>
           <th>รหัสเหตุการณ์</th>
           <th>ประเภทเหตุการณ์</th>
+          <th>สาขา</th>
           <th>โซน / DMA</th>
           <th>ความรุนแรง</th>
           <th>สถานะการจ่ายงาน</th>
@@ -125,6 +126,7 @@
         <tr {{ 'style="background:#eaf6ff;"' if inc.IncidentID == selected_id }}>
           <td>{{ inc.IncidentID }}</td>
           <td>{{ inc.IncidentType }}</td>
+          <td>{{ branch_name_map.get(inc.BranchID) or '—' }}</td>
           <td>{{ zone_name_map.get(inc.ZoneID) or 'ไม่ระบุ DMA' }}</td>
           <td>{{ inc.Severity }}</td>
           <td>{{ inc.ConversionStatus }}</td>
@@ -161,6 +163,7 @@
           <div class="tn-row">ประเภท: {{ selected_incident.IncidentType }}</div>
           <div class="tn-row">รายละเอียด: {{ selected_incident.Description or '—' }}</div>
           <div class="tn-row">โซน / DMA: {{ zone_name_map.get(selected_incident.ZoneID) or 'ไม่ระบุ DMA' }}</div>
+          <div class="tn-row">สาขา: {{ branch_name_map.get(selected_incident.BranchID) or '—' }}</div>
           <div class="tn-row">ความรุนแรง: {{ selected_incident.Severity }}</div>
           <div class="tn-row">สถานะแปลง: {{ selected_incident.ConversionStatus }}</div>
           <div class="tn-row">กำหนดเสร็จ (รวม): {{ selected_incident.DueDate or '—' }}</div>
@@ -168,7 +171,7 @@
           <span class="tn-editable-badge">แก้ไขได้</span>
           {% endif %}
         </div>
-        {{ jp.incident_popup(selected_incident, incident_permissions, back_url, zone_name_map.get(selected_incident.ZoneID) or 'ไม่ระบุ DMA', zones) }}
+        {{ jp.incident_popup(selected_incident, incident_permissions, back_url, zone_name_map.get(selected_incident.ZoneID) or 'ไม่ระบุ DMA', zones, branch_name_map.get(selected_incident.BranchID) or '-') }}
 
         {% if jobs %}
         <ul>

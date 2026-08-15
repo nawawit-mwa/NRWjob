@@ -181,3 +181,86 @@ def get_job_permissions(job: dict, user: dict) -> dict:
     }
     perms["any"] = any(perms.values())
     return perms
+
+
+def get_branch_group_options(user: dict) -> list:
+    """คืนรายชื่อกลุ่มสาขา (ภาค) ที่ user คนนี้เลือกกรองได้ในหน้า Dashboard
+    - Admin: เห็นทุกกลุ่มสาขาในระบบ
+    - role อื่น: เห็นเฉพาะกลุ่มสาขาที่ตนเองสังกัด (ผ่าน BranchGroupID ตรงๆ หรือผ่าน BranchID -> Branches -> BranchGroupID)"""
+    from constants import ROLE_ADMIN
+
+    all_groups = sc.get_all_records("BranchGroups")
+    if user.get("Role") == ROLE_ADMIN:
+        return all_groups
+
+    branch_group_id = user.get("BranchGroupID")
+    if branch_group_id:
+        return [g for g in all_groups if g.get("BranchGroupID") == branch_group_id]
+
+    branch_id = user.get("BranchID")
+    if branch_id:
+        branch = sc.find_one("Branches", "BranchID", branch_id)
+        if branch:
+            return [g for g in all_groups if g.get("BranchGroupID") == branch.get("BranchGroupID")]
+
+    return []
+
+
+def get_branch_options(user: dict, branch_group_filter: str = "") -> list:
+    """คืนรายชื่อสาขา ที่ user คนนี้เลือกกรองได้ในหน้า Dashboard
+    จำกัดตามขอบเขตของ user เสมอ — ถ้ามี branch_group_filter จะแคบลงเหลือเฉพาะสาขาในภาคนั้น"""
+    from constants import ROLE_ADMIN
+
+    all_branches = sc.get_all_records("Branches")
+
+    if branch_group_filter:
+        return [b for b in all_branches if b.get("BranchGroupID") == branch_group_filter]
+
+    if user.get("Role") == ROLE_ADMIN:
+        return all_branches
+
+    group_ids = {g["BranchGroupID"] for g in get_branch_group_options(user)}
+    return [b for b in all_branches if b.get("BranchGroupID") in group_ids]
+
+
+def get_zone_options(user: dict, branch_group_filter: str = "", branch_filter: str = "") -> list:
+    """คืนรายชื่อโซน (DMA) ที่ user คนนี้เลือกกรองได้ในหน้า Dashboard
+    จำกัดตามขอบเขตของ user เสมอ — ลำดับความแคบ: branch_filter > branch_group_filter > ขอบเขตปกติ"""
+    from constants import ROLE_ADMIN
+
+    all_zones = sc.get_all_records("Zones")
+    all_branches = sc.get_all_records("Branches")
+
+    if branch_filter:
+        return [z for z in all_zones if z.get("BranchID") == branch_filter]
+
+    if branch_group_filter:
+        scope_branch_ids = {
+            b["BranchID"] for b in all_branches if b.get("BranchGroupID") == branch_group_filter
+        }
+    elif user.get("Role") == ROLE_ADMIN:
+        return all_zones  # Admin ไม่ระบุภาค/สาขา -> เห็นทุกโซน
+    else:
+        group_ids = {g["BranchGroupID"] for g in get_branch_group_options(user)}
+        scope_branch_ids = {b["BranchID"] for b in all_branches if b.get("BranchGroupID") in group_ids}
+
+    return [z for z in all_zones if z.get("BranchID") in scope_branch_ids]
+
+
+def filter_by_branch_group_and_zone(records: list, branch_group_filter: str,
+                                     branch_filter: str, zone_filter: str) -> list:
+    """กรอง list ของ Job หรือ Incident (ต้องมีฟิลด์ BranchID/ZoneID) ตามภาค/สาขา/โซนที่เลือก (AND ทั้งหมด)"""
+    if branch_group_filter:
+        group_branch_ids = {
+            b["BranchID"] for b in sc.get_all_records("Branches")
+            if b.get("BranchGroupID") == branch_group_filter
+        }
+        records = [r for r in records if r.get("BranchID") in group_branch_ids]
+
+    if branch_filter:
+        records = [r for r in records if r.get("BranchID") == branch_filter]
+
+    if zone_filter:
+        records = [r for r in records if r.get("ZoneID") == zone_filter]
+
+    return records

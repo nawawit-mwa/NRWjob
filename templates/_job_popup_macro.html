@@ -95,13 +95,14 @@
   + ปุ่มปิดเหตุการณ์ — ใช้ร่วมกันทุกหน้าที่แสดงเหตุการณ์ (dashboard, convert_incident, incident_tree)
 
   พารามิเตอร์:
-    incident   - dict ของเหตุการณ์
-    perms      - dict จาก incident_service.get_incident_permissions()
-    back_url   - URL ที่จะ redirect กลับมาหลังทำรายการ
-    zone_name  - ชื่อโซนที่แปลแล้ว (ไม่ใช่ ZoneID ดิบ)
-    zones      - list โซนทั้งหมด (สำหรับ dropdown แก้ไข)
+    incident     - dict ของเหตุการณ์
+    perms        - dict จาก incident_service.get_incident_permissions()
+    back_url     - URL ที่จะ redirect กลับมาหลังทำรายการ
+    zone_name    - ชื่อโซนที่แปลแล้ว (ไม่ใช่ ZoneID ดิบ)
+    zones        - list โซนทั้งหมด (สำหรับ dropdown แก้ไข)
+    branch_name  - ชื่อสาขาที่แปลแล้ว (ไม่ใช่ BranchID ดิบ) — ไม่บังคับใส่ (มี default กันพัง)
 #}
-{% macro incident_popup(incident, perms, back_url, zone_name, zones) %}
+{% macro incident_popup(incident, perms, back_url, zone_name, zones, branch_name='') %}
 {% if perms.any %}
 <div class="job-popup-overlay" id="incpopup-{{ incident.IncidentID }}">
   <div class="job-popup-box">
@@ -109,13 +110,14 @@
             onclick="document.getElementById('incpopup-{{ incident.IncidentID }}').classList.remove('open')">✕</button>
     <h3>{{ incident.IncidentID }}</h3>
     <div class="pp-row">สถานะ: {{ incident.Status }}</div>
+    {% if branch_name %}<div class="pp-row">สาขา: {{ branch_name }}</div>{% endif %}
 
     {% if perms.can_edit %}
     <form method="post" action="{{ url_for('incident_update', incident_id=incident.IncidentID) }}">
       <input type="hidden" name="next" value="{{ back_url }}">
       <div class="field" style="margin-bottom:10px;">
         <label style="font-size:0.78rem;">รายละเอียด</label>
-        <input type="text" name="description" value="{{ incident.Description or '' }}" style="width:100%;">
+        <textarea name="description" rows="3" style="width:100%; font-family:var(--font-ui); padding:7px 10px; border:1px solid var(--line); border-radius:6px; font-size:0.82rem;">{{ incident.Description or '' }}</textarea>
       </div>
       <div class="field" style="margin-bottom:10px;">
         <label style="font-size:0.78rem;">ความรุนแรง</label>

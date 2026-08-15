@@ -13,32 +13,72 @@
   {% endwith %}
 
   <div class="summary-grid">
-    <a href="{{ url_for('dashboard', view='active') }}"
+    <a href="{{ url_for('dashboard', view='active', branch_group=branch_group_filter, branch=branch_filter, zone=zone_filter) }}"
        class="summary-card summary-card-link {{ 'active-filter' if view == 'active' }}">
       <div class="num">{{ summary.active_jobs }}</div>
       <div class="label">งานที่กำลังดำเนินการ</div>
     </a>
-    <a href="{{ url_for('dashboard', view='done') }}"
+    <a href="{{ url_for('dashboard', view='done', branch_group=branch_group_filter, branch=branch_filter, zone=zone_filter) }}"
        class="summary-card summary-card-link {{ 'active-filter' if view == 'done' }}">
       <div class="num">{{ summary.done_jobs }}</div>
       <div class="label">งานที่จบแล้ว (ปิด/ยกเลิก)</div>
     </a>
-    <a href="{{ url_for('dashboard', view='all') }}"
+    <a href="{{ url_for('dashboard', view='all', branch_group=branch_group_filter, branch=branch_filter, zone=zone_filter) }}"
        class="summary-card summary-card-link {{ 'active-filter' if view == 'all' }}">
       <div class="num">{{ summary.total_jobs }}</div>
       <div class="label">งานทั้งหมดในขอบเขตของคุณ</div>
     </a>
-    <a href="{{ url_for('dashboard', view='incidents') }}"
+    <a href="{{ url_for('dashboard', view='incidents', branch_group=branch_group_filter, branch=branch_filter, zone=zone_filter) }}"
        class="summary-card summary-card-link {{ 'active-filter' if view == 'incidents' }}">
       <div class="num">{{ summary.total_incidents }}</div>
       <div class="label">เหตุการณ์ที่เกี่ยวข้อง</div>
     </a>
   </div>
 
+  <div class="panel" style="padding: 16px 18px; margin-bottom: 16px;">
+    <form method="get" style="display:flex; gap:14px; align-items:flex-end; flex-wrap:wrap;">
+      <input type="hidden" name="view" value="{{ view }}">
+      <div class="field" style="margin-bottom:0; min-width:200px;">
+        <label for="branch_group">ภาค (กลุ่มสาขา)</label>
+        <select id="branch_group" name="branch_group" onchange="this.form.submit()">
+          <option value="">— ทุกภาคในขอบเขตของคุณ —</option>
+          {% for g in branch_group_options %}
+          <option value="{{ g.BranchGroupID }}" {{ 'selected' if g.BranchGroupID == branch_group_filter }}>
+            {{ g.BranchGroupName }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field" style="margin-bottom:0; min-width:200px;">
+        <label for="branch">สาขา</label>
+        <select id="branch" name="branch" onchange="this.form.submit()">
+          <option value="">— ทุกสาขาในขอบเขตของคุณ —</option>
+          {% for b in branch_options %}
+          <option value="{{ b.BranchID }}" {{ 'selected' if b.BranchID == branch_filter }}>{{ b.BranchName }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field" style="margin-bottom:0; min-width:200px;">
+        <label for="zone">DMA (โซน)</label>
+        <select id="zone" name="zone" onchange="this.form.submit()">
+          <option value="">— ทุกโซนในขอบเขตของคุณ —</option>
+          {% for z in zone_options %}
+          <option value="{{ z.ZoneID }}" {{ 'selected' if z.ZoneID == zone_filter }}>{{ z.ZoneName }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% if branch_group_filter or branch_filter or zone_filter %}
+      <a href="{{ url_for('dashboard', view=view) }}" style="font-size:0.85rem; color:var(--mwa-green); font-weight:600;">
+        ล้างตัวกรองภาค/สาขา/โซน ✕
+      </a>
+      {% endif %}
+    </form>
+  </div>
+
   {% if view != 'all' %}
   <div class="flash info" style="display:flex; justify-content:space-between; align-items:center;">
     <span>กำลังกรองอยู่</span>
-    <a href="{{ url_for('dashboard', view='all') }}" style="color:var(--mwa-green); font-weight:600;">ล้างตัวกรอง ✕</a>
+    <a href="{{ url_for('dashboard', view='all', branch_group=branch_group_filter, branch=branch_filter, zone=zone_filter) }}" style="color:var(--mwa-green); font-weight:600;">ล้างตัวกรอง ✕</a>
   </div>
   {% endif %}
 
@@ -96,6 +136,7 @@
         <tr>
           <th>รหัสเหตุการณ์</th>
           <th>ประเภทเหตุการณ์</th>
+          <th>สาขา</th>
           <th>โซน / DMA</th>
           <th>ความรุนแรง</th>
           <th>สถานะการจ่ายงาน</th>
@@ -109,6 +150,7 @@
         <tr>
           <td>{{ inc.IncidentID }}</td>
           <td>{{ inc.IncidentType }}</td>
+          <td>{{ branch_name_map.get(inc.BranchID) or '—' }}</td>
           <td>{{ zone_name_map.get(inc.ZoneID) or 'ไม่ระบุ DMA' }}</td>
           <td>{{ inc.Severity }}</td>
           <td>{{ inc.ConversionStatus }}</td>
@@ -118,7 +160,7 @@
             <a href="{{ url_for('convert_incident', incident_id=inc.IncidentID) }}" class="btn-edit-trigger">จ่ายงาน</a>
             {% endif %}
             {% if iperms.any %}{{ jp.incident_edit_trigger(inc) }}{% endif %}
-            {{ jp.incident_popup(inc, iperms, url_for('dashboard'), zone_name_map.get(inc.ZoneID) or 'ไม่ระบุ DMA', zones) }}
+            {{ jp.incident_popup(inc, iperms, url_for('dashboard'), zone_name_map.get(inc.ZoneID) or 'ไม่ระบุ DMA', zones, branch_name_map.get(inc.BranchID) or '-') }}
           </td>
         </tr>
         {% endfor %}
