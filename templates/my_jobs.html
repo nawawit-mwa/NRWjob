@@ -85,7 +85,7 @@
       <div class="jc-head">
         <div>
           <div class="jc-id">{{ job.JobID }} — {{ job_type_name_map.get(job.JobType, job.JobType) }}</div>
-          <div class="jc-meta">กำหนดเสร็จ: {{ job.DueDate or '—' }} · ความสำคัญ: {{ job.Priority or '—' }}</div>
+          <div class="jc-meta">กำหนดเสร็จ: {{ job.DueDate|date_display or '—' }} · ความสำคัญ: {{ job.Priority or '—' }}</div>
         </div>
         <span class="badge {{ status_badge(job.Status) }}">{{ job.Status }}</span>
       </div>

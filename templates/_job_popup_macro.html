@@ -19,7 +19,7 @@
     <h3>{{ job.JobID }} — {{ type_label }}</h3>
     <div class="pp-row">สถานะ: <span class="badge {{ job.Status|status_class }}">{{ job.Status }}</span></div>
     <div class="pp-row">ผู้รับผิดชอบปัจจุบัน: {{ job.CurrentAssigneeRole or '—' }}</div>
-    <div class="pp-row">กำหนดเสร็จ: {{ job.DueDate or '—' }}</div>
+    <div class="pp-row">กำหนดเสร็จ: {{ job.DueDate|date_display or '—' }}</div>
     <div class="pp-row">ความสำคัญ: {{ job.Priority or '—' }}</div>
 
     <div class="pp-actions">
@@ -151,6 +151,13 @@
       <input type="hidden" name="next" value="{{ back_url }}">
       <button type="submit" class="btn-sm close">ปิดเหตุการณ์</button>
     </form>
+    {% endif %}
+
+    {% if perms.can_dispatch %}
+    <a href="{{ url_for('convert_incident', incident_id=incident.IncidentID) }}"
+       class="btn-sm submit" style="display:inline-block; text-decoration:none; margin-top:12px;">
+      จ่ายงาน
+    </a>
     {% endif %}
   </div>
 </div>

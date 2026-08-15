@@ -139,9 +139,10 @@ def _update_converted_by(incident_id: str, user: dict):
 
 
 def get_incident_permissions(incident: dict, user: dict) -> dict:
-    """เช็คว่า user คนนี้แก้ไข/ปิด Incident นี้ได้ไหม ณ ตอนนี้
-    สิทธิ์: ผู้จัดการ (สาขา) + ผู้อำนวยการ (กอง) + Admin เท่านั้น
-    Guard: แก้ไข/ปิดได้ก็ต่อเมื่อ Status ยังไม่ใช่ 'ปิดแล้ว'"""
+    """เช็คว่า user คนนี้แก้ไข/ปิด/จ่ายงาน Incident นี้ได้ไหม ณ ตอนนี้
+    - แก้ไข/ปิด: ผู้จัดการ (สาขา) + ผู้อำนวยการ (กอง) + Admin เท่านั้น
+    - จ่ายงาน (แปลงเป็นงาน): หัวหน้าส่วนขึ้นไป + Admin (สิทธิ์เดียวกับ convert_incident_to_jobs)
+    Guard: ทำอะไรก็ตามได้ก็ต่อเมื่อ Status ยังไม่ใช่ 'ปิดแล้ว'"""
     role = user.get("Role")
     is_admin = role == ROLE_ADMIN
     is_authorized = is_admin or role in INCIDENT_EDIT_ROLES
@@ -149,7 +150,17 @@ def get_incident_permissions(incident: dict, user: dict) -> dict:
 
     can_edit = is_authorized and not_closed
     can_close = is_authorized and not_closed
-    return {"can_edit": can_edit, "can_close": can_close, "any": can_edit or can_close}
+    can_dispatch = (
+        not_closed
+        and incident.get("ConversionStatus") != CONVERSION_FULL
+        and (is_admin or role_level(role) <= ROLE_LEVELS[ROLE_SECTION_CHIEF])
+    )
+    return {
+        "can_edit": can_edit,
+        "can_close": can_close,
+        "can_dispatch": can_dispatch,
+        "any": can_edit or can_close or can_dispatch,
+    }
 
 
 def update_incident_details(incident_id: str, user: dict, description: str = None,

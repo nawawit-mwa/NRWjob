@@ -130,7 +130,7 @@
           <td>{{ zone_name_map.get(inc.ZoneID) or 'ไม่ระบุ DMA' }}</td>
           <td>{{ inc.Severity }}</td>
           <td>{{ inc.ConversionStatus }}</td>
-          <td>{{ inc.DueDate or '—' }}</td>
+          <td>{{ inc.DueDate|date_display or '—' }}</td>
           <td>
             {% if inc.IncidentID == selected_id %}
             <span class="btn-edit-trigger" style="opacity:0.6; cursor:default;">กำลังดู</span>
@@ -165,8 +165,8 @@
           <div class="tn-row">โซน / DMA: {{ zone_name_map.get(selected_incident.ZoneID) or 'ไม่ระบุ DMA' }}</div>
           <div class="tn-row">สาขา: {{ branch_name_map.get(selected_incident.BranchID) or '—' }}</div>
           <div class="tn-row">ความรุนแรง: {{ selected_incident.Severity }}</div>
-          <div class="tn-row">สถานะแปลง: {{ selected_incident.ConversionStatus }}</div>
-          <div class="tn-row">กำหนดเสร็จ (รวม): {{ selected_incident.DueDate or '—' }}</div>
+          <div class="tn-row">สถานะจ่ายงาน: {{ selected_incident.ConversionStatus }}</div>
+          <div class="tn-row">กำหนดเสร็จ (รวม): {{ selected_incident.DueDate|date_display or '—' }}</div>
           {% if incident_permissions.any %}
           <span class="tn-editable-badge">แก้ไขได้</span>
           {% endif %}
@@ -191,7 +191,7 @@
                 <span class="badge {{ job.Status|status_class }}">{{ job.Status }}</span>
               </div>
               <div class="tn-row">ผู้รับผิดชอบ: {{ job.CurrentAssigneeRole or '—' }}</div>
-              <div class="tn-row">กำหนดเสร็จ: {{ job.DueDate or '—' }}</div>
+              <div class="tn-row">กำหนดเสร็จ: {{ job.DueDate|date_display or '—' }}</div>
               {% if job.IsSlowestInGroup == True or job.IsSlowestInGroup == 'True' %}
               <span class="tn-slowest">ตัวกำหนด DueDate ของเหตุการณ์</span>
               {% endif %}

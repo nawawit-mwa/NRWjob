@@ -70,7 +70,7 @@
         <div>
           <div class="jc-id">{{ job.JobID }} — {{ job_type_name_map.get(job.JobType, job.JobType) }}</div>
           <div class="jc-meta">
-            กำหนดเสร็จ: {{ job.DueDate or '—' }} · ความสำคัญ: {{ job.Priority or '—' }}
+            กำหนดเสร็จ: {{ job.DueDate|date_display or '—' }} · ความสำคัญ: {{ job.Priority or '—' }}
             {% if job.CurrentAssigneeRole %} · ผู้ถือครองปัจจุบัน: {{ job.CurrentAssigneeRole }}{% endif %}
           </div>
         </div>
@@ -123,7 +123,7 @@
           <td>{{ job_type_name_map.get(job.JobType, job.JobType) }}</td>
           <td><span class="badge {{ job.Status|status_class }}">{{ job.Status }}</span></td>
           <td>{{ job.CurrentAssigneeRole or '—' }}</td>
-          <td>{{ job.DueDate or '—' }}</td>
+          <td>{{ job.DueDate|date_display or '—' }}</td>
           <td>
             {% if perms.any %}{{ jp.edit_trigger(job) }}{% endif %}
             {{ jp.job_popup(job, perms, lateral_candidates_map.get(job.JobID, []), url_for('manage_jobs'), job_type_name_map.get(job.JobType, job.JobType)) }}

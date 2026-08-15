@@ -49,6 +49,25 @@ def _status_badge_class(status):
 app.jinja_env.filters["status_class"] = _status_badge_class
 
 
+def _date_display(value):
+    """แปลงวันที่จาก ISO (yyyy-mm-dd) ที่เก็บจริงในระบบ ให้แสดงผลเป็น dd/mm/yyyy (ค.ศ.)
+    ใช้เฉพาะตอน 'แสดงผล' เท่านั้น — ค่าที่เก็บจริงยังเป็น ISO เหมือนเดิม (ใช้เทียบ string
+    ในกฎ 'DueDate ใหม่ต้องไม่น้อยกว่าเดิม' ต่อไปได้ตามปกติ) ถ้าค่าไม่ตรงรูปแบบ ISO ที่คาดไว้
+    คืนค่าเดิมโดยไม่แตะต้อง (กันพังกรณีข้อมูลเพี้ยน)"""
+    if not value:
+        return value
+    parts = str(value).split("-")
+    if len(parts) != 3:
+        return value
+    year, month, day = parts
+    if not (len(year) == 4 and year.isdigit() and month.isdigit() and day.isdigit()):
+        return value
+    return f"{day}/{month}/{year}"
+
+
+app.jinja_env.filters["date_display"] = _date_display
+
+
 def _user_short_display(user_id):
     """แปลง UserID -> 'ชื่อ(คำแรก) / ตำแหน่ง' สำหรับแสดงในตาราง (เช่น ปิดงานโดย)
     ถ้าหา user ไม่เจอ (เช่นถูกลบไปแล้ว) แสดง UserID ดิบแทน ไม่ error"""

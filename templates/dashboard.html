@@ -111,7 +111,7 @@
           <td>{{ job_type_name_map.get(job.JobType, job.JobType) }}</td>
           <td><span class="badge {{ job.Status|status_class }}">{{ job.Status }}</span></td>
           <td>{{ job.CurrentAssigneeRole or '—' }}</td>
-          <td>{{ job.DueDate or '—' }}</td>
+          <td>{{ job.DueDate|date_display or '—' }}</td>
           <td>{{ job.Priority or '—' }}</td>
           <td>
             {% if perms.any %}{{ jp.edit_trigger(job) }}{% endif %}
@@ -154,7 +154,7 @@
           <td>{{ zone_name_map.get(inc.ZoneID) or 'ไม่ระบุ DMA' }}</td>
           <td>{{ inc.Severity }}</td>
           <td>{{ inc.ConversionStatus }}</td>
-          <td>{{ inc.DueDate or '—' }}</td>
+          <td>{{ inc.DueDate|date_display or '—' }}</td>
           <td>
             {% if inc.ConversionStatus != 'แปลงครบแล้ว' %}
             <a href="{{ url_for('convert_incident', incident_id=inc.IncidentID) }}" class="btn-edit-trigger">จ่ายงาน</a>
