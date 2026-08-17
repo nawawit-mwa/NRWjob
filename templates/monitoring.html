@@ -1191,7 +1191,17 @@ function openModal(code){
   document.getElementById('jobStatus').value = '';
   document.getElementById('jobStep').value = '';
   document.getElementById('jobRemark').value = '';
-  document.getElementById('mRemarkPanel').style.display = 'none'; // จะถูกเซ็ตใหม่โดย updateRemarkPanelFromJobLog() หลัง fetchJobLogs โหลดเสร็จ
+  // แผงหมายเหตุใน popup ใช้แหล่งข้อมูลเดียวกับ badge 📌/ตัวกรอง/ตัวนับ KPI เสมอ (d.a.remark)
+  // ไม่ดึงจาก job_log แยกต่างหากอีกต่อไป — ถ้าวันหลังสลับแหล่ง badge ไปที่อื่น แผงนี้จะตามไปเองอัตโนมัติ
+  // เพราะอ่านจากตัวแปรเดียวกัน ไม่ต้องแก้ 2 จุด
+  const remarkPanel = document.getElementById('mRemarkPanel');
+  if(d.a.hasRemark && d.a.remark){
+    remarkPanel.style.display = 'block';
+    document.getElementById('mRemarkCategory').textContent = d.a.remark.category ? ` · ${d.a.remark.category}` : '';
+    document.getElementById('mRemarkText').textContent = d.a.remark.text || '(ไม่มีข้อความรายละเอียด)';
+  } else {
+    remarkPanel.style.display = 'none';
+  }
   fetchJobLogs(d.code);
 
   if(d.a.status==='no_data'){
@@ -1390,9 +1400,13 @@ function jobStatusColor(status){
 }
 
 /**
- * ป้าย "หมายเหตุจากระบบ" ด้านบน modal เปลี่ยนมาใช้ฟิลด์ remark จากรายการ job_log
- * ล่าสุด (เรียงตาม timestamp) ของ RTU ที่เปิดอยู่ แทนแหล่งข้อมูล Google Sheet เดิม
- * (ไม่กระทบ badge "📌 remark" ที่การ์ด/ตัวกรอง/ตัวนับ KPI ซึ่งยังอิงชีท remark เดิมตามปกติ)
+ * ⚠️ ฟังก์ชันนี้ไม่ถูกเรียกใช้แล้ว (ไม่มีจุดไหนใน openModal/fetchJobLogs/submitJobLog เรียกอีกต่อไป)
+ * เก็บไว้เผื่ออยากย้อนกลับมาให้แผงหมายเหตุใน popup อ้างอิง job_log อีกครั้งในอนาคต — ไม่ได้ลบทิ้ง
+ *
+ * เดิม: ป้าย "หมายเหตุจากระบบ" ด้านบน modal เคยใช้ฟิลด์ remark จากรายการ job_log ล่าสุด
+ * (เรียงตาม timestamp) ของ RTU ที่เปิดอยู่ แทนแหล่งข้อมูล Google Sheet — ตอนนี้กลับมาใช้แหล่งเดียวกับ
+ * badge "📌 remark" ที่การ์ด/ตัวกรอง/ตัวนับ KPI แล้ว (ดู openModal ที่อ่านจาก d.a.remark ตรงๆ)
+ * ตามกฎที่ตั้งไว้: ไม่ว่า badge/ตัวกรองจะอิงแหล่งไหน popup ต้องแสดงจากแหล่งเดียวกันเสมอ
  */
 function updateRemarkPanelFromJobLog(rtuId){
   if(currentJobRtuId !== rtuId) return; // กันข้อมูลเก่าจาก fetch ที่ค้างมาทับ modal ที่เปิดใหม่แล้ว
@@ -1421,7 +1435,7 @@ async function fetchJobLogs(rtuId){
   if(!JOB_API_URL){
     modeNote.style.display = 'block';
     jobLogsCache = jobLogMemoryStore[rtuId] ? [...jobLogMemoryStore[rtuId]] : [];
-    if(currentJobRtuId === rtuId){ renderJobTable(jobLogsCache); updateRemarkPanelFromJobLog(rtuId); }
+    if(currentJobRtuId === rtuId){ renderJobTable(jobLogsCache); }
     return;
   }
   modeNote.style.display = 'none';
@@ -1435,7 +1449,6 @@ async function fetchJobLogs(rtuId){
     if(currentJobRtuId !== rtuId) return; // ผู้ใช้เปิด modal อื่นไปแล้วระหว่างรอ fetch — ไม่ต้องอัปเดตหน้าจอปัจจุบัน
     jobLogsCache = Array.isArray(json) ? json : (json.data || []);
     renderJobTable(jobLogsCache);
-    updateRemarkPanelFromJobLog(rtuId);
   }catch(err){
     if(currentJobRtuId !== rtuId) return;
     jobLogsCache = [];
@@ -1492,7 +1505,7 @@ async function submitJobLog(){
   const optimisticRow = { ...payload, _pending: true };
   jobLogsCache = [optimisticRow, ...jobLogsCache];
   renderJobTable(jobLogsCache);
-  updateRemarkPanelFromJobLog(currentJobRtuId); // แสดง remark ล่าสุดทันที (แถวที่เพิ่งกดบันทึก)
+  // หมายเหตุ: แผงหมายเหตุใน popup ไม่อ้างอิง job_log แล้ว (ดู openModal) จึงไม่ต้องอัปเดตแผงตรงนี้อีก
 
   try{
     if(JOB_API_URL){
@@ -1511,12 +1524,10 @@ async function submitJobLog(){
     }
     optimisticRow._pending = false;
     renderJobTable(jobLogsCache);
-    updateRemarkPanelFromJobLog(currentJobRtuId);
     remarkEl.value = '';
   }catch(err){
     jobLogsCache = jobLogsCache.filter(r => r !== optimisticRow);
     renderJobTable(jobLogsCache);
-    updateRemarkPanelFromJobLog(currentJobRtuId); // เอาแถวที่บันทึกไม่สำเร็จออกแล้ว ต้องคืนป้าย remark กลับไปเป็นแถวล่าสุดก่อนหน้า
     alert(`บันทึกไม่สำเร็จ: ${err.message}\nข้อมูลในฟอร์มยังอยู่ ลองกดบันทึกใหม่อีกครั้งได้เลย`);
   }finally{
     btn.disabled = false;
