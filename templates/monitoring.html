@@ -261,7 +261,7 @@
 
   <header>
     <div>
-      <h1>Smart MNF : Monitoring</h1>
+      <h1>Smart MNF : Monitoring/Job Assignment</h1>
       <p class="sub">คัดกรองพื้นที่ที่มีแนวโน้มน้ำสูญเสีย/ท่อแตกรั่ว จากสถิติ Minimum Night Flow (MNF) <br>และ Statistical Process Control ต่อพื้นที่ DMA</p>
     </div>
     <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;">
@@ -762,8 +762,7 @@ function loadIgnoreList(url){
 }
 
 function loadRemarksMap(url){
-  // ⚠️ ฟังก์ชันนี้ไม่ได้ถูกเรียกใช้แล้ว (superseded โดย loadRemarksMapFromJobLog ด้านล่าง) — เก็บไว้เผื่อ
-  // อยากย้อนกลับไปอิงชีท remark เดิมแทน job_log ในอนาคต ไม่ได้ลบทิ้งเพื่อไม่ให้เสียของเดิม
+  // "RTU มีหมายเหตุ" ทั่วทั้งหน้า (badge 📌 บนการ์ด/ตัวกรอง/ตัวนับ KPI) อ่านจากชีท remark นี้ (เหมือนเดิม)
   // Google Sheet หมายเหตุต่อ RTU — เป็น optional โดยเจตนาเหมือน loadIgnoreList: fetch ไม่ผ่าน/ชีทว่าง/
   // ไม่มีคอลัมน์ที่ต้องการ = ไม่มี DM ไหน "มีหมายเหตุ" เลย ไม่ throw ต่อ ไม่ทำให้ทั้งหน้าพัง
   // เลเยอร์นี้เป็น UI display เท่านั้น ไม่แตะการคำนวณ backend ใดๆ
@@ -801,8 +800,10 @@ async function fetchAllJobLogs(){
 }
 
 function loadRemarksMapFromJobLog(){
-  // "RTU มีหมายเหตุ" ทั่วทั้งหน้า (badge 📌 บนการ์ด/ตัวกรอง/ตัวนับ KPI) เปลี่ยนมาอิงจาก job_log แทนชีท
-  // remark เดิม: ดูสถานะของ "รายการล่าสุด" (ตาม timestamp) ต่อ RTU — ถ้ายังไม่ใช่ 'ปิดงาน' ถือว่า RTU นั้น
+  // ⚠️ ฟังก์ชันนี้ไม่ได้ถูกเรียกใช้แล้ว (สลับกลับไปใช้ loadRemarksMap อ่านจากชีท remark เดิมแทน)
+  // เก็บไว้เผื่ออยากย้อนกลับมาอิง job_log อีกครั้งในอนาคต — ไม่ได้ลบทิ้งตามที่สั่ง
+  // "RTU มีหมายเหตุ" ทั่วทั้งหน้า (badge 📌 บนการ์ด/ตัวกรอง/ตัวนับ KPI) เดิมเคยอิงจาก job_log แทนชีท
+  // remark: ดูสถานะของ "รายการล่าสุด" (ตาม timestamp) ต่อ RTU — ถ้ายังไม่ใช่ 'ปิดงาน' ถือว่า RTU นั้น
   // "มีหมายเหตุ" (ยังมีงานค้าง/กำลังตรวจสอบอยู่) เป็น optional โดยเจตนาเช่นเดิม: fetch ไม่ผ่าน/ไม่มี log เลย
   // = ไม่มี RTU ไหน "มีหมายเหตุ" เลย ไม่ throw ต่อ ไม่ทำให้ทั้งหน้าพัง
   return fetchAllJobLogs().then(rows => {
@@ -881,7 +882,8 @@ async function refreshFromCsv(isFirstLoad){
   try{
     const [flowRows, seriesRows, summaryRows, ignoreSet, remarksByDma] = await Promise.all([
       loadCsv(FLOW_CSV_URL), loadCsv(SERIES_CSV_URL), loadCsv(SUMMARY_CSV_URL), loadIgnoreList(IGNORE_CSV_URL),
-      loadRemarksMapFromJobLog(),   // "มีหมายเหตุ" มาจาก job_log ที่ยังไม่ปิดงานแล้ว (เดิมมาจากชีท remark แยกต่างหาก)
+      loadRemarksMap(REMARK_CSV_URL),   // "มีหมายเหตุ" กลับมาอ่านจากชีท remark เดิมแทน job_log ตามที่สั่ง
+      // (loadRemarksMapFromJobLog() ยังเก็บไว้เหมือนเดิม ไม่ได้ลบ — สลับกลับมาใช้ได้ทันทีถ้าต้องการในอนาคต)
     ]);
     const hourlyByDma = hourlyFromFlowCsv(flowRows);
     const seriesByDma = seriesFromCsv(seriesRows);
