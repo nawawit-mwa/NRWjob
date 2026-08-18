@@ -75,7 +75,6 @@ def run_batch_tasks():
     dir_script3 = r"C:\Users\00100156\Desktop\BI\NRW_Monitoring"
     script3_path = os.path.join(dir_script2, "prepare_dma_csv.py")
 
-    dir_script4 = r"C:\NRWjob"
     
     source_file2_1 = r"C:\Users\00100156\Desktop\BI\NRW_Monitoring\dma_daily_series.csv"
     destination_file2_1 = r"C:\NRWjob\static\data\dma_daily_series.csv"
@@ -116,6 +115,7 @@ def run_batch_tasks():
             print(f"❌ ไม่พบไฟล์ .csv ในโฟลเดอร์ '{dir_script1}' การทำงานหยุดลง")
             return
 
+        
         # ==========================================
         # ขั้นตอนที่ 3: คัดลอกและเปลี่ยนชื่อทับ
         # ==========================================
@@ -140,7 +140,7 @@ def run_batch_tasks():
         # ขั้นตอนที่ 4: รัน script3.py ใน folder_b
         # ==========================================
         print(f"--- 4. กำลังรัน script3.py ใน {dir_script2} ---")
-        subprocess.run(["python", script2_path], cwd=dir_script2, check=True)
+        subprocess.run(["python", script3_path], cwd=dir_script3, check=True)
         print("✅ รัน script3.py เสร็จสิ้น\n")
 
          # ==========================================
