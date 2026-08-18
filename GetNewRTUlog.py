@@ -2,6 +2,48 @@ import subprocess
 import shutil
 import os
 import glob
+from datetime import datetime
+
+# สมมติโฟลเดอร์ที่เป็น Git Repository ของคุณ
+git_folder = r"C:\NRWjob"
+
+def git_push_auto(repo_dir, commit_message=None):
+    """ฟังก์ชันสั่ง git add, commit, และ push อัตโนมัติ"""
+    if commit_message is None:
+        commit_message = (
+            f"auto update: {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+        )
+
+    try:
+        print(f"--- 📌 เริ่มกระบวนการ Git Push ใน {repo_dir} ---")
+
+        # 1. git add .
+        subprocess.run(["git", "add", "."], cwd=repo_dir, check=True)
+        print("✅ Git add เรียบร้อย")
+
+        # 2. git commit -m "..."
+        # ใช้ capture_output=True เพื่อเช็คว่ามีไฟล์ให้ commit หรือไม่ (ป้องกันโปรแกรมหลุดถ้าไม่มีอะไรเปลี่ยน)
+        commit_result = subprocess.run(
+            ["git", "commit", "-m", commit_message],
+            cwd=repo_dir,
+            capture_output=True,
+            text=True,
+        )
+
+        if "nothing to commit" in commit_result.stdout:
+            print("ℹ️ ไม่มีไฟล์เปลี่ยนแปลง ข้ามขั้นตอน commit และ push")
+            return
+
+        print(f"✅ Git commit เรียบร้อย: '{commit_message}'")
+
+        # 3. git push
+        subprocess.run(["git", "push"], cwd=repo_dir, check=True)
+        print("🚀 Git push ขึ้นเซิร์ฟเวอร์เรียบร้อยแล้ว!\n")
+
+    except subprocess.CalledProcessError as e:
+        print(f"❌ เกิดข้อผิดพลาดในการรันคำสั่ง Git: {e}")
+    except Exception as e:
+        print(f"❌ เกิดข้อผิดพลาดที่ไม่คาดคิด: {e}")
 
 def get_latest_csv(folder_path):
     """ฟังก์ชันหาไฟล์ .csv ที่ถูกสร้างหรือแก้ไขล่าสุดในโฟลเดอร์"""
@@ -159,6 +201,10 @@ def run_batch_tasks():
         print(f"\n❌ เกิดข้อผิดพลาด! สคริปต์รันไม่สำเร็จ (Error Code: {e.returncode})")
     except Exception as e:
         print(f"\n❌ เกิดข้อผิดพลาดที่ไม่คาดคิด: {e}")
+
+    
+    # 2. เรียกใช้ฟังก์ชัน Git push เป็นขั้นตอนสุดท้าย
+    git_push_auto(repo_dir=git_folder)
 
 if __name__ == "__main__":
     run_batch_tasks()
