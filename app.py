@@ -18,8 +18,12 @@ import dashboard_service
 import incident_service
 import job_service
 import org_service
+import remark_service
 import sheets_client as sc
-from constants import ROLE_ADMIN, ROLE_DEPUTY_GOVERNOR, ROLE_ASSISTANT_GOVERNOR, ASSIGNER_ROLES
+from constants import (
+    ROLE_ADMIN, ROLE_DEPUTY_GOVERNOR, ROLE_ASSISTANT_GOVERNOR, ASSIGNER_ROLES,
+    ROLE_ENGINEER, ROLE_LEVELS,
+)
 from schema_setup import SHEET_SCHEMAS
 
 app = Flask(__name__)
@@ -115,7 +119,11 @@ def get_optional_user():
 @app.route("/", methods=["GET"])
 def monitoring():
     user = get_optional_user()
-    return render_template("monitoring.html", user=user, active_page="monitoring")
+    # จำกัด tab "การดำเนินการ" (บันทึกสถานะงาน) ให้เฉพาะวิศวกรขึ้นไปเท่านั้น (เดิมเปิดให้ทุกคน)
+    can_manage_job = bool(user) and auth_service.role_level(user.get("Role")) <= ROLE_LEVELS[ROLE_ENGINEER]
+    return render_template(
+        "monitoring.html", user=user, active_page="monitoring", can_manage_job=can_manage_job
+    )
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -331,6 +339,26 @@ def incident_close(incident_id):
     except (PermissionError, ValueError) as e:
         flash(str(e), "error")
     return _safe_redirect("dashboard")
+
+
+@app.route("/remarks/clear", methods=["POST"])
+@login_required
+def remark_clear():
+    user = request.current_user
+    # จำกัดเฉพาะวิศวกรขึ้นไป (เช็คซ้ำฝั่ง server แม้ frontend จะซ่อน tab ไว้แล้วก็ตาม)
+    if auth_service.role_level(user.get("Role")) > ROLE_LEVELS[ROLE_ENGINEER]:
+        return jsonify(success=False, error="ไม่มีสิทธิ์ (ต้องเป็นวิศวกรขึ้นไป)")
+
+    payload = request.get_json(silent=True) or {}
+    rtu_id = payload.get("rtu_id", "")
+    if not rtu_id:
+        return jsonify(success=False, error="ไม่พบ RTU ID")
+
+    try:
+        removed = remark_service.clear_remark_for_rtu(rtu_id)
+        return jsonify(success=True, removed=removed)
+    except Exception as e:
+        return jsonify(success=False, error=f"เกิดข้อผิดพลาดไม่คาดคิด: {e}")
 
 
 @app.route("/alerts/save", methods=["POST"])

@@ -229,6 +229,25 @@ def update_row(sheet_name: str, id_field: str, id_value, updates: dict):
                 break
 
 
+def delete_row(sheet_name: str, id_field: str, id_value) -> bool:
+    """ลบทั้งแถวที่ id_field == id_value ออกจาก sheet (ลบจริง ไม่ใช่แค่ล้างข้อความ)
+    คืน True ถ้าพบและลบสำเร็จ, False ถ้าไม่พบแถวให้ลบเลย (ไม่ raise — เพราะ 'ไม่พบ = ไม่มีอะไรต้องลบ' ก็ถือว่าจบงานแล้ว)
+    ถ้ามีแถวซ้ำกัน id_field เดียวกันหลายแถว ลบเฉพาะแถวแรกที่เจอเท่านั้น (เหมือน find_row_index)"""
+    row_idx = find_row_index(sheet_name, id_field, id_value)
+    if row_idx is None:
+        return False
+    ws = get_worksheet(sheet_name)
+    _with_retry(ws.delete_rows, row_idx)
+
+    records = _records_cache.get(sheet_name)
+    if records:
+        for i, r in enumerate(records):
+            if str(r.get(id_field, "")) == str(id_value):
+                del records[i]
+                break
+    return True
+
+
 def next_id(sheet_name: str, id_field: str, prefix: str) -> str:
     """สร้างรหัสถัดไปอย่างง่าย เช่น JOB-000123 (ใช้สำหรับ prototype เท่านั้น
     งานจริงควรใช้ id generator ที่ปลอดภัยกว่านี้ เผื่อการเขียนพร้อมกัน)"""

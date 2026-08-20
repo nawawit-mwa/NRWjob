@@ -73,6 +73,8 @@
     transition:border-color .15s, color .15s;
   }
   .theme-toggle:hover{border-color:var(--teal);color:var(--text);}
+  .theme-toggle:disabled{opacity:.35;cursor:not-allowed;}
+  .theme-toggle:disabled:hover{border-color:var(--border);color:var(--text-dim);}
 
   /* header */
   header{display:flex;flex-wrap:wrap;gap:14px;justify-content:space-between;align-items:flex-end;margin-bottom:6px;}
@@ -310,12 +312,19 @@
 <div class="overlay" id="overlay">
   <div class="modal">
     <button class="close" id="closeBtn">✕</button>
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:2px;">
+      <button type="button" id="mPrevBtn" class="theme-toggle" onclick="navigateModal(-1)"
+              style="cursor:pointer; padding:4px 10px; font-size:12px;">◀ ก่อนหน้า</button>
+      <button type="button" id="mNextBtn" class="theme-toggle" onclick="navigateModal(1)"
+              style="cursor:pointer; padding:4px 10px; font-size:12px;">ถัดไป ▶</button>
+      <span id="mNavPosition" class="mono" style="font-size:11px; color:var(--text-faint);"></span>
+    </div>
     <h3 id="mName"></h3>
     <div class="mcode mono" id="mCode"></div>
 
     <div class="modal-tabs">
       <button type="button" class="mtab active" data-tab="analysis" onclick="switchModalTab('analysis')">📊 กราฟและข้อมูลวิเคราะห์</button>
-      <button type="button" class="mtab" data-tab="job" onclick="switchModalTab('job')">🛠️ การดำเนินการ</button>
+      <button type="button" class="mtab" data-tab="job" onclick="switchModalTab('job')" id="mJobTabBtn">🛠️ การดำเนินการ</button>
     </div>
 
     <div id="tabAnalysis" class="mtab-panel active">
@@ -424,6 +433,13 @@ if (typeof Chart !== 'undefined') {
 
 // login แล้วเท่านั้นถึงบันทึกการแจ้งเตือน MNF ได้ (หน้านี้ยังเปิดให้คนไม่ login ดูข้อมูลได้ตามปกติ)
 const IS_LOGGED_IN = {{ 'true' if user else 'false' }};
+
+// tab "การดำเนินการ" (บันทึกสถานะงาน) จำกัดเฉพาะวิศวกรขึ้นไปเท่านั้น (เดิมเปิดให้ทุกคนแม้ไม่ login)
+const CAN_MANAGE_JOB = {{ 'true' if can_manage_job else 'false' }};
+if(!CAN_MANAGE_JOB){
+  const jobTabBtn = document.getElementById('mJobTabBtn');
+  if(jobTabBtn) jobTabBtn.style.display = 'none';
+}
 
 /* ---------------------------------------------------------------------
    CONFIG
@@ -1192,6 +1208,44 @@ let mnfChart, hourlyChart, cusumChart, pressureChart;
 let currentJobRtuId = null;   // RTU/DMA ที่กำลังเปิด modal อยู่ (ใช้อ้างอิงตอนบันทึก/โหลด job log)
 let jobLogsCache = [];        // ประวัติ job log ของ RTU ที่เปิดอยู่ (ใช้ทำ optimistic UI update)
 const jobLogMemoryStore = {}; // fallback เมื่อยังไม่ตั้งค่า JOB_API_URL — key: rtuId, value: array ของ log
+
+/**
+ * ลำดับ "ก่อนหน้า/ถัดไป" ใน popup อิงตามลำดับเดียวกับที่การ์ด (cardGrid) แสดงบนหน้าจอตอนนี้เสมอ
+ * (กรอง + เรียงด้วย severityThenCodeCmp เหมือน renderCards() ทุกประการ) — ถ้าเปลี่ยนตัวกรองระหว่างที่
+ * popup เปิดอยู่ กด ก่อนหน้า/ถัดไป อาจข้ามไปคนละตัวจากที่คาดได้ (ตามที่ยืนยันไว้ก่อน coding)
+ */
+function getCurrentOrderedList(){
+  return data.filter(matchesFilters).sort(severityThenCodeCmp);
+}
+
+function navigateModal(direction){
+  const list = getCurrentOrderedList();
+  const index = list.findIndex(x => x.code === currentJobRtuId);
+  if(index === -1) return;
+  const newIndex = index + direction;
+  if(newIndex < 0 || newIndex >= list.length) return; // อยู่ที่ตัวแรก/ตัวสุดท้ายแล้ว ไม่วนกลับ
+  openModal(list[newIndex].code);
+}
+
+function updateModalNavButtons(){
+  const list = getCurrentOrderedList();
+  const index = list.findIndex(x => x.code === currentJobRtuId);
+  const prevBtn = document.getElementById('mPrevBtn');
+  const nextBtn = document.getElementById('mNextBtn');
+  const posEl = document.getElementById('mNavPosition');
+
+  if(index === -1){
+    // RTU ปัจจุบันไม่อยู่ในรายการที่กรองไว้แล้ว (เช่น ตัวกรองถูกเปลี่ยนหลังเปิด popup) — ปิดปุ่มทั้งคู่
+    prevBtn.disabled = true;
+    nextBtn.disabled = true;
+    posEl.textContent = '';
+    return;
+  }
+  prevBtn.disabled = (index <= 0);
+  nextBtn.disabled = (index >= list.length - 1);
+  posEl.textContent = `${index + 1} / ${list.length}`;
+}
+
 function openModal(code){
   const d = data.find(x=>x.code===code);
   window._lastOpenedDmaCode = code;
@@ -1202,6 +1256,7 @@ function openModal(code){
 
   // เปิด modal ใหม่ทุกครั้ง = กลับไป tab กราฟก่อนเสมอ + รีเซ็ต/โหลดฟอร์ม-ประวัติ job ของ RTU นี้
   currentJobRtuId = d.code;
+  updateModalNavButtons();
   switchModalTab('analysis');
   populateJobFormOptions();
   document.getElementById('jobAssignee').value = '';
@@ -1627,6 +1682,34 @@ async function submitJobLog(){
     optimisticRow._pending = false;
     renderJobTable(jobLogsCache);
     remarkEl.value = '';
+
+    // ถ้าเพิ่งบันทึกสถานะ "ปิดงาน" สำเร็จ -> ปลด tag remark ของ RTU นี้ออกจากชีท remark อัตโนมัติ
+    // (จำกัดเฉพาะวิศวกรขึ้นไปอยู่แล้วตั้งแต่ตอนเปิด tab นี้ ไม่ต้องเช็คสิทธิ์ซ้ำฝั่ง JS อีก — backend เช็คซ้ำเองด้วย)
+    if(status === 'ปิดงาน'){
+      try{
+        const res = await fetch('/remarks/clear', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rtu_id: currentJobRtuId }),
+        });
+        const json = await res.json();
+        if(json && json.success && json.removed){
+          // อัปเดตข้อมูลในหน่วยความจำทันที ไม่ต้องรอโหลดหน้าใหม่ — ซ่อน badge/แผงหมายเหตุที่เกี่ยวข้องทั้งหมด
+          delete remarksByDma[currentJobRtuId];
+          const dRef = data.find(x => x.code === currentJobRtuId);
+          if(dRef){
+            dRef.a.hasRemark = false;
+            dRef.a.remark = null;
+          }
+          document.getElementById('mRemarkPanel').style.display = 'none';
+          renderKpis(); renderCards(); renderPriority();
+        }
+        // ถ้า success=false (เช่น สิทธิ์ไม่พอ) หรือ removed=false (ไม่มี remark อยู่แล้ว) ไม่ต้องแจ้งอะไรเพิ่ม
+        // เพราะการบันทึกสถานะงานหลักสำเร็จไปแล้ว ไม่อยากให้ผู้ใช้สับสนว่าการบันทึกงานล้มเหลว
+      }catch(e){
+        // เงียบไว้ — ไม่ทำให้ผู้ใช้เข้าใจผิดว่าการบันทึกสถานะงาน (ซึ่งสำเร็จแล้ว) มีปัญหา
+      }
+    }
   }catch(err){
     jobLogsCache = jobLogsCache.filter(r => r !== optimisticRow);
     renderJobTable(jobLogsCache);
