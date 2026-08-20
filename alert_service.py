@@ -39,9 +39,11 @@ def save_alert(user: dict, rtu_id: str, rtu_name: str, case_classification: str,
             chart_image_url = drive_client.upload_chart_image(
                 image_data_url, f"alert_{rtu_id}_{_now()}.jpg"
             )
-        except Exception:
-            # อัปโหลดรูปไม่สำเร็จ (เช่น โควตา Drive/เน็ตหลุด) ไม่ควรทำให้บันทึกทั้งรายการล้มเหลวไปด้วย
-            # บันทึกข้อมูลอื่นต่อไปตามปกติ แค่ไม่มีรูปแนบ
+        except Exception as e:
+            # อัปโหลดรูปไม่สำเร็จ (เช่น โควตา Drive/เน็ตหลุด/ยังไม่เปิด Drive API ใน Google Cloud Project)
+            # ไม่ควรทำให้บันทึกทั้งรายการล้มเหลวไปด้วย — บันทึกข้อมูลอื่นต่อไปตามปกติ แค่ไม่มีรูปแนบ
+            # แต่ต้อง log ไว้ให้เห็น ไม่งั้นไล่บั๊กไม่ได้เลยว่าทำไมไม่มีรูป (เจอปัญหานี้มาแล้วจริงจากการใช้งานจริง)
+            print(f"[alert_service] อัปโหลดรูปกราฟไม่สำเร็จสำหรับ RTU={rtu_id}: {type(e).__name__}: {e}")
             chart_image_url = ""
 
     alert_id = sc.next_id("SavedAlerts", "AlertID", "ALT-")
