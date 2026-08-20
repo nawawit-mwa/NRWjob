@@ -12,6 +12,7 @@ from functools import wraps
 
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
 
+import alert_service
 import auth_service
 import dashboard_service
 import incident_service
@@ -330,6 +331,67 @@ def incident_close(incident_id):
     except (PermissionError, ValueError) as e:
         flash(str(e), "error")
     return _safe_redirect("dashboard")
+
+
+@app.route("/alerts/save", methods=["POST"])
+@login_required
+def alert_save():
+    user = request.current_user
+    payload = request.get_json(silent=True) or {}
+    try:
+        alert_id = alert_service.save_alert(
+            user=user,
+            rtu_id=payload.get("rtu_id", ""),
+            rtu_name=payload.get("rtu_name", ""),
+            case_classification=payload.get("case", ""),
+            mnf_value=payload.get("mnf_value", ""),
+            cusum=payload.get("cusum", ""),
+            trend_result=payload.get("trend", ""),
+            note=payload.get("note", ""),
+            image_data_url=payload.get("image_data_url", ""),
+        )
+        return jsonify(success=True, alert_id=alert_id)
+    except (PermissionError, ValueError) as e:
+        return jsonify(success=False, error=str(e))
+    except Exception as e:
+        return jsonify(success=False, error=f"เกิดข้อผิดพลาดไม่คาดคิด: {e}")
+
+
+@app.route("/alerts")
+@login_required
+def alerts_list():
+    user = request.current_user
+    alerts = alert_service.get_alerts_for_user(user)
+    alert_permissions = {a["AlertID"]: alert_service.get_alert_permissions(a, user) for a in alerts}
+    return render_template(
+        "alerts.html",
+        user=user,
+        active_page="alerts",
+        alerts=alerts,
+        alert_permissions=alert_permissions,
+    )
+
+
+@app.route("/alerts/<alert_id>/convert", methods=["POST"])
+@login_required
+def alert_convert(alert_id):
+    user = request.current_user
+    try:
+        incident_id = alert_service.convert_alert_to_incident(alert_id, user)
+        flash(f"แปลงแจ้งเตือนเป็นเหตุการณ์ {incident_id} เรียบร้อยแล้ว", "info")
+    except (PermissionError, ValueError) as e:
+        flash(str(e), "error")
+    return redirect(url_for("alerts_list"))
+
+
+@app.route("/alerts/status/<rtu_id>")
+def alert_status(rtu_id):
+    # public endpoint (ไม่บังคับ login) — แค่บอกว่า RTU นี้มีเหตุการณ์เชื่อมโยงหรือไม่
+    # ใช้แสดงข้อความใน popup ของหน้า Monitoring ที่เปิดให้คนไม่ login ดูได้อยู่แล้ว
+    alert = alert_service.get_alert_status_for_rtu(rtu_id)
+    if alert and alert.get("LinkedIncidentID"):
+        return jsonify(linked=True, incident_id=alert["LinkedIncidentID"])
+    return jsonify(linked=False)
 
 
 @app.route("/incidents/tree")

@@ -32,9 +32,15 @@ _ws_cache = {}          # sheet_name -> worksheet object
 _header_cache = {}      # sheet_name -> list of header names
 _records_cache = {}     # sheet_name -> list of dict (ข้อมูลปัจจุบันของ sheet ตาม cache)
 _loaded_sheets = set()  # sheet_name ที่เคยโหลดข้อมูลจริงจาก API มาไว้ใน cache แล้ว
+_loaded_at = {}         # sheet_name -> timestamp (epoch) ที่โหลดข้อมูลล่าสุด (ใช้กับ TTL)
 
 MAX_RETRIES = 6
 BASE_DELAY_SECONDS = 3  # เริ่มที่ 3 วิ แล้ว double ทุกครั้งที่ retry (3,6,12,24,48,96)
+
+# Cache หมดอายุอัตโนมัติหลังผ่านไปกี่วินาที — กันกรณี Admin แก้ Sheet ตรงๆ ผ่านเบราว์เซอร์
+# (เช่น เปลี่ยนรหัสผ่าน, ปิด/เปิดบัญชี) โดยไม่ต้อง restart แอปทุกครั้ง
+# ตั้งไว้ที่ 5 นาที: นานพอไม่ให้ยิง API บ่อยเกินจนชนโควตา แต่ก็ไม่ต้องรอนานเกินไปเวลาแก้ข้อมูลสด
+CACHE_TTL_SECONDS = 300
 
 # --- Proactive throttle: กันไม่ให้ยิง API เกินโควตาตั้งแต่ต้น แทนรอโดนบล็อกแล้วค่อย retry ---
 # Google Sheets API ดีฟอลต์ให้ 60 requests/นาที/user เผื่อ buffer ไว้ที่ 45 ครั้งต่อ 60 วินาที
@@ -79,13 +85,24 @@ def _with_retry(func, *args, **kwargs):
     raise last_error
 
 
+_credentials = None
+
+
+def get_credentials():
+    """คืน Credentials object เดียวกับที่ gspread ใช้ — ให้ drive_client.py เรียกใช้ร่วมกันได้
+    (ไม่ต้องสร้าง credentials ซ้ำ/ขอสิทธิ์เพิ่ม เพราะ SCOPES มี Drive อยู่แล้ว)"""
+    global _credentials
+    if _credentials is None:
+        _credentials = Credentials.from_service_account_file(
+            config.GOOGLE_SERVICE_ACCOUNT_JSON, scopes=SCOPES
+        )
+    return _credentials
+
+
 def get_client():
     global _client
     if _client is None:
-        creds = Credentials.from_service_account_file(
-            config.GOOGLE_SERVICE_ACCOUNT_JSON, scopes=SCOPES
-        )
-        _client = gspread.authorize(creds)
+        _client = gspread.authorize(get_credentials())
     return _client
 
 
@@ -125,14 +142,22 @@ def get_headers(sheet_name: str):
 
 
 def get_all_records(sheet_name: str, force_refresh: bool = False) -> list:
-    """คืนรายการทุกแถวเป็น list of dict (key=header) — ใช้ cache เว้นแต่สั่ง force_refresh=True
-    หรือยังไม่เคยอ่าน sheet นี้เลยในรอบนี้"""
-    if not force_refresh and sheet_name in _loaded_sheets:
+    """คืนรายการทุกแถวเป็น list of dict (key=header) — ใช้ cache เว้นแต่:
+    - สั่ง force_refresh=True, หรือ
+    - ยังไม่เคยอ่าน sheet นี้เลยในรอบนี้, หรือ
+    - cache ของ sheet นี้หมดอายุแล้ว (เกิน CACHE_TTL_SECONDS นับจากโหลดครั้งล่าสุด)
+      ป้องกันกรณี Admin แก้ Sheet ตรงๆ ผ่านเบราว์เซอร์ แล้วแอปยังใช้ข้อมูลเก่าค้างอยู่นาน"""
+    is_stale = (
+        sheet_name in _loaded_at
+        and (time.time() - _loaded_at[sheet_name]) > CACHE_TTL_SECONDS
+    )
+    if not force_refresh and sheet_name in _loaded_sheets and not is_stale:
         return _records_cache[sheet_name]
     ws = get_worksheet(sheet_name)
     records = _with_retry(ws.get_all_records)
     _records_cache[sheet_name] = records
     _loaded_sheets.add(sheet_name)
+    _loaded_at[sheet_name] = time.time()
     return records
 
 
@@ -221,10 +246,12 @@ def next_id(sheet_name: str, id_field: str, prefix: str) -> str:
 
 
 def clear_cache():
-    """ล้าง cache ทั้งหมด (เผื่อกรณีมีคนอื่นแก้ sheet ตรงๆ นอกระบบ แล้วอยากบังคับอ่านใหม่)"""
+    """ล้าง cache ทั้งหมด (เผื่อกรณีมีคนอื่นแก้ sheet ตรงๆ นอกระบบ แล้วอยากบังคับอ่านใหม่ทันที
+    โดยไม่ต้องรอ TTL หมดอายุ)"""
     _records_cache.clear()
     _header_cache.clear()
     _loaded_sheets.clear()
+    _loaded_at.clear()
 
 
 def warm_up(sheet_names: list):
@@ -253,6 +280,7 @@ def warm_up(sheet_names: list):
             _header_cache[name] = []
             _records_cache[name] = []
             _loaded_sheets.add(name)
+            _loaded_at[name] = time.time()
             continue
         headers = values[0]
         records = []
@@ -262,6 +290,7 @@ def warm_up(sheet_names: list):
         _header_cache[name] = headers
         _records_cache[name] = records
         _loaded_sheets.add(name)
+        _loaded_at[name] = time.time()
 
     print(f"[sheets_client] warm_up: โหลดข้อมูล {len(existing_sheet_names)} sheet(s) "
           f"สำเร็จด้วย API call เพียง 2 ครั้ง")

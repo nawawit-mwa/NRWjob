@@ -324,6 +324,20 @@
         <div style="font-weight:700;margin-bottom:4px;">📌 หมายเหตุจากระบบ / Remark<span id="mRemarkCategory" class="mono" style="font-weight:400;font-size:11px;"></span></div>
         <div id="mRemarkText" style="font-weight:400;white-space:pre-wrap;"></div>
       </div>
+
+      <div id="mAlertLinkedPanel" style="display:none;margin-bottom:12px;padding:10px 14px;border-radius:10px;background:rgba(7,156,0,.14);border:1px solid var(--green);color:var(--green);font-size:12.5px;font-weight:600;">
+        ✅ เปิดเป็นเหตุการณ์แล้ว: <span id="mAlertLinkedIncident" class="mono"></span>
+      </div>
+
+      <div id="mAlertSavePanel" style="display:none;margin-bottom:12px;padding:12px 14px;border-radius:10px;background:var(--panel-2);border:1px solid var(--border);">
+        <div style="font-weight:600;font-size:12.5px;margin-bottom:8px;">📝 บันทึกการแจ้งเตือนนี้ไว้ดูภายหลัง</div>
+        <textarea id="mAlertNote" rows="2" placeholder="หมายเหตุเพิ่มเติม (ถ้ามี)"
+                  style="width:100%;font-family:inherit;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--panel);color:var(--text);font-size:12.5px;margin-bottom:8px;"></textarea>
+        <button type="button" id="mAlertSaveBtn" class="theme-toggle" onclick="saveCurrentAlert()"
+                style="cursor:pointer;">💾 บันทึกการแจ้งเตือนนี้</button>
+        <span id="mAlertSaveStatus" style="font-size:11.5px;margin-left:8px;"></span>
+      </div>
+
       <div class="mkpis" id="mKpis"></div>
 
       <div class="chart-box">
@@ -407,6 +421,9 @@
 if (typeof Chart !== 'undefined') {
   Chart.defaults.font.family = "'Sarabun','Segoe UI',sans-serif";
 }
+
+// login แล้วเท่านั้นถึงบันทึกการแจ้งเตือน MNF ได้ (หน้านี้ยังเปิดให้คนไม่ login ดูข้อมูลได้ตามปกติ)
+const IS_LOGGED_IN = {{ 'true' if user else 'false' }};
 
 /* ---------------------------------------------------------------------
    CONFIG
@@ -1204,6 +1221,29 @@ function openModal(code){
   }
   fetchJobLogs(d.code);
 
+  // ปุ่ม "บันทึกการแจ้งเตือนนี้" — เห็นเฉพาะคน login แล้วเท่านั้น (ฝั่ง server บังคับด้วย login_required
+  // ซ้ำอีกชั้นอยู่แล้ว ฝั่งนี้แค่ซ่อนปุ่มไม่ให้คนไม่ login เห็นเฉยๆ)
+  document.getElementById('mAlertSavePanel').style.display = IS_LOGGED_IN ? 'block' : 'none';
+  document.getElementById('mAlertNote').value = '';
+  document.getElementById('mAlertSaveStatus').textContent = '';
+  const saveBtn = document.getElementById('mAlertSaveBtn');
+  saveBtn.disabled = false;
+  saveBtn.textContent = '💾 บันทึกการแจ้งเตือนนี้';
+
+  // เช็คว่า RTU นี้เคยถูกบันทึก+แปลงเป็นเหตุการณ์ไปแล้วหรือยัง (public endpoint เรียกได้ไม่ว่า login หรือไม่)
+  const linkedPanel = document.getElementById('mAlertLinkedPanel');
+  linkedPanel.style.display = 'none';
+  fetch(`/alerts/status/${encodeURIComponent(d.code)}`)
+    .then(res => res.json())
+    .then(json => {
+      if(currentJobRtuId !== d.code) return; // ผู้ใช้เปิด modal อื่นไปแล้วระหว่างรอ fetch
+      if(json && json.linked){
+        linkedPanel.style.display = 'block';
+        document.getElementById('mAlertLinkedIncident').textContent = json.incident_id;
+      }
+    })
+    .catch(() => {}); // เงียบไว้ — แค่แจ้งเตือนเสริม ไม่ให้กระทบการเปิด modal หลัก
+
   if(d.a.status==='no_data'){
     // ไม่มีข้อมูลราย 15 นาที/รายวันให้ RTU นี้เลย (ถูกตัดออกจาก compute_metrics ตั้งแต่ต้น) — แสดงข้อความ
     // อธิบายตรงๆ แทนที่จะพยายามวาดกราฟจากข้อมูลว่างเปล่า แล้วเคลียร์กราฟเก่าที่อาจค้างจาก DMA ก่อนหน้าทิ้ง
@@ -1477,6 +1517,68 @@ function renderJobTable(logs){
       <td style="white-space:pre-wrap;">${escapeHtml(row.remark || '')}${row._pending ? ' <span class="mono" style="color:var(--text-faint);">(กำลังบันทึก…)</span>' : ''}</td>
     </tr>
   `).join('');
+}
+
+/**
+ * บันทึกการแจ้งเตือน MNF ที่กำลังดูอยู่ใน modal ไว้ดูภายหลัง — capture รูปกราฟ MNF หลัก (canvas#chartMnf)
+ * เป็น JPEG คุณภาพลดลง (ไม่เอา PNG เต็มคุณภาพ กันไฟล์ใหญ่เกินจำเป็น) แล้วส่งไป Flask backend
+ * ต้อง login แล้วเท่านั้น (ปุ่มนี้ถูกซ่อนไว้แล้วถ้าไม่ login ผ่าน IS_LOGGED_IN แต่ backend ก็เช็คซ้ำอีกชั้น
+ * ด้วย login_required อยู่ดี เผื่อกรณี session หมดอายุระหว่างเปิดหน้าค้างไว้)
+ */
+async function saveCurrentAlert(){
+  if(!currentJobRtuId) return;
+  const d = data.find(x => x.code === currentJobRtuId);
+  if(!d) return;
+
+  const btn = document.getElementById('mAlertSaveBtn');
+  const statusEl = document.getElementById('mAlertSaveStatus');
+  const noteEl = document.getElementById('mAlertNote');
+
+  btn.disabled = true;
+  btn.textContent = 'กำลังบันทึก...';
+  statusEl.textContent = '';
+
+  let imageDataUrl = '';
+  try{
+    const canvas = document.getElementById('chartMnf');
+    if(canvas) imageDataUrl = canvas.toDataURL('image/jpeg', 0.7);
+  }catch(e){
+    // canvas ว่าง/ยังไม่วาดกราฟ (เช่น RTU นี้ status='no_data') — บันทึกต่อได้โดยไม่มีรูปแนบ
+    imageDataUrl = '';
+  }
+
+  const payload = {
+    rtu_id: d.code,
+    rtu_name: d.name,
+    case: d.a.case || '',
+    mnf_value: d.a.currentMnf != null ? d.a.currentMnf.toFixed(1) : '',
+    cusum: (d.a.cs && d.a.cs.breached) ? `ตัดเกณฑ์ที่วันหลัง baseline #${d.a.cs.breachIndex + 1}` : 'ยังไม่ตัดเกณฑ์',
+    trend: (d.a.mk && d.a.mk.trend) ? d.a.mk.trend : '',
+    note: noteEl.value.trim(),
+    image_data_url: imageDataUrl,
+  };
+
+  try{
+    const res = await fetch('/alerts/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const json = await res.json();
+    if(json && json.success){
+      statusEl.style.color = 'var(--green)';
+      statusEl.textContent = `✅ บันทึกแล้ว (${json.alert_id})`;
+      btn.textContent = '💾 บันทึกการแจ้งเตือนนี้';
+      btn.disabled = false;
+    } else {
+      throw new Error((json && json.error) || 'บันทึกไม่สำเร็จ');
+    }
+  }catch(err){
+    statusEl.style.color = 'var(--red)';
+    statusEl.textContent = `⚠️ ${err.message}`;
+    btn.textContent = '💾 บันทึกการแจ้งเตือนนี้';
+    btn.disabled = false;
+  }
 }
 
 async function submitJobLog(){

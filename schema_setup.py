@@ -33,12 +33,20 @@ SHEET_SCHEMAS = {
         "ContractorCompany", "Phone", "Status",
     ],
 
+    # --- แจ้งเตือน MNF ที่บันทึกไว้ (จาก NRW Monitoring) ---
+    "SavedAlerts": [
+        "AlertID", "RTUID", "RTUName", "ZoneID", "BranchID",
+        "CaseClassification", "MNFValue", "CUSUM", "TrendResult",
+        "ChartImageURL", "Note", "SavedBy", "SavedAt",
+        "LinkedIncidentID", "LinkedIncidentAt",
+    ],
+
     # --- เหตุการณ์ ---
     "Incidents": [
         "IncidentID", "Source", "RTUID", "IncidentType", "ZoneID", "BranchID",
         "Description", "Severity", "Status", "ReportedBy", "ReportedAt",
         "ConversionStatus", "ConvertedBy", "ConvertedByRoleLevel", "ConvertedAt",
-        "DueDate", "DueDateUpdatedAt",
+        "DueDate", "DueDateUpdatedAt", "ClosedBy", "ClosedAt",
     ],
 
     # --- งาน (แกนหลัก) ---

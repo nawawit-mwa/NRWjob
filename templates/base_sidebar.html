@@ -30,6 +30,8 @@
           <div class="side-nav-label">การบัญชาการ</div>
           <a href="{{ url_for('new_incident') }}"
              class="side-nav-item {{ 'active' if active_page == 'new_incident' }}">แจ้งเหตุการณ์ใหม่</a>
+          <a href="{{ url_for('alerts_list') }}"
+             class="side-nav-item {{ 'active' if active_page == 'alerts' }}">แจ้งเตือน MNF ที่บันทึกไว้</a>
         </div>
         <div class="side-nav-group">
           <div class="side-nav-label">การจัดการงาน</div>

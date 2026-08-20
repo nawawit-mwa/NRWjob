@@ -1,0 +1,72 @@
+{% extends "base_sidebar.html" %}
+{% block title %}แจ้งเตือน MNF ที่บันทึกไว้ — Smart NRW{% endblock %}
+
+{% block content %}
+<div class="container">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, message in messages %}
+        <div class="flash {{ category }}">{{ message }}</div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  <div class="section-title">แจ้งเตือน MNF ที่บันทึกไว้</div>
+
+  {% if alerts %}
+    {% for alert in alerts %}
+    {% set perms = alert_permissions.get(alert.AlertID, {}) %}
+    <div class="job-card">
+      <div class="jc-head">
+        <div>
+          <div class="jc-id">{{ alert.AlertID }} — {{ alert.RTUName or alert.RTUID }}</div>
+          <div class="jc-meta">
+            บันทึกโดย: {{ alert.SavedBy|user_short }} · {{ alert.SavedAt|date_display }}
+            {% if alert.CaseClassification %} · กลุ่ม: {{ alert.CaseClassification }}{% endif %}
+          </div>
+        </div>
+        {% if perms.already_linked %}
+        <span class="badge status-done">เปิดเป็นเหตุการณ์แล้ว</span>
+        {% else %}
+        <span class="badge status-pending">ยังไม่แปลง</span>
+        {% endif %}
+      </div>
+
+      <div class="jc-meta" style="margin-top:8px;">
+        <strong>MNF:</strong> {{ alert.MNFValue or '—' }} ·
+        <strong>CUSUM:</strong> {{ alert.CUSUM or '—' }} ·
+        <strong>เทรนด์:</strong> {{ alert.TrendResult or '—' }}
+      </div>
+      {% if alert.Note %}
+      <div class="jc-meta" style="margin-top:4px;">หมายเหตุ: {{ alert.Note }}</div>
+      {% endif %}
+      {% if alert.ChartImageURL %}
+      <div style="margin-top:8px;">
+        <a href="{{ alert.ChartImageURL }}" target="_blank" rel="noopener" style="font-size:0.82rem;">
+          🖼️ ดูรูปกราฟ ณ ตอนบันทึก
+        </a>
+      </div>
+      {% endif %}
+
+      <div class="jc-actions">
+        {% if perms.already_linked %}
+        <a href="{{ url_for('incident_tree', incident_id=alert.LinkedIncidentID) }}" class="btn-edit-trigger">
+          ดูเหตุการณ์ {{ alert.LinkedIncidentID }}
+        </a>
+        {% elif perms.can_convert %}
+        <form method="post" action="{{ url_for('alert_convert', alert_id=alert.AlertID) }}">
+          <button type="submit" class="btn-sm submit">แปลงเป็นเหตุการณ์</button>
+        </form>
+        {% else %}
+        <span style="font-size:0.82rem; color:var(--ink-soft);">
+          รอหัวหน้าส่วนขึ้นไปแปลงเป็นเหตุการณ์
+        </span>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+  <div class="panel"><div class="empty-state">ยังไม่มีแจ้งเตือนที่บันทึกไว้ในขอบเขตของคุณ</div></div>
+  {% endif %}
+</div>
+{% endblock %}
