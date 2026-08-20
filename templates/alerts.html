@@ -42,9 +42,9 @@
       {% endif %}
       {% if alert.ChartImageURL %}
       <div style="margin-top:8px;">
-        <a href="{{ alert.ChartImageURL }}" target="_blank" rel="noopener" style="font-size:0.82rem;">
-          🖼️ ดูรูปกราฟ ณ ตอนบันทึก
-        </a>
+        <div style="font-size:0.78rem; color:var(--ink-soft); margin-bottom:4px;">🖼️ กราฟ ณ ตอนบันทึก</div>
+        <img src="{{ alert.ChartImageURL }}" alt="กราฟ MNF ของ {{ alert.RTUName or alert.RTUID }}"
+             style="max-width:100%; border:1px solid var(--line); border-radius:8px;">
       </div>
       {% endif %}
 

@@ -23,28 +23,32 @@ def _now():
     return datetime.datetime.now().isoformat(timespec="seconds")
 
 
+MAX_CHART_IMAGE_CHARS = 45000  # เผื่อ margin จากลิมิต 50,000 ตัวอักษร/เซลล์ของ Google Sheets
+
+
 def save_alert(user: dict, rtu_id: str, rtu_name: str, case_classification: str,
                mnf_value: str, cusum: str, trend_result: str, note: str = "",
                image_data_url: str = "") -> str:
     """บันทึกการแจ้งเตือน MNF ที่สนใจ — resolve ZoneID/BranchID จาก RTUID อัตโนมัติ
-    (แบบเดียวกับ incident_service.create_incident ตอนสร้างจาก RTU)"""
+    (แบบเดียวกับ incident_service.create_incident ตอนสร้างจาก RTU)
+
+    รูปกราฟ: ฝัง base64 data URL ลงเซลล์ ChartImageURL ตรงๆ (ไม่ผ่าน Google Drive) เพราะ Service
+    Account ไม่มีพื้นที่เก็บข้อมูลใน Drive เป็นของตัวเอง (ต้องมี Google Workspace ถึงจะใช้ Shared Drive
+    ได้ ซึ่งบัญชีที่ใช้งานจริงเป็น Gmail ส่วนตัว ไม่มี Workspace) — ถ้ารูปใหญ่เกินลิมิตเซลล์ของ Sheets
+    จะไม่บันทึกรูป (แต่ข้อมูลอื่นบันทึกสำเร็จตามปกติ ไม่ทำให้ทั้งรายการล้มเหลว)"""
     rtu = sc.find_one("RTUs", "RTUID", rtu_id)
     zone_id = rtu.get("ZoneID", "") if rtu else ""
     branch_id = rtu.get("BranchID", "") if rtu else ""
 
     chart_image_url = ""
     if image_data_url:
-        try:
-            import drive_client
-            chart_image_url = drive_client.upload_chart_image(
-                image_data_url, f"alert_{rtu_id}_{_now()}.jpg"
+        if len(image_data_url) <= MAX_CHART_IMAGE_CHARS:
+            chart_image_url = image_data_url
+        else:
+            print(
+                f"[alert_service] รูปกราฟใหญ่เกิน {MAX_CHART_IMAGE_CHARS} ตัวอักษร "
+                f"({len(image_data_url)}) สำหรับ RTU={rtu_id} — ไม่บันทึกรูปแนบ (ข้อมูลอื่นบันทึกต่อตามปกติ)"
             )
-        except Exception as e:
-            # อัปโหลดรูปไม่สำเร็จ (เช่น โควตา Drive/เน็ตหลุด/ยังไม่เปิด Drive API ใน Google Cloud Project)
-            # ไม่ควรทำให้บันทึกทั้งรายการล้มเหลวไปด้วย — บันทึกข้อมูลอื่นต่อไปตามปกติ แค่ไม่มีรูปแนบ
-            # แต่ต้อง log ไว้ให้เห็น ไม่งั้นไล่บั๊กไม่ได้เลยว่าทำไมไม่มีรูป (เจอปัญหานี้มาแล้วจริงจากการใช้งานจริง)
-            print(f"[alert_service] อัปโหลดรูปกราฟไม่สำเร็จสำหรับ RTU={rtu_id}: {type(e).__name__}: {e}")
-            chart_image_url = ""
 
     alert_id = sc.next_id("SavedAlerts", "AlertID", "ALT-")
     sc.append_row("SavedAlerts", {
