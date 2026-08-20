@@ -36,7 +36,8 @@ SHEET_SCHEMAS = {
     # --- แจ้งเตือน MNF ที่บันทึกไว้ (จาก NRW Monitoring) ---
     "SavedAlerts": [
         "AlertID", "RTUID", "RTUName", "ZoneID", "BranchID",
-        "CaseClassification", "MNFValue", "CUSUM", "TrendResult",
+        "CaseClassification", "CurrentMNF", "BaselineMean", "NightFlowWindow",
+        "MNFValue", "CUSUM", "TrendResult",
         "ChartImageURL", "Note", "Status", "SavedBy", "SavedAt",
         "LinkedIncidentID", "LinkedIncidentAt",
     ],

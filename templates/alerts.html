@@ -1,5 +1,5 @@
 {% extends "base_sidebar.html" %}
-{% block title %}แสดง MNF ผิดปกติ — Smart NRW{% endblock %}
+{% block title %}รายการแสดง MNF ผิดปกติ — Smart NRW{% endblock %}
 
 {% block extra_head %}
 <style>
@@ -28,66 +28,33 @@
     {% endif %}
   {% endwith %}
 
-  <div class="section-title">แสดง MNF ผิดปกติ</div>
+  <div class="section-title">รายการแสดง MNF ผิดปกติ</div>
 
   {% if alerts %}
   <div class="panel alert-table-wrap">
     <table class="alert-table">
       <thead>
         <tr>
+          <th></th>
           <th>รหัส</th>
           <th>RTU</th>
           <th>กลุ่ม</th>
-          <th>MNF / CUSUM / เทรนด์</th>
+          <th>MNF ปัจจุบัน / ค่าเฉลี่ยฐาน / ช่วง Night Flow</th>
           <th>หมายเหตุ</th>
           <th>กราฟ</th>
           <th>บันทึกโดย / วันที่</th>
           <th>สถานะ</th>
-          <th></th>
         </tr>
       </thead>
       <tbody>
         {% for alert in alerts %}
         {% set perms = alert_permissions.get(alert.AlertID, {}) %}
         <tr>
-          <td class="mono">{{ alert.AlertID }}</td>
-          <td>{{ alert.RTUName or alert.RTUID }}</td>
-          <td>{{ alert.CaseClassification or '—' }}</td>
-          <td style="min-width:200px;">
-            <strong>MNF:</strong> {{ alert.MNFValue or '—' }}<br>
-            <strong>CUSUM:</strong> {{ alert.CUSUM or '—' }}<br>
-            <strong>เทรนด์:</strong> {{ alert.TrendResult or '—' }}
-          </td>
-          <td style="min-width:150px;">{{ alert.Note or '—' }}</td>
-          <td>
-            {% if alert.ChartImageURL %}
-            <a href="{{ alert.ChartImageURL }}" target="_blank" rel="noopener">
-              <img src="{{ alert.ChartImageURL }}" alt="กราฟ" class="alert-thumb">
-            </a>
-            {% else %}
-            <span style="color:var(--ink-soft); font-size:0.78rem;">ไม่มีรูป</span>
-            {% endif %}
-          </td>
-          <td style="white-space:nowrap;">
-            {{ alert.SavedBy|user_short }}<br>
-            <span class="mono" style="font-size:0.78rem; color:var(--ink-soft);">{{ alert.SavedAt|date_display }}</span>
-          </td>
-          <td>
-            {% if perms.already_cancelled %}
-            <span class="badge status-cancel">ยกเลิกแล้ว</span>
-            {% elif perms.already_linked %}
-            <span class="badge status-done">เปิดเป็นเหตุการณ์แล้ว</span>
-            {% else %}
-            <span class="badge status-pending">ยังไม่แปลง</span>
-            {% endif %}
-          </td>
           <td>
             <div class="alert-actions">
               {% if perms.already_linked %}
               <a href="{{ url_for('incident_tree', incident_id=alert.LinkedIncidentID) }}"
                  class="btn-edit-trigger btn-full">ดูเหตุการณ์ {{ alert.LinkedIncidentID }}</a>
-              {% elif perms.already_cancelled %}
-              <span style="font-size:0.78rem; color:var(--ink-soft);">—</span>
               {% else %}
                 {% if perms.can_convert %}
                 <form method="post" action="{{ url_for('alert_convert', alert_id=alert.AlertID) }}">
@@ -106,6 +73,34 @@
               {% endif %}
             </div>
           </td>
+          <td class="mono">{{ alert.AlertID }}</td>
+          <td>{{ alert.RTUName or alert.RTUID }}</td>
+          <td>{{ alert.CaseClassification or '—' }}</td>
+          <td style="min-width:190px;">
+            <strong>ปัจจุบัน:</strong> {{ alert.CurrentMNF or '—' }} m³/hr<br>
+            <strong>ฐาน:</strong> {{ alert.BaselineMean or '—' }} m³/hr<br>
+            <strong>Night Flow:</strong> {{ alert.NightFlowWindow or '—' }}
+          </td>
+          <td style="min-width:150px;">{{ alert.Note or '—' }}</td>
+          <td>
+            {% if alert.ChartImageURL %}
+            <img src="{{ alert.ChartImageURL }}" alt="กราฟ" class="alert-thumb"
+                 style="cursor:pointer;" onclick="openImageLightbox(this.src)">
+            {% else %}
+            <span style="color:var(--ink-soft); font-size:0.78rem;">ไม่มีรูป</span>
+            {% endif %}
+          </td>
+          <td style="white-space:nowrap;">
+            {{ alert.SavedBy|user_short }}<br>
+            <span class="mono" style="font-size:0.78rem; color:var(--ink-soft);">{{ alert.SavedAt|date_display }}</span>
+          </td>
+          <td>
+            {% if perms.already_linked %}
+            <span class="badge status-done">เปิดเป็นเหตุการณ์แล้ว</span>
+            {% else %}
+            <span class="badge status-pending">ยังไม่แปลง</span>
+            {% endif %}
+          </td>
         </tr>
         {% endfor %}
       </tbody>
@@ -115,4 +110,20 @@
   <div class="panel"><div class="empty-state">ยังไม่มีแจ้งเตือนที่บันทึกไว้ในขอบเขตของคุณ</div></div>
   {% endif %}
 </div>
+
+<div id="imgLightboxOverlay" onclick="closeImageLightbox()"
+     style="display:none; position:fixed; inset:0; background:rgba(10,25,40,.75); z-index:200; align-items:center; justify-content:center; padding:24px;">
+  <img id="imgLightboxImg" src="" alt="กราฟขนาดเต็ม"
+       style="max-width:95vw; max-height:95vh; border-radius:10px; box-shadow:0 24px 60px rgba(0,0,0,.5);">
+</div>
+
+<script>
+function openImageLightbox(src){
+  document.getElementById('imgLightboxImg').src = src;
+  document.getElementById('imgLightboxOverlay').style.display = 'flex';
+}
+function closeImageLightbox(){
+  document.getElementById('imgLightboxOverlay').style.display = 'none';
+}
+</script>
 {% endblock %}

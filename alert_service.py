@@ -33,6 +33,7 @@ def _now():
 
 
 def save_alert(user: dict, rtu_id: str, rtu_name: str, case_classification: str,
+               current_mnf: str, baseline_mean: str, night_flow_window: str,
                mnf_value: str, cusum: str, trend_result: str, note: str = "",
                image_data_url: str = "") -> str:
     """บันทึกการแจ้งเตือน MNF ที่สนใจ — resolve ZoneID/BranchID จาก RTUID อัตโนมัติ
@@ -71,6 +72,9 @@ def save_alert(user: dict, rtu_id: str, rtu_name: str, case_classification: str,
         "ZoneID": zone_id,
         "BranchID": branch_id,
         "CaseClassification": case_classification,
+        "CurrentMNF": current_mnf,
+        "BaselineMean": baseline_mean,
+        "NightFlowWindow": night_flow_window,
         "MNFValue": mnf_value,
         "CUSUM": cusum,
         "TrendResult": trend_result,
@@ -87,8 +91,12 @@ def save_alert(user: dict, rtu_id: str, rtu_name: str, case_classification: str,
 
 def get_alerts_for_user(user: dict) -> list:
     """คืนรายการแจ้งเตือนที่บันทึกไว้ ในขอบเขตพื้นที่ของ user (ตรรกะเดียวกับ dashboard_service
-    ใช้กับ Incidents — Admin เห็นหมด, รองผู้ว่าการ/ผู้ช่วยผู้ว่าการ เห็นตามกลุ่มสาขา, ที่เหลือเห็นตามสาขาตน)"""
-    all_alerts = sc.get_all_records("SavedAlerts")
+    ใช้กับ Incidents — Admin เห็นหมด, รองผู้ว่าการ/ผู้ช่วยผู้ว่าการ เห็นตามกลุ่มสาขา, ที่เหลือเห็นตามสาขาตน)
+    ไม่แสดงรายการที่ถูกยกเลิกแล้ว (Status == ยกเลิกแล้ว) เลย — ยังเก็บแถวไว้ใน Sheet เป็นประวัติ
+    (soft-cancel) แค่ไม่โผล่ในรายการที่แสดงผลบนหน้าเว็บอีกต่อไป"""
+    all_alerts = [
+        a for a in sc.get_all_records("SavedAlerts") if a.get("Status") != ALERT_STATUS_CANCELLED
+    ]
     role = user.get("Role")
 
     if role == ROLE_ADMIN:

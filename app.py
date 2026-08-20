@@ -137,8 +137,8 @@ def login():
             token = auth_service.login(username, password)
             session["token"] = token
             if is_ajax:
-                return jsonify(success=True, redirect=url_for("dashboard"))
-            return redirect(url_for("dashboard"))
+                return jsonify(success=True, redirect=url_for("monitoring"))
+            return redirect(url_for("monitoring"))
         except ValueError as e:
             if is_ajax:
                 return jsonify(success=False, error=str(e))
@@ -372,6 +372,9 @@ def alert_save():
             rtu_id=payload.get("rtu_id", ""),
             rtu_name=payload.get("rtu_name", ""),
             case_classification=payload.get("case", ""),
+            current_mnf=payload.get("current_mnf", ""),
+            baseline_mean=payload.get("baseline_mean", ""),
+            night_flow_window=payload.get("night_flow_window", ""),
             mnf_value=payload.get("mnf_value", ""),
             cusum=payload.get("cusum", ""),
             trend_result=payload.get("trend", ""),
