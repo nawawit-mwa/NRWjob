@@ -2,11 +2,15 @@
 alert_service.py
 บันทึกการแจ้งเตือน MNF ที่สนใจจากหน้า NRW Monitoring ไว้ดูภายหลัง + แปลงเป็นเหตุการณ์ได้
 
-State/logic (สรุปตามที่ตกลงกันไว้ก่อน coding):
+State/logic:
 - บันทึกได้เฉพาะ user ที่ login แล้ว (บังคับที่ route ด้วย login_required)
 - เห็นรายการที่บันทึกไว้ตามขอบเขตพื้นที่เดียวกับ Incidents (BranchID -> BranchGroupID)
-- แปลงเป็นเหตุการณ์ได้เฉพาะหัวหน้าส่วนขึ้นไป (สิทธิ์เดียวกับแปลง Incident -> Job) + Admin
+- RTU 1 ตัว บันทึกซ้ำไม่ได้ถ้ามีแถว 'active' (Status ไม่ใช่ 'ยกเลิกแล้ว') อยู่แล้ว
+- แปลงเป็นเหตุการณ์ / ยกเลิก: เฉพาะหัวหน้าส่วนขึ้นไป + Admin
 - แปลงซ้ำไม่ได้ถ้ามี LinkedIncidentID อยู่แล้ว
+- ยกเลิกไม่ได้ถ้าแปลงเป็นเหตุการณ์ไปแล้ว (LinkedIncidentID มีค่าแล้ว)
+- กด "ยกเลิก" = เปลี่ยน Status เป็น 'ยกเลิกแล้ว' (soft — เก็บแถวไว้เป็นประวัติ ไม่ลบทิ้ง) ทำให้ RTU
+  นั้นกลับมาบันทึกใหม่ได้ทันที เพราะไม่นับเป็น 'active' อีกต่อไป
 """
 
 import datetime
@@ -18,12 +22,14 @@ from constants import (
     ROLE_LEVELS, ROLE_SECTION_CHIEF,
 )
 
+ALERT_STATUS_ACTIVE = "บันทึกไว้"
+ALERT_STATUS_CANCELLED = "ยกเลิกแล้ว"
+
+MAX_CHART_IMAGE_CHARS = 45000  # เผื่อ margin จากลิมิต 50,000 ตัวอักษร/เซลล์ของ Google Sheets
+
 
 def _now():
     return datetime.datetime.now().isoformat(timespec="seconds")
-
-
-MAX_CHART_IMAGE_CHARS = 45000  # เผื่อ margin จากลิมิต 50,000 ตัวอักษร/เซลล์ของ Google Sheets
 
 
 def save_alert(user: dict, rtu_id: str, rtu_name: str, case_classification: str,
@@ -32,10 +38,17 @@ def save_alert(user: dict, rtu_id: str, rtu_name: str, case_classification: str,
     """บันทึกการแจ้งเตือน MNF ที่สนใจ — resolve ZoneID/BranchID จาก RTUID อัตโนมัติ
     (แบบเดียวกับ incident_service.create_incident ตอนสร้างจาก RTU)
 
-    รูปกราฟ: ฝัง base64 data URL ลงเซลล์ ChartImageURL ตรงๆ (ไม่ผ่าน Google Drive) เพราะ Service
-    Account ไม่มีพื้นที่เก็บข้อมูลใน Drive เป็นของตัวเอง (ต้องมี Google Workspace ถึงจะใช้ Shared Drive
-    ได้ ซึ่งบัญชีที่ใช้งานจริงเป็น Gmail ส่วนตัว ไม่มี Workspace) — ถ้ารูปใหญ่เกินลิมิตเซลล์ของ Sheets
-    จะไม่บันทึกรูป (แต่ข้อมูลอื่นบันทึกสำเร็จตามปกติ ไม่ทำให้ทั้งรายการล้มเหลว)"""
+    รูปกราฟ: ฝัง base64 data URL ลงเซลล์ ChartImageURL ตรงๆ (ไม่ผ่าน Google Drive เพราะ Service
+    Account ไม่มีพื้นที่เก็บข้อมูลใน Drive เป็นของตัวเอง) ถ้ารูปใหญ่เกินลิมิตเซลล์ของ Sheets จะไม่บันทึก
+    รูป (แต่ข้อมูลอื่นบันทึกสำเร็จตามปกติ ไม่ทำให้ทั้งรายการล้มเหลว)
+
+    raise ValueError ถ้า RTU นี้มีแถวที่ยัง active (ยังไม่ถูกยกเลิก) อยู่แล้ว — กันบันทึกซ้ำ"""
+    existing = get_active_alert_for_rtu(rtu_id)
+    if existing:
+        raise ValueError(
+            f"RTU นี้มีการบันทึกไว้แล้ว ({existing['AlertID']}) — กด 'ยกเลิก' ก่อนถ้าต้องการบันทึกใหม่"
+        )
+
     rtu = sc.find_one("RTUs", "RTUID", rtu_id)
     zone_id = rtu.get("ZoneID", "") if rtu else ""
     branch_id = rtu.get("BranchID", "") if rtu else ""
@@ -63,6 +76,7 @@ def save_alert(user: dict, rtu_id: str, rtu_name: str, case_classification: str,
         "TrendResult": trend_result,
         "ChartImageURL": chart_image_url,
         "Note": note,
+        "Status": ALERT_STATUS_ACTIVE,
         "SavedBy": user["UserID"],
         "SavedAt": _now(),
         "LinkedIncidentID": "",
@@ -93,14 +107,40 @@ def get_alerts_for_user(user: dict) -> list:
     return []
 
 
+def get_active_alert_for_rtu(rtu_id: str) -> dict:
+    """คืนแถว SavedAlerts ล่าสุดของ RTU นี้ที่ยัง 'active' (Status ไม่ใช่ 'ยกเลิกแล้ว') หรือ None ถ้าไม่มี
+    ใช้กันบันทึกซ้ำ + ใช้แสดงสถานะ 'บันทึกข้อมูลแล้ว' ใน popup ของ Monitoring
+    หมายเหตุ: แถวเก่าก่อนมีคอลัมน์ Status จะอ่านได้ค่าว่าง ("") ซึ่งนับเป็น active ด้วย (ไม่ใช่ 'ยกเลิกแล้ว')
+    จึงย้อนความเข้ากันได้กับข้อมูลเดิมโดยอัตโนมัติ ไม่ต้อง migrate ข้อมูล"""
+    alerts = sc.find_many("SavedAlerts", "RTUID", rtu_id)
+    active = [a for a in alerts if a.get("Status") != ALERT_STATUS_CANCELLED]
+    if not active:
+        return None
+    active.sort(key=lambda a: a.get("SavedAt", ""), reverse=True)
+    return active[0]
+
+
 def get_alert_permissions(alert: dict, user: dict) -> dict:
-    """เช็คว่า user คนนี้แปลงแจ้งเตือนนี้เป็นเหตุการณ์ได้ไหม
-    สิทธิ์: หัวหน้าส่วนขึ้นไป + Admin — แปลงซ้ำไม่ได้ถ้ามี LinkedIncidentID อยู่แล้ว"""
+    """เช็คว่า user คนนี้แปลง/ยกเลิกแจ้งเตือนนี้ได้ไหม
+    สิทธิ์: หัวหน้าส่วนขึ้นไป + Admin ทั้งสองการกระทำ
+    - แปลงซ้ำไม่ได้ถ้ามี LinkedIncidentID อยู่แล้ว
+    - ยกเลิกไม่ได้ถ้าแปลงเป็นเหตุการณ์ไปแล้ว หรือถูกยกเลิกไปแล้ว"""
     role = user.get("Role")
     is_admin = role == ROLE_ADMIN
+    is_authorized = is_admin or role_level(role) <= ROLE_LEVELS[ROLE_SECTION_CHIEF]
+
     already_linked = bool(alert.get("LinkedIncidentID"))
-    can_convert = (not already_linked) and (is_admin or role_level(role) <= ROLE_LEVELS[ROLE_SECTION_CHIEF])
-    return {"can_convert": can_convert, "already_linked": already_linked}
+    already_cancelled = alert.get("Status") == ALERT_STATUS_CANCELLED
+
+    can_convert = is_authorized and not already_linked and not already_cancelled
+    can_cancel = is_authorized and not already_linked and not already_cancelled
+
+    return {
+        "can_convert": can_convert,
+        "can_cancel": can_cancel,
+        "already_linked": already_linked,
+        "already_cancelled": already_cancelled,
+    }
 
 
 def convert_alert_to_incident(alert_id: str, user: dict) -> str:
@@ -114,8 +154,10 @@ def convert_alert_to_incident(alert_id: str, user: dict) -> str:
     perms = get_alert_permissions(alert, user)
     if not perms["can_convert"]:
         if perms["already_linked"]:
-            raise ValueError(f"แจ้งเตือนนี้ถูกแปลงเป็นเหตุการณ์ {alert['LinkedIncidentID']} ไปแล้ว")
-        raise PermissionError("ไม่มีสิทธิ์แปลงแจ้งเตือนนี้เป็นเหตุการณ์ (ต้องเป็นหัวหน้าส่วนขึ้นไป)")
+            raise ValueError(f"แจ้งเตือนนี้ถูกสร้างเป็นเหตุการณ์ {alert['LinkedIncidentID']} ไปแล้ว")
+        if perms["already_cancelled"]:
+            raise ValueError("แจ้งเตือนนี้ถูกยกเลิกไปแล้ว")
+        raise PermissionError("ไม่มีสิทธิ์สร้างเหตุการณ์จากแจ้งเตือนนี้ (ต้องเป็นหัวหน้าส่วนขึ้นไป)")
 
     description_parts = [
         f"บันทึกจากระบบ NRW Monitoring — RTU: {alert.get('RTUName', alert.get('RTUID', ''))}",
@@ -123,8 +165,6 @@ def convert_alert_to_incident(alert_id: str, user: dict) -> str:
     ]
     if alert.get("Note"):
         description_parts.append(f"หมายเหตุ: {alert['Note']}")
-    if alert.get("ChartImageURL"):
-        description_parts.append(f"กราฟ ณ ตอนบันทึก: {alert['ChartImageURL']}")
 
     incident_id = incident_service.create_incident(
         incident_type=f"MNF ผิดปกติ ({alert.get('CaseClassification', '')})",
@@ -143,12 +183,39 @@ def convert_alert_to_incident(alert_id: str, user: dict) -> str:
     return incident_id
 
 
+def cancel_alert(alert_id: str, user: dict):
+    """ยกเลิกแจ้งเตือนที่บันทึกไว้ (soft — เปลี่ยน Status เป็น 'ยกเลิกแล้ว' เก็บแถวไว้เป็นประวัติ)
+    ทำให้ RTU นั้นกลับมาบันทึกใหม่ได้ทันที"""
+    alert = sc.find_one("SavedAlerts", "AlertID", alert_id)
+    if not alert:
+        raise ValueError("ไม่พบรายการแจ้งเตือนนี้")
+
+    perms = get_alert_permissions(alert, user)
+    if not perms["can_cancel"]:
+        if perms["already_linked"]:
+            raise ValueError("ยกเลิกไม่ได้ เพราะแจ้งเตือนนี้ถูกสร้างเป็นเหตุการณ์ไปแล้ว")
+        if perms["already_cancelled"]:
+            raise ValueError("แจ้งเตือนนี้ถูกยกเลิกไปแล้ว")
+        raise PermissionError("ไม่มีสิทธิ์ยกเลิกแจ้งเตือนนี้ (ต้องเป็นหัวหน้าส่วนขึ้นไป)")
+
+    sc.update_row("SavedAlerts", "AlertID", alert_id, {"Status": ALERT_STATUS_CANCELLED})
+
+
 def get_alert_status_for_rtu(rtu_id: str) -> dict:
-    """เช็คว่า RTU นี้เคยถูกบันทึก+แปลงเป็นเหตุการณ์แล้วหรือยัง (ใช้แสดงใน popup ของ Monitoring)
-    คืนรายการล่าสุดที่มี LinkedIncidentID เท่านั้น (ถ้ามีหลายรายการ เอาที่บันทึกล่าสุดก่อน) หรือ None ถ้าไม่มี"""
-    alerts = sc.find_many("SavedAlerts", "RTUID", rtu_id)
-    linked = [a for a in alerts if a.get("LinkedIncidentID")]
-    if not linked:
-        return None
-    linked.sort(key=lambda a: a.get("SavedAt", ""), reverse=True)
-    return linked[0]
+    """เช็คสถานะแจ้งเตือนของ RTU นี้ (ใช้แสดงใน popup ของ Monitoring) คืน dict เสมอ:
+    - saved: มีแถว active อยู่ไหม (บันทึกไว้แล้ว ไม่ว่าจะแปลงเป็นเหตุการณ์หรือยัง)
+    - alert_id / saved_at: ข้อมูลของแถว active ล่าสุด (ถ้า saved=True)
+    - linked / incident_id: แถวนั้นถูกแปลงเป็นเหตุการณ์แล้วหรือยัง"""
+    active = get_active_alert_for_rtu(rtu_id)
+    if not active:
+        return {"saved": False, "linked": False}
+
+    result = {
+        "saved": True,
+        "alert_id": active["AlertID"],
+        "saved_at": active.get("SavedAt", ""),
+        "linked": bool(active.get("LinkedIncidentID")),
+    }
+    if result["linked"]:
+        result["incident_id"] = active["LinkedIncidentID"]
+    return result

@@ -406,7 +406,19 @@ def alert_convert(alert_id):
     user = request.current_user
     try:
         incident_id = alert_service.convert_alert_to_incident(alert_id, user)
-        flash(f"แปลงแจ้งเตือนเป็นเหตุการณ์ {incident_id} เรียบร้อยแล้ว", "info")
+        flash(f"สร้างเหตุการณ์ {incident_id} จากแจ้งเตือนนี้เรียบร้อยแล้ว", "info")
+    except (PermissionError, ValueError) as e:
+        flash(str(e), "error")
+    return redirect(url_for("alerts_list"))
+
+
+@app.route("/alerts/<alert_id>/cancel", methods=["POST"])
+@login_required
+def alert_cancel(alert_id):
+    user = request.current_user
+    try:
+        alert_service.cancel_alert(alert_id, user)
+        flash(f"ยกเลิกแจ้งเตือน {alert_id} เรียบร้อยแล้ว — บันทึกใหม่ได้ทันที", "info")
     except (PermissionError, ValueError) as e:
         flash(str(e), "error")
     return redirect(url_for("alerts_list"))
@@ -414,12 +426,9 @@ def alert_convert(alert_id):
 
 @app.route("/alerts/status/<rtu_id>")
 def alert_status(rtu_id):
-    # public endpoint (ไม่บังคับ login) — แค่บอกว่า RTU นี้มีเหตุการณ์เชื่อมโยงหรือไม่
+    # public endpoint (ไม่บังคับ login) — บอกว่า RTU นี้บันทึกไว้แล้วหรือยัง + เชื่อมโยงเหตุการณ์หรือไม่
     # ใช้แสดงข้อความใน popup ของหน้า Monitoring ที่เปิดให้คนไม่ login ดูได้อยู่แล้ว
-    alert = alert_service.get_alert_status_for_rtu(rtu_id)
-    if alert and alert.get("LinkedIncidentID"):
-        return jsonify(linked=True, incident_id=alert["LinkedIncidentID"])
-    return jsonify(linked=False)
+    return jsonify(**alert_service.get_alert_status_for_rtu(rtu_id))
 
 
 @app.route("/incidents/tree")

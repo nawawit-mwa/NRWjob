@@ -338,6 +338,10 @@
         ✅ เปิดเป็นเหตุการณ์แล้ว: <span id="mAlertLinkedIncident" class="mono"></span>
       </div>
 
+      <div id="mAlertSavedPanel" style="display:none;margin-bottom:12px;padding:10px 14px;border-radius:10px;background:rgba(0,156,255,.10);border:1px solid var(--mwa-sky, #009cff);color:var(--mwa-sky, #009cff);font-size:12.5px;font-weight:600;">
+        📌 บันทึกข้อมูลแล้ว (<span id="mAlertSavedId" class="mono"></span>) เมื่อ <span id="mAlertSavedDate" class="mono"></span>
+      </div>
+
       <div id="mAlertSavePanel" style="display:none;margin-bottom:12px;padding:12px 14px;border-radius:10px;background:var(--panel-2);border:1px solid var(--border);">
         <div style="font-weight:600;font-size:12.5px;margin-bottom:8px;">📝 บันทึกการแจ้งเตือนนี้ไว้ดูภายหลัง</div>
         <textarea id="mAlertNote" rows="2" placeholder="หมายเหตุเพิ่มเติม (ถ้ามี)"
@@ -1282,28 +1286,14 @@ function openModal(code){
   }
   fetchJobLogs(d.code);
 
-  // ปุ่ม "บันทึกการแจ้งเตือนนี้" — เห็นเฉพาะคน login แล้วเท่านั้น (ฝั่ง server บังคับด้วย login_required
-  // ซ้ำอีกชั้นอยู่แล้ว ฝั่งนี้แค่ซ่อนปุ่มไม่ให้คนไม่ login เห็นเฉยๆ)
-  document.getElementById('mAlertSavePanel').style.display = IS_LOGGED_IN ? 'block' : 'none';
+  // แผงบันทึก/สถานะแจ้งเตือน MNF — ดึงสถานะจาก /alerts/status ครั้งเดียว ใช้ตัดสินใจว่าจะโชว์
+  // "ฟอร์มบันทึกใหม่" หรือ "บันทึกแล้ว" หรือ "เปิดเป็นเหตุการณ์แล้ว" (ไม่ใช่แยก 2 ที่เหมือนเดิม)
   document.getElementById('mAlertNote').value = '';
   document.getElementById('mAlertSaveStatus').textContent = '';
   const saveBtn = document.getElementById('mAlertSaveBtn');
   saveBtn.disabled = false;
   saveBtn.textContent = '💾 บันทึกการแจ้งเตือนนี้';
-
-  // เช็คว่า RTU นี้เคยถูกบันทึก+แปลงเป็นเหตุการณ์ไปแล้วหรือยัง (public endpoint เรียกได้ไม่ว่า login หรือไม่)
-  const linkedPanel = document.getElementById('mAlertLinkedPanel');
-  linkedPanel.style.display = 'none';
-  fetch(`/alerts/status/${encodeURIComponent(d.code)}`)
-    .then(res => res.json())
-    .then(json => {
-      if(currentJobRtuId !== d.code) return; // ผู้ใช้เปิด modal อื่นไปแล้วระหว่างรอ fetch
-      if(json && json.linked){
-        linkedPanel.style.display = 'block';
-        document.getElementById('mAlertLinkedIncident').textContent = json.incident_id;
-      }
-    })
-    .catch(() => {}); // เงียบไว้ — แค่แจ้งเตือนเสริม ไม่ให้กระทบการเปิด modal หลัก
+  refreshAlertStatusPanel(d.code);
 
   if(d.a.status==='no_data'){
     // ไม่มีข้อมูลราย 15 นาที/รายวันให้ RTU นี้เลย (ถูกตัดออกจาก compute_metrics ตั้งแต่ต้น) — แสดงข้อความ
@@ -1592,6 +1582,90 @@ function renderJobTable(logs){
  * เพื่อให้ขนาด base64 สุดท้ายเล็กพอจะฝังในเซลล์ Google Sheets ได้ (ลิมิต 50,000 ตัวอักษร/เซลล์)
  * วาดพื้นหลังสีขาวไว้ก่อนเสมอ เพราะ JPEG ไม่รองรับพื้นหลังโปร่งใส (ถ้าไม่วาดจะกลายเป็นสีดำ)
  */
+/** แปลงวันที่ ISO (เช่น "2026-08-20T18:41:08") เป็น dd/mm/yyyy (ค.ศ.) สำหรับแสดงผลใน popup */
+function formatDateDDMMYYYY(isoString){
+  if(!isoString) return '—';
+  const datePart = isoString.split('T')[0];
+  const parts = datePart.split('-');
+  if(parts.length !== 3) return isoString;
+  const [year, month, day] = parts;
+  return `${day}/${month}/${year}`;
+}
+
+/**
+ * เช็คสถานะแจ้งเตือน MNF ของ RTU นี้แล้วอัปเดตแผงทั้ง 3 (บันทึกใหม่/บันทึกแล้ว/เปิดเป็นเหตุการณ์แล้ว)
+ * ให้ตรงกันเสมอ — เรียกทั้งตอนเปิด modal และหลังบันทึกสำเร็จ (ไม่ต้องปิดเปิด popup ใหม่)
+ */
+async function refreshAlertStatusPanel(rtuId){
+  const savePanel = document.getElementById('mAlertSavePanel');
+  const savedPanel = document.getElementById('mAlertSavedPanel');
+  const linkedPanel = document.getElementById('mAlertLinkedPanel');
+
+  savePanel.style.display = 'none';
+  savedPanel.style.display = 'none';
+  linkedPanel.style.display = 'none';
+
+  if(!IS_LOGGED_IN) return; // ไม่ login เลย ไม่ต้องโชว์อะไรเกี่ยวกับการบันทึกทั้งหมด
+
+  try{
+    const res = await fetch(`/alerts/status/${encodeURIComponent(rtuId)}`);
+    const json = await res.json();
+    if(currentJobRtuId !== rtuId) return; // ผู้ใช้เปิด modal อื่นไปแล้วระหว่างรอ fetch
+
+    if(json && json.saved){
+      // มีการบันทึกไว้แล้ว (ยัง active) — ห้ามบันทึกซ้ำ โชว์แผง "บันทึกแล้ว" แทนฟอร์ม
+      savedPanel.style.display = 'block';
+      document.getElementById('mAlertSavedId').textContent = json.alert_id;
+      document.getElementById('mAlertSavedDate').textContent = formatDateDDMMYYYY(json.saved_at);
+      if(json.linked){
+        linkedPanel.style.display = 'block';
+        document.getElementById('mAlertLinkedIncident').textContent = json.incident_id;
+      }
+    } else {
+      // ยังไม่เคยบันทึก (หรือบันทึกเดิมถูกยกเลิกไปแล้ว) — โชว์ฟอร์มบันทึกใหม่ได้ตามปกติ
+      savePanel.style.display = 'block';
+    }
+  }catch(e){
+    // เช็คสถานะไม่สำเร็จ (เช่น เน็ตหลุด) — ปล่อยให้เห็นฟอร์มบันทึกไว้ก่อน ดีกว่าไม่เห็นอะไรเลย
+    savePanel.style.display = 'block';
+  }
+}
+
+/**
+ * รวมกราฟ "รูปแบบการไหลรายวัน" (chartHourly) และ "แรงดันน้ำรายวัน" (chartPressure) เป็นภาพเดียว
+ * วางซ้อนแนวตั้ง แล้วย่อ+ลดคุณภาพก่อนแปลงเป็น JPEG (กันภาพใหญ่เกินลิมิตเซลล์ Google Sheets)
+ * ข้ามกราฟที่ยังไม่ถูกวาด/ว่างเปล่าไปเงียบๆ (เช่น RTU สถานะ 'no_data' ไม่มีกราฟให้จับภาพเลย)
+ */
+function getCombinedChartsImage(canvasIds, maxWidth, quality){
+  const canvases = canvasIds
+    .map(id => document.getElementById(id))
+    .filter(c => c && c.width > 0 && c.height > 0);
+  if(canvases.length === 0) return '';
+
+  const scaled = canvases.map(c => {
+    const scale = Math.min(1, maxWidth / c.width);
+    return {
+      w: Math.max(1, Math.round(c.width * scale)),
+      h: Math.max(1, Math.round(c.height * scale)),
+      src: c,
+    };
+  });
+  const totalH = scaled.reduce((sum, s) => sum + s.h, 0);
+
+  const tmp = document.createElement('canvas');
+  tmp.width = maxWidth;
+  tmp.height = totalH;
+  const ctx = tmp.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, tmp.width, tmp.height);
+  let y = 0;
+  for(const s of scaled){
+    ctx.drawImage(s.src, 0, y, s.w, s.h);
+    y += s.h;
+  }
+  return tmp.toDataURL('image/jpeg', quality);
+}
+
 function getResizedChartImage(sourceCanvas, maxWidth, quality){
   const scale = Math.min(1, maxWidth / sourceCanvas.width);
   const targetW = Math.max(1, Math.round(sourceCanvas.width * scale));
@@ -1621,10 +1695,9 @@ async function saveCurrentAlert(){
 
   let imageDataUrl = '';
   try{
-    const canvas = document.getElementById('chartMnf');
-    // ย่อความกว้างเหลือไม่เกิน 480px + คุณภาพ 0.5 (ลดจาก 0.7 เดิม) — canvas จริงมักใหญ่กว่าที่เห็นบนจอ
-    // มาก (โดยเฉพาะจอ retina) ทำให้ base64 ที่ได้เกินลิมิตเซลล์ Sheets ได้ง่ายถ้าไม่ย่อก่อน
-    if(canvas) imageDataUrl = getResizedChartImage(canvas, 480, 0.5);
+    // รวมกราฟ "รูปแบบการไหลรายวัน" (flow) + "แรงดันน้ำรายวัน" (pressure) เป็นภาพเดียว ตามที่ต้องการ
+    // (ไม่ใช่กราฟ MNF เหมือนเดิม) ย่อ+ลดคุณภาพในตัวเพื่อกันภาพใหญ่เกินลิมิตเซลล์ Sheets
+    imageDataUrl = getCombinedChartsImage(['chartHourly', 'chartPressure'], 480, 0.5);
   }catch(e){
     // canvas ว่าง/ยังไม่วาดกราฟ (เช่น RTU นี้ status='no_data') — บันทึกต่อได้โดยไม่มีรูปแนบ
     imageDataUrl = '';
@@ -1649,10 +1722,8 @@ async function saveCurrentAlert(){
     });
     const json = await res.json();
     if(json && json.success){
-      statusEl.style.color = 'var(--green)';
-      statusEl.textContent = `✅ บันทึกแล้ว (${json.alert_id})`;
-      btn.textContent = '💾 บันทึกการแจ้งเตือนนี้';
-      btn.disabled = false;
+      // บันทึกสำเร็จ -> สลับไปโชว์แผง "บันทึกแล้ว" ทันที ไม่ต้องปิดเปิด popup ใหม่ (ข้อ 2)
+      await refreshAlertStatusPanel(d.code);
     } else {
       throw new Error((json && json.error) || 'บันทึกไม่สำเร็จ');
     }
