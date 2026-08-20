@@ -55,7 +55,13 @@ def upload_chart_image(data_url: str, filename: str) -> str:
         "file": (filename, file_bytes, mime_type),
     }
     resp = session.post(DRIVE_UPLOAD_URL, files=files)
-    resp.raise_for_status()
+    if not resp.ok:
+        # resp.raise_for_status() เดิมให้แค่ "403 Forbidden" เฉยๆ ไม่พอไล่บั๊ก — ต้องดึง response body
+        # จริงจาก Google มาด้วย เพราะเหตุผลจริง (เช่น "Drive API ยังไม่เปิดใช้งาน", "storageQuotaExceeded",
+        # "insufficientFilePermissions" ฯลฯ) อยู่ใน JSON body ไม่ใช่แค่ status line
+        raise RuntimeError(
+            f"อัปโหลด Drive ไม่สำเร็จ HTTP {resp.status_code}: {resp.text[:500]}"
+        )
     file_id = resp.json()["id"]
 
     # เปิดสิทธิ์ให้ดูได้แบบมีลิงก์ (ไม่ต้อง login Google) เพื่อให้เปิดดูรูปจาก popup ได้ทุกคน
