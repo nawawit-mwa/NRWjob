@@ -880,8 +880,14 @@ const STATUS_ORDER = {alert:0, watch:1, ok:2, remark:3, no_data:4};
 
 function severityThenCodeCmp(a, b){
   // ใช้เป็นค่าเริ่มต้นตอนกดปุ่มกรองภาค — เรียงตามความรุนแรงก่อน (แจ้งเตือน>เฝ้าระวัง>ปกติ>มีหมายเหตุ>ไม่มีข้อมูล)
-  // แล้วเรียงตามรหัส DM จากน้อยไปมากเป็นตัวรองภายในกลุ่มความรุนแรงเดียวกัน
-  return STATUS_ORDER[dStatus(a)] - STATUS_ORDER[dStatus(b)] || a.code.localeCompare(b.code);
+  // ถ้าอยู่กลุ่มความรุนแรงเดียวกันหมด (เช่น กรองเหลือแค่ "มีหมายเหตุ" อย่างเดียว ทุกตัว dStatus จะเท่ากันหมด)
+  // ใช้ "ส่วนต่าง" จริง (excessPerHour ดิบ ไม่ใช่ displayExcess ที่ถูกบังคับเป็น 0 สำหรับสถานะ 'ok' เพื่อให้
+  // ตรงกับที่ตารางโชว์ "—") มากไปน้อยเป็นตัวรอง ให้ตัวที่ผิดปกติหนักกว่าขึ้นก่อนจริงๆ แม้สถานะเดิมจะเป็น
+  // "ปกติ" แต่ติด tag remark ไว้ก็ตาม (เคสที่พบบ่อยที่สุดของการกรอง "มีหมายเหตุ")
+  // สุดท้ายค่อยเรียงตามรหัส DM จากน้อยไปมากเป็นตัวรองสุดท้าย กันกรณีส่วนต่างเท่ากันเป๊ะ
+  return STATUS_ORDER[dStatus(a)] - STATUS_ORDER[dStatus(b)]
+      || (b.a.excessPerHour - a.a.excessPerHour)
+      || a.code.localeCompare(b.code);
 }
 
 function displayExcess(d){
