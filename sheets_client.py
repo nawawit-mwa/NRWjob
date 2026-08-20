@@ -114,7 +114,29 @@ def get_spreadsheet():
 
 
 def get_worksheet(sheet_name: str):
-    """คืน worksheet object พร้อม cache ไว้ (สร้างใหม่ถ้ายังไม่มี - ใช้ตอน schema_setup)"""
+    """คืน worksheet object พร้อม cache ไว้
+    ถ้าหา tab ไม่เจอ -> error ชัดเจนออกมาทันที (ไม่สร้าง tab เปล่าอัตโนมัติแบบเงียบๆ อีกต่อไป —
+    เคยเป็นบั๊กจริง: สร้าง tab ว่างไม่มี header ให้เอง ทำให้เขียนข้อมูลเป็นค่าว่างหมดแต่ไม่ error เลย)
+    ถ้าต้องการสร้าง tab ใหม่จริงๆ (ตอน schema_setup ครั้งแรกเท่านั้น) ให้ใช้ get_or_create_worksheet() แทน"""
+    if sheet_name in _ws_cache:
+        return _ws_cache[sheet_name]
+    ss = get_spreadsheet()
+    try:
+        ws = _with_retry(ss.worksheet, sheet_name)
+    except gspread.exceptions.WorksheetNotFound:
+        raise ValueError(
+            f"ไม่พบ Sheet tab ชื่อ '{sheet_name}' ใน Google Sheet — ต้องสร้าง tab นี้เองก่อน "
+            f"(พร้อมหัวตาราง/header ให้ถูกต้องตามที่กำหนดไว้) ห้ามปล่อยให้ระบบสร้างอัตโนมัติ "
+            f"เพราะจะได้ tab ว่างไม่มี header แล้วข้อมูลที่เขียนจะกลายเป็นค่าว่างทั้งหมดแบบไม่มี error เตือน"
+        )
+    _ws_cache[sheet_name] = ws
+    return ws
+
+
+def get_or_create_worksheet(sheet_name: str):
+    """เหมือน get_worksheet() แต่สร้าง tab ใหม่ให้อัตโนมัติถ้ายังไม่มี — ใช้เฉพาะตอนรัน schema_setup.py
+    ครั้งแรกเท่านั้น (ตอนนั้นตั้งใจให้สร้าง tab เปล่าแล้วค่อยเซ็ต header ทีหลังด้วย set_headers())
+    ห้ามใช้ตอน runtime ปกติ (ใช้ get_worksheet() แทน) เพราะจะไปบังหาบั๊กแบบเงียบๆ ได้ถ้า sheet หาย/พิมพ์ชื่อผิด"""
     if sheet_name in _ws_cache:
         return _ws_cache[sheet_name]
     ss = get_spreadsheet()
