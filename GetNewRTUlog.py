@@ -21,13 +21,15 @@ def git_push_auto(repo_dir, commit_message=None):
         subprocess.run(["git", "add", "."], cwd=repo_dir, check=True)
         print("✅ Git add เรียบร้อย")
 
-        # 2. git commit -m "..."
-        # ใช้ capture_output=True เพื่อเช็คว่ามีไฟล์ให้ commit หรือไม่ (ป้องกันโปรแกรมหลุดถ้าไม่มีอะไรเปลี่ยน)
+       # 2. git commit -m "..."
+        # ใช้ capture_output=True เพื่อเช็คว่ามีไฟล์ให้ commit หรือไม่
         commit_result = subprocess.run(
             ["git", "commit", "-m", commit_message],
             cwd=repo_dir,
             capture_output=True,
             text=True,
+            encoding="utf-8",    # 🟢 เพิ่มบรรทัดนี้: บังคับให้อ่านเป็น UTF-8
+            errors="replace"     # 🟢 เพิ่มบรรทัดนี้: ถ้าเจออักขระที่อ่านไม่ออกให้แทนที่ ไม่ต้อง Error
         )
 
         if "nothing to commit" in commit_result.stdout:
