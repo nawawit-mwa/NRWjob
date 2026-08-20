@@ -3,6 +3,9 @@
 
 {% block extra_head %}
 <style>
+  /* หน้านี้ตารางกว้างกว่าปกติ (หลายคอลัมน์) ขยาย container เฉพาะหน้านี้เกินค่ามาตรฐาน 1080px
+     ของระบบ กันไม่ให้เกิด scroll bar แนวนอนโดยไม่จำเป็น */
+  .container { max-width: 1500px; }
   .alert-table-wrap { overflow-x: auto; }
   .alert-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
   .alert-table th {
@@ -39,7 +42,7 @@
           <th>รหัส</th>
           <th>RTU</th>
           <th>กลุ่ม</th>
-          <th>MNF ปัจจุบัน / ค่าเฉลี่ยฐาน / ช่วง Night Flow</th>
+          <th></th>
           <th>หมายเหตุ</th>
           <th>กราฟ</th>
           <th>บันทึกโดย / วันที่</th>
@@ -76,10 +79,10 @@
           <td class="mono">{{ alert.AlertID }}</td>
           <td>{{ alert.RTUName or alert.RTUID }}</td>
           <td>{{ alert.CaseClassification or '—' }}</td>
-          <td style="min-width:190px;">
-            <strong>ปัจจุบัน:</strong> {{ alert.CurrentMNF or '—' }} m³/hr<br>
-            <strong>ฐาน:</strong> {{ alert.BaselineMean or '—' }} m³/hr<br>
-            <strong>Night Flow:</strong> {{ alert.NightFlowWindow or '—' }}
+          <td style="min-width:220px;">
+            <strong>MNF ปัจจุบัน:</strong> {{ alert.CurrentMNF or '—' }} m³/hr<br>
+            <strong>ค่าเฉลี่ยฐาน:</strong> {{ alert.BaselineMean or '—' }} m³/hr<br>
+            <strong>ช่วง Night Flow:</strong> {{ alert.NightFlowWindow or '—' }}
           </td>
           <td style="min-width:150px;">{{ alert.Note or '—' }}</td>
           <td>
