@@ -1586,6 +1586,26 @@ function renderJobTable(logs){
  * ต้อง login แล้วเท่านั้น (ปุ่มนี้ถูกซ่อนไว้แล้วถ้าไม่ login ผ่าน IS_LOGGED_IN แต่ backend ก็เช็คซ้ำอีกชั้น
  * ด้วย login_required อยู่ดี เผื่อกรณี session หมดอายุระหว่างเปิดหน้าค้างไว้)
  */
+/**
+ * ย่อรูปกราฟจาก canvas จริง (ซึ่งมักมีความละเอียดสูงกว่าที่เห็นบนจอมาก โดยเฉพาะจอ retina ที่
+ * devicePixelRatio > 1) ให้เหลือความกว้างไม่เกิน maxWidth ก่อนแปลงเป็น JPEG คุณภาพต่ำลงอีก
+ * เพื่อให้ขนาด base64 สุดท้ายเล็กพอจะฝังในเซลล์ Google Sheets ได้ (ลิมิต 50,000 ตัวอักษร/เซลล์)
+ * วาดพื้นหลังสีขาวไว้ก่อนเสมอ เพราะ JPEG ไม่รองรับพื้นหลังโปร่งใส (ถ้าไม่วาดจะกลายเป็นสีดำ)
+ */
+function getResizedChartImage(sourceCanvas, maxWidth, quality){
+  const scale = Math.min(1, maxWidth / sourceCanvas.width);
+  const targetW = Math.max(1, Math.round(sourceCanvas.width * scale));
+  const targetH = Math.max(1, Math.round(sourceCanvas.height * scale));
+  const tmp = document.createElement('canvas');
+  tmp.width = targetW;
+  tmp.height = targetH;
+  const ctx = tmp.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, targetW, targetH);
+  ctx.drawImage(sourceCanvas, 0, 0, targetW, targetH);
+  return tmp.toDataURL('image/jpeg', quality);
+}
+
 async function saveCurrentAlert(){
   if(!currentJobRtuId) return;
   const d = data.find(x => x.code === currentJobRtuId);
@@ -1602,7 +1622,9 @@ async function saveCurrentAlert(){
   let imageDataUrl = '';
   try{
     const canvas = document.getElementById('chartMnf');
-    if(canvas) imageDataUrl = canvas.toDataURL('image/jpeg', 0.7);
+    // ย่อความกว้างเหลือไม่เกิน 480px + คุณภาพ 0.5 (ลดจาก 0.7 เดิม) — canvas จริงมักใหญ่กว่าที่เห็นบนจอ
+    // มาก (โดยเฉพาะจอ retina) ทำให้ base64 ที่ได้เกินลิมิตเซลล์ Sheets ได้ง่ายถ้าไม่ย่อก่อน
+    if(canvas) imageDataUrl = getResizedChartImage(canvas, 480, 0.5);
   }catch(e){
     // canvas ว่าง/ยังไม่วาดกราฟ (เช่น RTU นี้ status='no_data') — บันทึกต่อได้โดยไม่มีรูปแนบ
     imageDataUrl = '';
