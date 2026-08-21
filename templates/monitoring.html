@@ -320,6 +320,7 @@
       <span id="mNavPosition" class="mono" style="font-size:11px; color:var(--text-faint);"></span>
     </div>
     <h3 id="mName"></h3>
+    <span id="mBranchName" class="mono" style="font-size:13px;color:var(--text-dim);"></span>
     <div class="mcode mono" id="mCode"></div>
 
     <div class="modal-tabs">
@@ -1263,6 +1264,18 @@ function openModal(code){
   document.getElementById('mName').textContent = d.name;
   document.getElementById('mCode').textContent = `${d.code} · ${cm.icon} ${cm.label}`;
   document.getElementById('mCode').title = d.a.caseReason || '';
+
+  // ชื่อสาขา — ข้อมูล Monitoring (จาก CSV) ไม่มีข้อมูลสาขาเลย ต้องขอจากฝั่ง NRW Job backend
+  // (RTUs -> BranchID -> Branches) เป็น public endpoint เรียกได้ไม่ว่า login หรือไม่
+  const branchEl = document.getElementById('mBranchName');
+  branchEl.textContent = '';
+  fetch(`/rtus/${encodeURIComponent(d.code)}/info`)
+    .then(res => res.json())
+    .then(json => {
+      if(currentJobRtuId !== d.code && window._lastOpenedDmaCode !== d.code) return;
+      if(json && json.branch_name) branchEl.textContent = `📍 สาขา${json.branch_name}`;
+    })
+    .catch(() => {}); // เงียบไว้ — แค่ข้อมูลเสริม ไม่ให้กระทบการเปิด modal หลัก
 
   // เปิด modal ใหม่ทุกครั้ง = กลับไป tab กราฟก่อนเสมอ + รีเซ็ต/โหลดฟอร์ม-ประวัติ job ของ RTU นี้
   currentJobRtuId = d.code;

@@ -361,6 +361,12 @@ def remark_clear():
         return jsonify(success=False, error=f"เกิดข้อผิดพลาดไม่คาดคิด: {e}")
 
 
+@app.route("/rtus/<rtu_id>/info")
+def rtu_info(rtu_id):
+    # public endpoint (ไม่บังคับ login) — ใช้แสดงชื่อสาขาใน popup ของหน้า Monitoring ที่เปิดให้คนไม่ login ดูได้อยู่แล้ว
+    return jsonify(branch_name=org_service.get_branch_name_for_rtu(rtu_id))
+
+
 @app.route("/alerts/save", methods=["POST"])
 @login_required
 def alert_save():

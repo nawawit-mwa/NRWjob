@@ -144,3 +144,13 @@ def same_unit(user_a: dict, user_b: dict) -> bool:
         user_a.get("DivisionID")
         and user_a.get("DivisionID") == user_b.get("DivisionID")
     )
+
+
+def get_branch_name_for_rtu(rtu_id: str) -> str:
+    """หาชื่อสาขาจาก RTUID (RTUs -> BranchID -> Branches -> BranchName)
+    คืนค่าว่างถ้าหา RTU หรือสาขาไม่เจอ (ใช้แสดงชื่อสาขาใน popup ของหน้า Monitoring)"""
+    rtu = sc.find_one("RTUs", "RTUID", rtu_id)
+    if not rtu:
+        return ""
+    branch = sc.find_one("Branches", "BranchID", rtu.get("BranchID", ""))
+    return branch.get("BranchName", "") if branch else ""
