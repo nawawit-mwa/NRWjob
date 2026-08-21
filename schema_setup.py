@@ -36,8 +36,9 @@ SHEET_SCHEMAS = {
     # --- แจ้งเตือน MNF ที่บันทึกไว้ (จาก NRW Monitoring) ---
     "SavedAlerts": [
         "AlertID", "RTUID", "RTUName", "ZoneID", "BranchID",
-        "CaseClassification", "MNFValue", "CUSUM", "TrendResult",
-        "ChartImageURL", "Note", "SavedBy", "SavedAt",
+        "CaseClassification", "CurrentMNF", "BaselineMean", "NightFlowWindow",
+        "MNFValue", "CUSUM", "TrendResult",
+        "ChartImageURL", "Note", "Status", "SavedBy", "SavedAt",
         "LinkedIncidentID", "LinkedIncidentAt",
     ],
 
@@ -73,7 +74,7 @@ SHEET_SCHEMAS = {
 def create_all_sheets():
     for sheet_name, headers in SHEET_SCHEMAS.items():
         print(f"กำลังสร้าง/ตั้งค่า sheet: {sheet_name}")
-        sc.get_worksheet(sheet_name)   # สร้าง tab ถ้ายังไม่มี
+        sc.get_or_create_worksheet(sheet_name)   # สร้าง tab ถ้ายังไม่มี (เฉพาะตอน schema_setup เท่านั้น)
         sc.set_headers(sheet_name, headers)
 
 

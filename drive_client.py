@@ -14,6 +14,7 @@ import re
 
 from google.auth.transport.requests import AuthorizedSession
 
+import config
 import sheets_client as sc
 
 DRIVE_UPLOAD_URL = "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id"
@@ -32,7 +33,13 @@ def _get_session():
 def upload_chart_image(data_url: str, filename: str) -> str:
     """อัปโหลดรูปจาก data URL (เช่น 'data:image/jpeg;base64,...') ขึ้น Google Drive
     ตั้งสิทธิ์ให้ดูได้ผ่านลิงก์ (anyone/reader) แล้วคืนลิงก์เปิดดูรูป
-    raise ValueError ถ้ารูปแบบข้อมูลผิด, raise ตาม HTTP error ถ้าอัปโหลดไม่สำเร็จ"""
+    raise ValueError ถ้ารูปแบบข้อมูลผิด/ยังไม่ตั้งค่าโฟลเดอร์, raise ตาม HTTP error ถ้าอัปโหลดไม่สำเร็จ"""
+    if not config.GOOGLE_DRIVE_FOLDER_ID:
+        raise ValueError(
+            "ยังไม่ได้ตั้งค่า GOOGLE_DRIVE_FOLDER_ID — ต้องสร้างโฟลเดอร์ Drive จริง (ของบัญชี Google จริง "
+            "ไม่ใช่ของ Service Account เอง) แล้วแชร์สิทธิ์ Editor ให้ Service Account ก่อน"
+        )
+
     match = re.match(r"^data:(image/\w+);base64,(.+)$", data_url or "")
     if not match:
         raise ValueError("รูปแบบข้อมูลรูปภาพไม่ถูกต้อง (ต้องเป็น data URL แบบ image/*)")
@@ -40,13 +47,21 @@ def upload_chart_image(data_url: str, filename: str) -> str:
     file_bytes = base64.b64decode(b64data)
 
     session = _get_session()
-    metadata = {"name": filename, "mimeType": mime_type}
+    # ต้องระบุ parents เป็นโฟลเดอร์ของบัญชี Google จริงเสมอ — ถ้าไม่ระบุ ไฟล์จะพยายามสร้างในพื้นที่ของ
+    # Service Account เอง ซึ่งมีพื้นที่เก็บข้อมูล 0 ไบต์ ทำให้เจอ 403 Forbidden ทันที (ปัญหาที่เจอมาแล้วจริง)
+    metadata = {"name": filename, "mimeType": mime_type, "parents": [config.GOOGLE_DRIVE_FOLDER_ID]}
     files = {
         "data": ("metadata", json.dumps(metadata), "application/json; charset=UTF-8"),
         "file": (filename, file_bytes, mime_type),
     }
     resp = session.post(DRIVE_UPLOAD_URL, files=files)
-    resp.raise_for_status()
+    if not resp.ok:
+        # resp.raise_for_status() เดิมให้แค่ "403 Forbidden" เฉยๆ ไม่พอไล่บั๊ก — ต้องดึง response body
+        # จริงจาก Google มาด้วย เพราะเหตุผลจริง (เช่น "Drive API ยังไม่เปิดใช้งาน", "storageQuotaExceeded",
+        # "insufficientFilePermissions" ฯลฯ) อยู่ใน JSON body ไม่ใช่แค่ status line
+        raise RuntimeError(
+            f"อัปโหลด Drive ไม่สำเร็จ HTTP {resp.status_code}: {resp.text[:500]}"
+        )
     file_id = resp.json()["id"]
 
     # เปิดสิทธิ์ให้ดูได้แบบมีลิงก์ (ไม่ต้อง login Google) เพื่อให้เปิดดูรูปจาก popup ได้ทุกคน
