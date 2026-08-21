@@ -209,6 +209,18 @@ def cancel_alert(alert_id: str, user: dict):
     sc.update_row("SavedAlerts", "AlertID", alert_id, {"Status": ALERT_STATUS_CANCELLED})
 
 
+def get_all_linked_rtu_ids() -> dict:
+    """คืน {RTUID: LinkedIncidentID} ของทุกแถวที่เชื่อมโยงเหตุการณ์แล้ว (ทั้งระบบ ไม่จำกัดขอบเขตพื้นที่
+    เพราะใช้เป็นตัวกรอง overlay บนหน้า Monitoring ซึ่งไม่ได้ scope ตามสาขาอยู่แล้วตั้งแต่ต้น)
+    ใช้ตัวเดียวดึงข้อมูล RTU ทั้งหมดพร้อมกัน แทนยิง /alerts/status ทีละตัวเป็นร้อยๆ ครั้ง"""
+    all_alerts = sc.get_all_records("SavedAlerts")
+    return {
+        a["RTUID"]: a["LinkedIncidentID"]
+        for a in all_alerts
+        if a.get("LinkedIncidentID") and a.get("RTUID")
+    }
+
+
 def get_alert_status_for_rtu(rtu_id: str) -> dict:
     """เช็คสถานะแจ้งเตือนของ RTU นี้ (ใช้แสดงใน popup ของ Monitoring) คืน dict เสมอ:
     - saved: มีแถว active อยู่ไหม (บันทึกไว้แล้ว ไม่ว่าจะแปลงเป็นเหตุการณ์หรือยัง)

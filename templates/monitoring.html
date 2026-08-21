@@ -319,8 +319,8 @@
               style="cursor:pointer; padding:4px 10px; font-size:12px;">ถัดไป ▶</button>
       <span id="mNavPosition" class="mono" style="font-size:11px; color:var(--text-faint);"></span>
     </div>
-    <h3 id="mName"></h3>
-    <span id="mBranchName" class="mono" style="font-size:13px;color:var(--text-dim);"></span>
+    <h3><span id="mName"></span><span id="mBranchName" class="mono"
+        style="font-size:0.6em; font-weight:400; color:var(--text-dim); margin-left:10px;"></span></h3>
     <div class="mcode mono" id="mCode"></div>
 
     <div class="modal-tabs">
@@ -924,11 +924,15 @@ function renderAll(){
 async function refreshFromCsv(isFirstLoad){
   document.getElementById('csvPathLabel').textContent = `${FLOW_CSV_URL}, ${SERIES_CSV_URL}, ${SUMMARY_CSV_URL}`;
   try{
-    const [flowRows, seriesRows, summaryRows, ignoreSet, remarksByDma] = await Promise.all([
+    const [flowRows, seriesRows, summaryRows, ignoreSet, remarksByDma, linkedMap] = await Promise.all([
       loadCsv(FLOW_CSV_URL), loadCsv(SERIES_CSV_URL), loadCsv(SUMMARY_CSV_URL), loadIgnoreList(IGNORE_CSV_URL),
       loadRemarksMap(REMARK_CSV_URL),   // "มีหมายเหตุ" กลับมาอ่านจากชีท remark เดิมแทน job_log ตามที่สั่ง
       // (loadRemarksMapFromJobLog() ยังเก็บไว้เหมือนเดิม ไม่ได้ลบ — สลับกลับมาใช้ได้ทันทีถ้าต้องการในอนาคต)
+      IS_LOGGED_IN
+        ? fetch('/alerts/linked-map').then(res => res.json()).catch(() => ({}))
+        : Promise.resolve({}),   // ไม่ login ไม่ต้องยิงเลย (endpoint บังคับ login_required อยู่แล้วด้วย)
     ]);
+    linkedIncidentMap = linkedMap || {};
     const hourlyByDma = hourlyFromFlowCsv(flowRows);
     const seriesByDma = seriesFromCsv(seriesRows);
     const summaryByDma = summaryFromCsv(summaryRows);
@@ -992,6 +996,8 @@ if(AUTO_REFRESH_ENABLED){
 }
 
 let activeStatusFilter = null;   // null = แสดงทุกสถานะ, ไม่ก็เป็น 'alert'/'watch'/'ok'/'no_data'/'remark'
+let activeIncidentFilter = false;   // true = กรองเฉพาะ RTU ที่เปิดเป็นเหตุการณ์แล้ว (ทำงานร่วมกับ activeStatusFilter แบบ AND)
+let linkedIncidentMap = {};         // {RTUID: IncidentID} ของ RTU ที่เปิดเป็นเหตุการณ์แล้ว — เห็นเฉพาะ login แล้ว
 let searchQuery = '';            // ค้นหาจากรหัส/ชื่อ RTU — ทำงานร่วมกับ activeStatusFilter แบบ AND
 
 const REGION_GROUPS = {   // จับคู่ DM_ID/RTU_ID ด้วย prefix — แก้ list นี้ที่เดียว มีผลทั้งปุ่ม กรอง และนับการ์ด
@@ -1048,14 +1054,23 @@ function clearSearchQuery(){
 function matchesFilters(d){
   if(!matchesRegion(d)) return false;
   if(activeStatusFilter && dStatus(d)!==activeStatusFilter) return false;
+  if(activeIncidentFilter && !linkedIncidentMap[d.code]) return false;
   if(searchQuery && !(d.code.toLowerCase().includes(searchQuery) || (d.name||'').toLowerCase().includes(searchQuery))) return false;
   return true;
+}
+
+function toggleIncidentFilter(){
+  activeIncidentFilter = !activeIncidentFilter;
+  renderCards();
+  renderPriority();
+  renderKpis();
 }
 
 function emptyFilterMessage(){
   const parts = [];
   if(activeRegion !== 'ทั้งหมด') parts.push(`เขต "${activeRegion}"`);
   if(activeStatusFilter) parts.push(`สถานะ "${STATUS_LABEL[activeStatusFilter]}"`);
+  if(activeIncidentFilter) parts.push(`"เปิดเป็นเหตุการณ์แล้ว"`);
   if(searchQuery) parts.push(`คำค้นหา "${searchQuery}"`);
   return parts.length ? `ไม่พบ RTUที่ตรงกับ ${parts.join(' และ ')}` : 'ไม่มีข้อมูล DM';
 }
@@ -1082,11 +1097,19 @@ function renderKpis(){
     <div class="kpi ${k.cls} ${activeStatusFilter===k.status?'active':''}" onclick="setStatusFilter(${k.status===null?'null':`'${k.status}'`})" title="คลิกเพื่อกรองเฉพาะสถานะนี้ (คลิกซ้ำเพื่อล้าง)">
       <div class="label">${k.label}</div>
       <div class="val mono">${k.val}${k.unit?`<small>${k.unit}</small>`:''}</div>
-    </div>`).join('');
+    </div>`).join('')
+    + (IS_LOGGED_IN ? `
+    <div class="kpi ${activeIncidentFilter?'active':''}" onclick="toggleIncidentFilter()" title="คลิกเพื่อกรองเฉพาะ RTU ที่เปิดเป็นเหตุการณ์แล้ว (คลิกซ้ำเพื่อล้าง)">
+      <div class="label">เปิดเหตุการณ์แล้ว</div>
+      <div class="val mono">${regionData.filter(d => linkedIncidentMap[d.code]).length}</div>
+    </div>` : '');
   const filterNote = document.getElementById('statusFilterNote');
   if(filterNote){
-    filterNote.style.display = activeStatusFilter ? '' : 'none';
-    filterNote.textContent = activeStatusFilter ? `🔍 กำลังกรองเฉพาะ "${STATUS_LABEL[activeStatusFilter]}" — คลิกการ์ดเดิมอีกครั้งเพื่อล้างตัวกรอง` : '';
+    const noteParts = [];
+    if(activeStatusFilter) noteParts.push(`"${STATUS_LABEL[activeStatusFilter]}"`);
+    if(activeIncidentFilter) noteParts.push(`"เปิดเหตุการณ์แล้ว"`);
+    filterNote.style.display = noteParts.length ? '' : 'none';
+    filterNote.textContent = noteParts.length ? `🔍 กำลังกรองเฉพาะ ${noteParts.join(' + ')} — คลิกการ์ดเดิมอีกครั้งเพื่อล้างตัวกรอง` : '';
   }
 }
 
@@ -1273,7 +1296,7 @@ function openModal(code){
     .then(res => res.json())
     .then(json => {
       if(currentJobRtuId !== d.code && window._lastOpenedDmaCode !== d.code) return;
-      if(json && json.branch_name) branchEl.textContent = `📍 สาขา${json.branch_name}`;
+      if(json && json.branch_name) branchEl.textContent = `สาขา : ${json.branch_name}`;
     })
     .catch(() => {}); // เงียบไว้ — แค่ข้อมูลเสริม ไม่ให้กระทบการเปิด modal หลัก
 

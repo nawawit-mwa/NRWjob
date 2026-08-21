@@ -373,6 +373,14 @@ def rtu_info(rtu_id):
     return jsonify(branch_name=org_service.get_branch_name_for_rtu(rtu_id))
 
 
+@app.route("/alerts/linked-map")
+@login_required
+def alerts_linked_map():
+    # เฉพาะ login แล้วเท่านั้น (ตามที่สั่ง) — ใช้เป็นตัวกรอง "เปิดเหตุการณ์แล้ว" ในหน้า Monitoring
+    # ดึงทีเดียวหมดทั้งระบบ กันหน้า Monitoring ยิง API ทีละ RTU เป็นร้อยๆ ครั้ง
+    return jsonify(alert_service.get_all_linked_rtu_ids())
+
+
 @app.route("/alerts/save", methods=["POST"])
 @login_required
 def alert_save():
