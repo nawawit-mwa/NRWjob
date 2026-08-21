@@ -93,7 +93,13 @@ app.jinja_env.filters["user_short"] = _user_short_display
 #  import ตัวแปร app จากไฟล์นี้โดยตรง ไม่ได้รันไฟล์นี้เป็นสคริปต์หลัก โค้ดใน
 #  if __name__ == "__main__" จะไม่ถูกเรียกเลยในกรณีนั้น)
 print("=== Warm up cache ===")
-sc.warm_up(list(SHEET_SCHEMAS.keys()))
+try:
+    sc.warm_up(list(SHEET_SCHEMAS.keys()))
+except Exception as e:
+    # warm_up ล้มเหลว (เช่น โดน rate limit ชั่วคราวตอนเริ่มโปรแกรม) ไม่ควรทำให้แอปทั้งตัวสตาร์ทไม่ได้
+    # แต่ละ sheet จะถูกโหลดแบบ lazy (ตอนถูกเรียกใช้จริงครั้งแรก) แทน — ช้าลงเล็กน้อยในการ request
+    # แรกๆ แต่แอปยังใช้งานได้ปกติ ไม่ต้องรอ restart service ด้วยมือ
+    print(f"[app.py] warm_up ล้มเหลว (จะโหลดแบบ lazy แทน): {type(e).__name__}: {e}")
 
 
 def login_required(view_func):

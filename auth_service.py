@@ -37,11 +37,15 @@ def _verify_password(password: str, stored_hash: str) -> bool:
     return _hash_password(password, salt) == stored_hash
 
 
-def create_user(user_id, name, username, password, role, **org_fields):
+def create_user(user_id, name, username, password, role, skip_if_exists=False, **org_fields):
     """สร้างผู้ใช้ใหม่ - org_fields รับ BranchGroupID/BranchID/DivisionID/SectionID/
-    ContractorCompany/Phone ตามที่ role นั้นต้องใช้"""
+    ContractorCompany/Phone ตามที่ role นั้นต้องใช้
+    skip_if_exists=True: ถ้ามี username นี้อยู่แล้ว ให้คืนข้อมูลเดิมเฉยๆ แทนการ raise error
+    (มีประโยชน์เวลารัน demo/seed script ซ้ำหลายครั้ง)"""
     existing = sc.find_one("Users", "Username", username)
     if existing:
+        if skip_if_exists:
+            return existing
         raise ValueError(f"Username '{username}' มีอยู่แล้ว")
     if role not in ROLE_LEVELS:
         raise ValueError(f"ไม่รู้จัก Role: {role}")
@@ -62,6 +66,12 @@ def create_user(user_id, name, username, password, role, **org_fields):
 def login(username: str, password: str) -> str:
     """คืน session token ถ้า login สำเร็จ, raise ValueError ถ้าไม่สำเร็จ"""
     user = sc.find_one("Users", "Username", username)
+    if not user:
+        # หาไม่เจอในรอบแรก อาจเป็นเพราะ cache ของ Sheet Users ยังว่าง/ผิดพลาดตอน warm_up ตอนเริ่ม
+        # โปรแกรม (เช่น โดน rate limit ชั่วคราว) — ลองบังคับโหลดใหม่อีกครั้งก่อนสรุปว่าไม่มีจริง
+        # กันปัญหา "login ไม่ผ่านทุกครั้งจนกว่าจะ restart service" ที่เจอมาแล้วจริงจากการใช้งานจริง
+        sc.get_all_records("Users", force_refresh=True)
+        user = sc.find_one("Users", "Username", username)
     if not user:
         raise ValueError("ไม่พบผู้ใช้งาน")
     if user.get("Status") != "Active":
