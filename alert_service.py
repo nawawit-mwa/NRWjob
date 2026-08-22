@@ -34,8 +34,8 @@ def _now():
 
 def save_alert(user: dict, rtu_id: str, rtu_name: str, case_classification: str,
                current_mnf: str, baseline_mean: str, night_flow_window: str,
-               mnf_value: str, cusum: str, trend_result: str, note: str = "",
-               image_data_url: str = "") -> str:
+               mnf_value: str, cusum: str, trend_result: str, chart_date: str = "",
+               note: str = "", image_data_url: str = "") -> str:
     """บันทึกการแจ้งเตือน MNF ที่สนใจ — resolve ZoneID/BranchID จาก RTUID อัตโนมัติ
     (แบบเดียวกับ incident_service.create_incident ตอนสร้างจาก RTU)
 
@@ -78,6 +78,7 @@ def save_alert(user: dict, rtu_id: str, rtu_name: str, case_classification: str,
         "MNFValue": mnf_value,
         "CUSUM": cusum,
         "TrendResult": trend_result,
+        "ChartDate": chart_date,
         "ChartImageURL": chart_image_url,
         "Note": note,
         "Status": ALERT_STATUS_ACTIVE,

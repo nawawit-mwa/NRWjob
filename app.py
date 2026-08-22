@@ -398,6 +398,7 @@ def alert_save():
             mnf_value=payload.get("mnf_value", ""),
             cusum=payload.get("cusum", ""),
             trend_result=payload.get("trend", ""),
+            chart_date=payload.get("chart_date", ""),
             note=payload.get("note", ""),
             image_data_url=payload.get("image_data_url", ""),
         )

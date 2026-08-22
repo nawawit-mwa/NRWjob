@@ -1798,6 +1798,9 @@ async function saveCurrentAlert(){
     mnf_value: d.a.currentMnf != null ? d.a.currentMnf.toFixed(1) : '',
     cusum: (d.a.cs && d.a.cs.breached) ? `ตัดเกณฑ์ที่วันหลัง baseline #${d.a.cs.breachIndex + 1}` : 'ยังไม่ตัดเกณฑ์',
     trend: (d.a.mk && d.a.mk.trend) ? d.a.mk.trend : '',
+    // วันที่ของเส้นล่าสุด (เส้นสีฟ้า) บนกราฟ flow/pressure — เก็บเป็น ISO ดิบ (เช่น "2026-08-16")
+    // เหมือน timestamp อื่นๆ ในระบบ ไม่ format ที่นี่ ปล่อยให้ตอนแสดงผลค่อยแปลงเป็น dd/mm/yyyy
+    chart_date: (d.hourly.days && d.hourly.days.length) ? d.hourly.days[d.hourly.days.length - 1] : '',
     note: noteEl.value.trim(),
     image_data_url: imageDataUrl,
   };

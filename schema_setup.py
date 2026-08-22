@@ -37,7 +37,7 @@ SHEET_SCHEMAS = {
     "SavedAlerts": [
         "AlertID", "RTUID", "RTUName", "ZoneID", "BranchID",
         "CaseClassification", "CurrentMNF", "BaselineMean", "NightFlowWindow",
-        "MNFValue", "CUSUM", "TrendResult",
+        "MNFValue", "CUSUM", "TrendResult", "ChartDate",
         "ChartImageURL", "Note", "Status", "SavedBy", "SavedAt",
         "LinkedIncidentID", "LinkedIncidentAt",
     ],
