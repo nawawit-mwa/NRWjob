@@ -335,6 +335,8 @@
         <div id="mRemarkText" style="font-weight:400;white-space:pre-wrap;"></div>
       </div>
 
+      <div id="mAlertStatusBadge" style="display:none;margin-bottom:12px;padding:10px 14px;border-radius:10px;font-size:12.5px;font-weight:600;"></div>
+
       <div class="mkpis" id="mKpis"></div>
 
       <div class="chart-box">
@@ -1660,19 +1662,38 @@ async function refreshAlertStatusPanel(rtuId){
   const savePanel = document.getElementById('mAlertSavePanel');
   const savedPanel = document.getElementById('mAlertSavedPanel');
   const linkedPanel = document.getElementById('mAlertLinkedPanel');
+  const statusBadge = document.getElementById('mAlertStatusBadge');
 
   savePanel.style.display = 'none';
   savedPanel.style.display = 'none';
   linkedPanel.style.display = 'none';
+  statusBadge.style.display = 'none';
 
-  // panel พวกนี้อยู่ใน tab "การดำเนินการ" ที่ถูกซ่อนทั้ง tab ไว้แล้วถ้าไม่ใช่วิศวกรขึ้นไป (CAN_MANAGE_JOB)
-  // เช็คเงื่อนไขเดียวกันตรงนี้ด้วย กันยิง /alerts/status เปล่าประโยชน์สำหรับคนที่มองไม่เห็น tab นี้อยู่แล้ว
-  if(!CAN_MANAGE_JOB) return;
-
+  // /alerts/status เป็น public endpoint ตั้งแต่ต้น (ทุกคนดูได้ ไม่ใช่แค่วิศวกร) — เช็คสถานะเสมอไม่ว่า
+  // จะเป็นใคร เพื่อโชว์ badge อ่านอย่างเดียวใน tab วิเคราะห์ให้ทุกคนเห็น ส่วนฟอร์มบันทึกจริง (ใน tab
+  // การดำเนินการ) ค่อยจำกัดแค่วิศวกรขึ้นไปทีหลังแยกต่างหาก
   try{
     const res = await fetch(`/alerts/status/${encodeURIComponent(rtuId)}`);
     const json = await res.json();
     if(currentJobRtuId !== rtuId) return; // ผู้ใช้เปิด modal อื่นไปแล้วระหว่างรอ fetch
+
+    if(json && json.saved){
+      // badge อ่านอย่างเดียวใน tab วิเคราะห์ — เห็นได้ทุกคนไม่ว่าจะมีสิทธิ์บันทึกหรือไม่
+      statusBadge.style.display = 'block';
+      if(json.linked){
+        statusBadge.style.background = 'rgba(7,156,0,.14)';
+        statusBadge.style.border = '1px solid var(--green)';
+        statusBadge.style.color = 'var(--green)';
+        statusBadge.textContent = `✅ เปิดเป็นเหตุการณ์แล้ว: ${json.incident_id} (บันทึก ${json.alert_id} เมื่อ ${formatDateDDMMYYYY(json.saved_at)})`;
+      } else {
+        statusBadge.style.background = 'rgba(0,156,255,.10)';
+        statusBadge.style.border = '1px solid var(--mwa-sky, #009cff)';
+        statusBadge.style.color = 'var(--mwa-sky, #009cff)';
+        statusBadge.textContent = `📌 บันทึกการแจ้งเตือนไว้แล้ว: ${json.alert_id} เมื่อ ${formatDateDDMMYYYY(json.saved_at)}`;
+      }
+    }
+
+    if(!CAN_MANAGE_JOB) return; // ฟอร์มบันทึก/แผงในนี้ต่อไปอยู่ใน tab การดำเนินการ จำกัดวิศวกรขึ้นไปเท่านั้น
 
     if(json && json.saved){
       // มีการบันทึกไว้แล้ว (ยัง active) — ห้ามบันทึกซ้ำ โชว์แผง "บันทึกแล้ว" แทนฟอร์ม
@@ -1689,6 +1710,8 @@ async function refreshAlertStatusPanel(rtuId){
     }
   }catch(e){
     // เช็คสถานะไม่สำเร็จ (เช่น เน็ตหลุด) — ปล่อยให้เห็นฟอร์มบันทึกไว้ก่อน ดีกว่าไม่เห็นอะไรเลย
+    // (เฉพาะคนที่มีสิทธิ์เห็นฟอร์มอยู่แล้วเท่านั้น)
+    if(CAN_MANAGE_JOB) savePanel.style.display = 'block';
     savePanel.style.display = 'block';
   }
 }
