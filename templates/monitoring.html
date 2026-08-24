@@ -183,7 +183,7 @@
   .modal .close:hover{color:var(--text);border-color:var(--text-dim);}
   .modal h3{font-family:'Sarabun','Segoe UI',sans-serif;font-size:19px;margin:0 0 2px;}
   .modal .mcode{color:var(--text-faint);font-size:12.5px;margin-bottom:14px;}
-  .modal .mkpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:18px;}
+  .modal .mkpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:18px;}
   .modal .mkpi{background:var(--panel-2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;}
   .modal .mkpi .l{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.05em;}
   .modal .mkpi .v{font-family:'Sarabun','Segoe UI',sans-serif;font-size:16px;margin-top:3px;}
@@ -287,7 +287,7 @@
   <div class="kpis" id="kpis"></div>
   <div id="statusFilterNote" style="display:none;font-size:12.5px;color:var(--teal);margin:-10px 0 16px;"></div>
 
-  <div class="section-title"><h2>รายการเฝ้าระวังตามความรุนแรง</h2><div class="line"></div></div>
+  <div class="section-title"><h2>รายการที่ตรวจสอบพบ</h2><div class="line"></div></div>
   <table>
     <thead><tr>
       <th class="sortable" data-key="status" onclick="sortPriorityBy('status')">สถานะ <span class="sort-ind"></span></th>
@@ -295,7 +295,7 @@
       <th class="sortable" data-key="currentMnf" onclick="sortPriorityBy('currentMnf')">MNF ปัจจุบัน <span class="sort-ind"></span></th>
       <th class="sortable" data-key="mean" onclick="sortPriorityBy('mean')">MNF ฐาน (Baseline) <span class="sort-ind"></span></th>
       <th class="sortable" data-key="excessPerHour" onclick="sortPriorityBy('excessPerHour')">ส่วนต่าง <span class="sort-ind"></span></th>
-      <th class="sortable" data-key="estLossPerDay" onclick="sortPriorityBy('estLossPerDay')">ปริมาณสูญเสียประเมิน <span class="sort-ind"></span></th>
+      <th class="sortable" data-key="pctIncrease" onclick="sortPriorityBy('pctIncrease')">% ที่เพิ่มขึ้นเทียบฐาน <span class="sort-ind"></span></th>
       <th>รูปแบบ</th>
     </tr></thead>
     <tbody id="priorityBody"></tbody>
@@ -739,8 +739,8 @@ function seriesFromCsv(rows){
 }
 
 const CASE_META = {
-  A: {label:'ท่อแตกรั่ว (Pipe Burst)', icon:'🔴', cls:'alert'},
-  B: {label:'รั่วซึมสะสม (Developing Leak)', icon:'🟠', cls:'watch'},
+  A: {label:'ท่อแตกรั่ว', icon:'🔴', cls:'alert'},
+  B: {label:'รั่วซึมสะสม', icon:'🟠', cls:'watch'},
   C: {label:'ไม่พบ MNF ผิดปกติเชิงสถิติ', icon:'🟡', cls:'ok'},
   N: {label:'ไม่มีข้อมูล (RTU เสีย/สื่อสารขาด)', icon:'⚫', cls:'no_data'},
 };
@@ -910,6 +910,14 @@ function displayExcess(d){
 
 function displayLoss(d){
   return d.a.status==='ok' ? 0 : d.a.estLossPerDay;
+}
+
+function displayPct(d){
+  // % ที่ MNF ปัจจุบันเพิ่มขึ้นเทียบกับ MNF ฐาน = (ปัจจุบัน - ฐาน) / ฐาน * 100
+  // ใช้ pattern เดียวกับ displayExcess/displayLoss: สถานะ "ปกติ" ตีเป็น 0 ให้ตรงกับที่ตารางโชว์ "—"
+  if(d.a.status==='ok') return 0;
+  if(!d.a.mean || d.a.mean<=0) return 0;
+  return (d.a.currentMnf - d.a.mean) / d.a.mean * 100;
 }
 
 const HOURLY_NOTE_DEFAULT = 'แถบเทา = ช่วง flow ปกติ (min–max ย้อนหลัง) · เส้นฟ้า = วันล่าสุด · ความละเอียด 15 นาที/จุด (96 จุด/วัน) ตามข้อมูล RTU';
@@ -1159,6 +1167,7 @@ function renderPriority(){
     mean: (a,b)=> a.a.mean-b.a.mean,
     excessPerHour: (a,b)=> displayExcess(a)-displayExcess(b),
     estLossPerDay: (a,b)=> displayLoss(a)-displayLoss(b),
+    pctIncrease: (a,b)=> displayPct(a)-displayPct(b),
   };
 
   const filteredData = data.filter(matchesFilters);
@@ -1192,14 +1201,14 @@ function renderPriority(){
     const spark = sparklinePath(d.a.mnfSeries.slice(-14),120,26);
     const deltaClass = d.a.status==='ok' ? 'delta-flat' : 'delta-pos';
     const deltaTxt = d.a.status==='ok' ? '—' : `+${d.a.excessPerHour.toFixed(1)} m³/hr`;
-    const lossTxt = d.a.status==='ok' ? '—' : `≈ ${Math.round(d.a.estLossPerDay)} m³/วัน`;
+    const pctTxt = d.a.status==='ok' ? '—' : `+${displayPct(d).toFixed(1)}%`;
     return `<tr onclick="openModal('${d.code}')">
       <td><span class="badge ${d.a.status}"><span class="bdot"></span>${(CASE_META[d.a.case]||CASE_META.C).icon} ${(CASE_META[d.a.case]||CASE_META.C).label}</span>${d.a.hardThresholdBreached?' <span class="mono" style="font-size:10.5px;color:#e5484d;" title="เกิน Hard Flow Threshold ตรงๆ เตือนทันที">⚡hard</span>':''}${d.a.mk.significant?' <span class="mono" style="font-size:10.5px;color:#e8a33d;" title="Mann-Kendall: แนวโน้มเพิ่มขึ้นมีนัยสำคัญ">▲trend</span>':''}${d.a.cusumRecentBreach?' <span class="mono" style="font-size:10.5px;color:#e5484d;" title="CUSUM: ฐานการไหลขยับขึ้นถาวรในช่วงล่าสุด">⚑cusum</span>':''}${d.a.hasRemark?` <span class="mono" style="font-size:10.5px;color:var(--remark);" title="${(d.a.remark.text||d.a.remark.category||'').replace(/"/g,'&quot;')}">📌 remark</span>`:''}</td>
       <td><b>${d.code}</b> <!--· ${d.name}--></td>
       <td class="mono">${d.a.currentMnf.toFixed(1)} m³/hr</td>
       <td class="mono">${d.a.mean.toFixed(1)} ± ${(2*d.a.sd).toFixed(1)}</td>
       <td class="${deltaClass} mono">${deltaTxt}</td>
-      <td class="mono">${lossTxt}</td>
+      <td class="mono">${pctTxt}</td>
       <td><svg viewBox="0 0 120 26" width="90" height="20"><polyline points="${spark}" fill="none" stroke="${d.a.status==='alert'?'#e5484d':d.a.status==='watch'?'#e8a33d':'#38bfc7'}" stroke-width="2"/></svg></td>
     </tr>`;
   }).join('');
@@ -1372,14 +1381,12 @@ function openModal(code){
     <div class="mkpi"><div class="l">ช่วง Night Flow (MNF Window)</div><div class="v mono">${d.a.mnfStart && d.a.mnfEnd ? `${d.a.mnfStart}–${d.a.mnfEnd}` : '—'}</div></div>
     <div class="mkpi"><div class="l">ค่าเฉลี่ยฐาน</div><div class="v mono">${d.a.mean.toFixed(1)} m³/hr</div></div>
     <div class="mkpi"><div class="l">เกณฑ์แจ้งเตือน (+2SD)</div><div class="v mono">${d.a.threshold.toFixed(1)} m³/hr</div></div>
-    <div class="mkpi"><div class="l">สูญเสียประเมิน</div><div class="v mono">${d.a.case==='C'?'—':Math.round(d.a.estLossPerDay)+' m³/วัน'}</div></div>
     <div class="mkpi"><div class="l">Mann-Kendall (10 วัน)</div><div class="v mono" style="font-size:13px;">${d.a.mk.trend}</div></div>
     <div class="mkpi"><div class="l">CUSUM</div><div class="v mono" style="font-size:13px;">${d.a.cs.breached?`ตัดเกณฑ์ที่วันหลัง baseline #${d.a.cs.breachIndex+1}`:'ยังไม่ตัดเกณฑ์'}</div></div>
     <!--<div class="mkpi"><div class="l">Sustained Flow วันนี้</div><div class="v mono" style="font-size:13px;">${d.a.sustainedRunIntervals} จาก 96 intervals${d.a.sustainedFlowBreach?' ⚠️':''}</div></div>-->
     <div class="mkpi"><div class="l">แรงดันตกยืนยัน</div><div class="v mono" style="font-size:13px;">${d.a.pressureDropConfirmed?'ใช่ — ตกร่วมกับ flow สูง':'ไม่พบ'}</div></div>
     <div class="mkpi"><div class="l">ประมาณระยะจุดรั่วจาก RTU</div><div class="v mono" style="font-size:12.5px;">${d.a.proximityEstimate || '— (ยังไม่พบสัญญาณให้ประมาณ)'}</div></div>
     <!--<div class="mkpi"><div class="l">R_eff (System Resistance)</div><div class="v mono">${d.a.rEffMedian!=null? d.a.rEffMedian.toFixed(4): '—'}</div></div>-->
-    <div class="mkpi"><div class="l">FAVAD ปริมาณรั่วประมาณ (ท่อ ${d.a.pipeMaterial})</div><div class="v mono">${d.a.favadVolumeTotal? d.a.favadVolumeTotal.toFixed(1)+' m³/วัน':'—'}</div></div>
   `;
   const hardBanner = document.getElementById('mHardBanner');
   if(d.a.hardThresholdBreached){
