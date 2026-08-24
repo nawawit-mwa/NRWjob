@@ -185,11 +185,15 @@ def get_all_records(sheet_name: str, force_refresh: bool = False) -> list:
 
 def append_row(sheet_name: str, row: dict):
     """เพิ่มแถวใหม่ - row เป็น dict โดย key ต้องตรงกับ header (ที่ไม่ตรง/ไม่มีจะเว้นว่าง)
-    อัปเดต cache ในหน่วยความจำทันทีแทนการอ่านซ้ำจาก API"""
+    อัปเดต cache ในหน่วยความจำทันทีแทนการอ่านซ้ำจาก API
+    ใช้ value_input_option="RAW" เสมอ (ไม่ใช่ USER_ENTERED) — กัน Google Sheets ตีความค่าที่ "หน้าตา
+    คล้ายวันที่/ตัวเลข" แล้วจัดรูปแบบใหม่เองอัตโนมัติ (เช่น timestamp ISO '2026-08-22T01:16:44' เพี้ยน
+    เป็น '2026-08-22 1:16:44' ทำให้ parse ฝั่ง JS พัง) ตรงกับหลักการเดิมของโปรเจกต์ที่เก็บทุกอย่างเป็น
+    plain text เป๊ะๆ ตามที่ส่งไป ไม่ให้ Sheets ตีความเอง"""
     headers = get_headers(sheet_name)
     ws = get_worksheet(sheet_name)
     values = [row.get(h, "") for h in headers]
-    _with_retry(ws.append_row, values, value_input_option="USER_ENTERED")
+    _with_retry(ws.append_row, values, value_input_option="RAW")
 
     record = {h: row.get(h, "") for h in headers}
     if sheet_name not in _loaded_sheets:
@@ -225,23 +229,33 @@ def find_many(sheet_name: str, field: str, value) -> list:
 
 def update_row(sheet_name: str, id_field: str, id_value, updates: dict):
     """อัปเดตหลายคอลัมน์ของแถวที่ id_field == id_value ด้วย API call เดียว (batch_update)
-    แทนการยิงทีละ field เหมือนเดิม — ช่วยลดทั้ง read และ write quota"""
+    แทนการยิงทีละ field เหมือนเดิม — ช่วยลดทั้ง read และ write quota
+
+    ถ้ามี field ใน updates ที่ไม่ตรงกับ header จริงของ sheet เลย -> error ชัดเจนทันที (ไม่เขียนอะไรเลย
+    แม้แต่ field ที่ตรง) แทนที่จะเงียบๆ ข้าม field ที่ไม่ตรงไปแล้วทำให้เข้าใจผิดว่า 'อัปเดตสำเร็จ' ทั้งที่
+    บาง field ไม่ถูกเขียนจริง — เคยเป็นบั๊กจริง (คอลัมน์ Status ยังไม่ได้เพิ่มใน Sheet ทำให้กด 'ยกเลิก'
+    แล้วขึ้นข้อความสำเร็จ แต่ไม่มีอะไรถูกเขียนจริงเลย)"""
     row_idx = find_row_index(sheet_name, id_field, id_value)
     if row_idx is None:
         raise ValueError(f"ไม่พบ {id_field}={id_value} ใน {sheet_name}")
     headers = get_headers(sheet_name)
     ws = get_worksheet(sheet_name)
 
+    missing_fields = [field for field in updates if field not in headers]
+    if missing_fields:
+        raise ValueError(
+            f"อัปเดต {sheet_name} ไม่สำเร็จ: ไม่พบคอลัมน์ {missing_fields} ใน header จริงของ Sheet "
+            f"(header ที่มีอยู่ตอนนี้: {headers}) — ต้องเพิ่มคอลัมน์นี้ใน Sheet ให้ตรงเป๊ะก่อน"
+        )
+
     batch_data = []
     for field, value in updates.items():
-        if field not in headers:
-            continue
         col_index = headers.index(field) + 1
         a1 = rowcol_to_a1(row_idx, col_index)
         batch_data.append({"range": a1, "values": [[value]]})
 
     if batch_data:
-        _with_retry(ws.batch_update, batch_data, value_input_option="USER_ENTERED")
+        _with_retry(ws.batch_update, batch_data, value_input_option="RAW")
 
     records = _records_cache.get(sheet_name)
     if records:

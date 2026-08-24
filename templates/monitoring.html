@@ -312,7 +312,7 @@
 <div class="overlay" id="overlay">
   <div class="modal">
     <button class="close" id="closeBtn">✕</button>
-    <div style="display:flex; align-items:center; gap:8px; margin-bottom:2px;">
+    <div style="display:flex; align-items:center; justify-content:center; gap:8px; margin-bottom:2px;">
       <button type="button" id="mPrevBtn" class="theme-toggle" onclick="navigateModal(-1)"
               style="cursor:pointer; padding:4px 10px; font-size:12px;">◀ ก่อนหน้า</button>
       <button type="button" id="mNextBtn" class="theme-toggle" onclick="navigateModal(1)"
@@ -335,24 +335,21 @@
         <div id="mRemarkText" style="font-weight:400;white-space:pre-wrap;"></div>
       </div>
 
-      <div id="mAlertLinkedPanel" style="display:none;margin-bottom:12px;padding:10px 14px;border-radius:10px;background:rgba(7,156,0,.14);border:1px solid var(--green);color:var(--green);font-size:12.5px;font-weight:600;">
-        ✅ เปิดเป็นเหตุการณ์แล้ว: <span id="mAlertLinkedIncident" class="mono"></span>
-      </div>
-
-      <div id="mAlertSavedPanel" style="display:none;margin-bottom:12px;padding:10px 14px;border-radius:10px;background:rgba(0,156,255,.10);border:1px solid var(--mwa-sky, #009cff);color:var(--mwa-sky, #009cff);font-size:12.5px;font-weight:600;">
-        📌 บันทึกข้อมูลแล้ว (<span id="mAlertSavedId" class="mono"></span>) เมื่อ <span id="mAlertSavedDate" class="mono"></span>
-      </div>
-
-      <div id="mAlertSavePanel" style="display:none;margin-bottom:12px;padding:12px 14px;border-radius:10px;background:var(--panel-2);border:1px solid var(--border);">
-        <div style="font-weight:600;font-size:12.5px;margin-bottom:8px;">📝 บันทึกการแจ้งเตือนนี้ไว้ดูภายหลัง</div>
-        <textarea id="mAlertNote" rows="2" placeholder="หมายเหตุเพิ่มเติม (ถ้ามี)"
-                  style="width:100%;font-family:inherit;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--panel);color:var(--text);font-size:12.5px;margin-bottom:8px;"></textarea>
-        <button type="button" id="mAlertSaveBtn" class="theme-toggle" onclick="saveCurrentAlert()"
-                style="cursor:pointer;">💾 บันทึกการแจ้งเตือนนี้</button>
-        <span id="mAlertSaveStatus" style="font-size:11.5px;margin-left:8px;"></span>
-      </div>
+      <div id="mAlertStatusBadge" style="display:none;margin-bottom:12px;padding:10px 14px;border-radius:10px;font-size:12.5px;font-weight:600;"></div>
 
       <div class="mkpis" id="mKpis"></div>
+
+      <div class="chart-box">
+        <div class="ct" id="hourlyChartTitle">รูปแบบการไหลรายวัน (ราย 15 นาที) — ล่าสุด เทียบช่วงปกติ</div>
+        <canvas id="chartHourly"></canvas>
+        <div class="note" id="hourlyNote">แถบเทา = ช่วง flow ปกติ (min–max ย้อนหลัง) · เส้นฟ้า = วันล่าสุด · ความละเอียด 15 นาที/จุด (96 จุด/วัน) ตามข้อมูล RTU</div>
+      </div>
+
+      <div class="chart-box">
+        <div class="ct" id="pressureChartTitle">แรงดันน้ำรายวัน (ราย 15 นาที) — ล่าสุด เทียบช่วงปกติ</div>
+        <canvas id="chartPressure"></canvas>
+        <div class="note" id="pressureNote">ใช้ยืนยันร่วมกับ flow สูง: ถ้าแรงดันตกพร้อมกับ flow เพิ่มขึ้นอย่างต่อเนื่อง = สัญญาณท่อแตกที่น่าเชื่อถือกว่าดู flow อย่างเดียว</div>
+      </div>
 
       <div class="chart-box">
         <div class="ct">MNF รายวัน (30 วันล่าสุด) เทียบเกณฑ์ฐาน</div>
@@ -365,21 +362,26 @@
         <canvas id="chartCusum"></canvas>
         <div class="note" id="cusumNote"></div>
       </div>-->
-
-      <div class="chart-box">
-        <div class="ct">รูปแบบการไหลรายวัน (ราย 15 นาที) — ล่าสุด เทียบช่วงปกติ</div>
-        <canvas id="chartHourly"></canvas>
-        <div class="note" id="hourlyNote">แถบเทา = ช่วง flow ปกติ (min–max ย้อนหลัง) · เส้นฟ้า = วันล่าสุด · ความละเอียด 15 นาที/จุด (96 จุด/วัน) ตามข้อมูล RTU</div>
-      </div>
-
-      <div class="chart-box">
-        <div class="ct">แรงดันน้ำรายวัน (ราย 15 นาที) — ล่าสุด เทียบช่วงปกติ</div>
-        <canvas id="chartPressure"></canvas>
-        <div class="note" id="pressureNote">ใช้ยืนยันร่วมกับ flow สูง: ถ้าแรงดันตกพร้อมกับ flow เพิ่มขึ้นอย่างต่อเนื่อง = สัญญาณท่อแตกที่น่าเชื่อถือกว่าดู flow อย่างเดียว</div>
-      </div>
     </div>
 
     <div id="tabJob" class="mtab-panel">
+      <div id="mAlertLinkedPanel" style="display:none;margin-bottom:12px;padding:10px 14px;border-radius:10px;background:rgba(7,156,0,.14);border:1px solid var(--green);color:var(--green);font-size:12.5px;font-weight:600;">
+        ✅ เปิดเป็นเหตุการณ์แล้ว: <span id="mAlertLinkedIncident" class="mono"></span>
+      </div>
+
+      <div id="mAlertSavedPanel" style="display:none;margin-bottom:12px;padding:10px 14px;border-radius:10px;background:rgba(0,156,255,.10);border:1px solid var(--mwa-sky, #009cff);color:var(--mwa-sky, #009cff);font-size:12.5px;font-weight:600;">
+        📌 บันทึกข้อมูลแล้ว (<span id="mAlertSavedId" class="mono"></span>) เมื่อ <span id="mAlertSavedDate" class="mono"></span>
+      </div>
+
+      <div id="mAlertSavePanel" style="display:none;margin-bottom:12px;padding:12px 14px;border-radius:10px;background:var(--panel-2);border:1px solid var(--border);">
+        <div style="font-weight:600;font-size:12.5px;margin-bottom:8px;">📝 บันทึกการแจ้งเตือนนี้ไว้ดูภายหลัง / แปลงเป็นเหตุการณ์จ่ายงานได้</div>
+        <textarea id="mAlertNote" rows="2" placeholder="หมายเหตุเพิ่มเติม (ถ้ามี)"
+                  style="width:100%;font-family:inherit;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--panel);color:var(--text);font-size:12.5px;margin-bottom:8px;"></textarea>
+        <button type="button" id="mAlertSaveBtn" class="theme-toggle" onclick="saveCurrentAlert()"
+                style="cursor:pointer;">💾 บันทึกการแจ้งเตือนนี้</button>
+        <span id="mAlertSaveStatus" style="font-size:11.5px;margin-left:8px;"></span>
+      </div>
+
       <div class="job-log-note" id="jobModeNote">⚠️ ยังไม่ได้ตั้งค่า Apps Script URL (<code class="mono">JOB_API_URL</code>) — ตอนนี้ทำงานใน <b>โหมดจำลอง</b>: บันทึกไว้ในหน่วยความจำเบราว์เซอร์ชั่วคราวเท่านั้น (หายเมื่อรีเฟรชหน้า ไม่ถูกแชร์กับผู้ใช้อื่น) ดูวิธีตั้งค่าใน <code class="mono">Code.gs</code> ที่แนบมา</div>
 
       <div class="job-form">
@@ -439,7 +441,9 @@ if (typeof Chart !== 'undefined') {
 // login แล้วเท่านั้นถึงบันทึกการแจ้งเตือน MNF ได้ (หน้านี้ยังเปิดให้คนไม่ login ดูข้อมูลได้ตามปกติ)
 const IS_LOGGED_IN = {{ 'true' if user else 'false' }};
 
-// tab "การดำเนินการ" (บันทึกสถานะงาน) จำกัดเฉพาะวิศวกรขึ้นไปเท่านั้น (เดิมเปิดให้ทุกคนแม้ไม่ login)
+// tab "การดำเนินการ" จำกัดเฉพาะวิศวกรขึ้นไปเท่านั้น — ครอบคลุมทั้งบันทึกสถานะงาน (เดิมเปิดให้ทุกคนแม้
+// ไม่ login) และบันทึกการแจ้งเตือน MNF (ย้ายมาจาก tab กราฟ/วิเคราะห์ เดิมเปิดให้ทุกคนที่ login แล้ว —
+// ตอนนี้แคบลงเหลือวิศวกรขึ้นไปเหมือนกันทั้ง tab ตามที่ยืนยันไว้)
 const CAN_MANAGE_JOB = {{ 'true' if can_manage_job else 'false' }};
 if(!CAN_MANAGE_JOB){
   const jobTabBtn = document.getElementById('mJobTabBtn');
@@ -701,13 +705,15 @@ function hourlyFromFlowCsv(rows){
     return arr;
   };
 
-  // ส่วนส่งออกข้อมูลตามประวัติวัน คงเดิม
+  // ส่งออกข้อมูลตามประวัติวัน + รายการวันที่ (days) เรียงคู่กับ flow/pressure — ใช้แสดงวันที่ของ
+  // เส้นล่าสุด (เส้นสีฟ้า) บนกราฟได้ ก่อนหน้านี้คำนวณ dayKeys ไว้แล้วแต่ไม่เคยส่งออกมาเลย
   const out = {};
   Object.entries(byDma).forEach(([code, d])=>{
     const dayKeys = Object.keys(d.q).sort().slice(-HISTORY_DAYS);
     out[code] = {
       flow: dayKeys.map(k=>fillGaps(d.q[k])),
       pressure: dayKeys.map(k=>fillGaps(d.p[k])),
+      days: dayKeys,
     };
   });
   return out;
@@ -946,7 +952,7 @@ async function refreshFromCsv(isFirstLoad){
       const breachIdx = sr.cPlusSeries.findIndex(v=>v>s.cusumH);
       const remark = remarksByDma[code] || null;   // UI display เท่านั้น — ไม่กระทบสถิติ/สถานะที่คำนวณจาก Python เลย
       return {
-        code, name: s.name, hourly: hourlyByDma[code] || {flow:[], pressure:[]},
+        code, name: s.name, hourly: hourlyByDma[code] || {flow:[], pressure:[], days:[]},
         a: {
           mnfSeries: sr.mnfSeries, totalSeries: sr.totalSeries,
           mean: s.mean, sd: s.sd, threshold: s.threshold, watchThreshold: s.watchThreshold,
@@ -1423,11 +1429,21 @@ function openModal(code){
   const hasHourly = !!(d.hourly.flow && d.hourly.flow.length);
   const hourlyCanvas = document.getElementById('chartHourly');
   const hourlyNoteEl = document.getElementById('hourlyNote');
+  const hourlyTitleEl = document.getElementById('hourlyChartTitle');
   if(hourlyChart){ hourlyChart.destroy(); hourlyChart = null; }
+
+  // วันที่ของเส้นล่าสุด (เส้นสีฟ้า) — ทั้ง flow และ pressure มาจาก dayKeys ชุดเดียวกัน (ไฟล์ flow_log.csv
+  // เดียวกัน) จึงใช้ d.hourly.days ตัวเดียวกันได้กับทั้งสองกราฟ
+  const lastPlottedDate = (d.hourly.days && d.hourly.days.length)
+    ? formatDateDDMMYYYY(d.hourly.days[d.hourly.days.length - 1])
+    : null;
 
   if(hasHourly){
     hourlyCanvas.style.display = '';
     hourlyNoteEl.textContent = HOURLY_NOTE_DEFAULT;
+    hourlyTitleEl.textContent = lastPlottedDate
+      ? `รูปแบบการไหลรายวัน (ราย 15 นาที) — ล่าสุด (${lastPlottedDate}) เทียบช่วงปกติ`
+      : 'รูปแบบการไหลรายวัน (ราย 15 นาที) — ล่าสุด เทียบช่วงปกติ';
     const lastDayFlow = d.hourly.flow[d.hourly.flow.length-1] || [];
     const histFlowDays = d.hourly.flow.slice(0,14);
     const flowMin = Array.from({length:INTERVALS_PER_DAY},(_,i)=>Math.min(...histFlowDays.map(day=>day[i]).filter(v=>v!=null)));
@@ -1449,7 +1465,13 @@ function openModal(code){
   } else {
     hourlyCanvas.style.display = 'none';
     hourlyNoteEl.textContent = HOURLY_NOTE_EMPTY;
+    hourlyTitleEl.textContent = 'รูปแบบการไหลรายวัน (ราย 15 นาที) — ล่าสุด เทียบช่วงปกติ';
   }
+
+  const pressureTitleEl = document.getElementById('pressureChartTitle');
+  pressureTitleEl.textContent = lastPlottedDate
+    ? `แรงดันน้ำรายวัน (ราย 15 นาที) — ล่าสุด (${lastPlottedDate}) เทียบช่วงปกติ`
+    : 'แรงดันน้ำรายวัน (ราย 15 นาที) — ล่าสุด เทียบช่วงปกติ';
 
   const intervalLabelsForPressure = Array.from({length:INTERVALS_PER_DAY},(_,i)=>{
     const h = Math.floor(i/4).toString().padStart(2,'0'), m = ((i%4)*15).toString().padStart(2,'0');
@@ -1607,10 +1629,11 @@ function renderJobTable(logs){
 }
 
 /**
- * บันทึกการแจ้งเตือน MNF ที่กำลังดูอยู่ใน modal ไว้ดูภายหลัง — capture รูปกราฟ MNF หลัก (canvas#chartMnf)
+ * บันทึกการแจ้งเตือน MNF ที่กำลังดูอยู่ใน modal ไว้ดูภายหลัง — capture กราฟ flow+pressure รวมเป็นภาพเดียว
  * เป็น JPEG คุณภาพลดลง (ไม่เอา PNG เต็มคุณภาพ กันไฟล์ใหญ่เกินจำเป็น) แล้วส่งไป Flask backend
- * ต้อง login แล้วเท่านั้น (ปุ่มนี้ถูกซ่อนไว้แล้วถ้าไม่ login ผ่าน IS_LOGGED_IN แต่ backend ก็เช็คซ้ำอีกชั้น
- * ด้วย login_required อยู่ดี เผื่อกรณี session หมดอายุระหว่างเปิดหน้าค้างไว้)
+ * จำกัดเฉพาะวิศวกรขึ้นไปเท่านั้น (ปุ่มนี้อยู่ใน tab "การดำเนินการ" ที่ถูกซ่อนไว้แล้วถ้าไม่ผ่านเงื่อนไข
+ * CAN_MANAGE_JOB แต่ backend ก็เช็คซ้ำอีกชั้นด้วย login_required อยู่ดี เผื่อกรณี session หมดอายุ
+ * ระหว่างเปิดหน้าค้างไว้)
  */
 /**
  * ย่อรูปกราฟจาก canvas จริง (ซึ่งมักมีความละเอียดสูงกว่าที่เห็นบนจอมาก โดยเฉพาะจอ retina ที่
@@ -1618,14 +1641,17 @@ function renderJobTable(logs){
  * เพื่อให้ขนาด base64 สุดท้ายเล็กพอจะฝังในเซลล์ Google Sheets ได้ (ลิมิต 50,000 ตัวอักษร/เซลล์)
  * วาดพื้นหลังสีขาวไว้ก่อนเสมอ เพราะ JPEG ไม่รองรับพื้นหลังโปร่งใส (ถ้าไม่วาดจะกลายเป็นสีดำ)
  */
-/** แปลงวันที่ ISO (เช่น "2026-08-20T18:41:08") เป็น dd/mm/yyyy (ค.ศ.) สำหรับแสดงผลใน popup */
+/** แปลงวันที่ ISO (เช่น "2026-08-20T18:41:08") เป็น dd/mm/yyyy (ค.ศ.) สำหรับแสดงผลใน popup
+ * ทนทานต่อกรณี Google Sheets ตีความ timestamp แล้วจัดรูปแบบใหม่เอง (เช่น "2026-08-20 1:16:44"
+ * ใช้ space คั่นแทน T) — เผื่อข้อมูลเก่าที่เพี้ยนไปแล้วก่อนแก้ไขต้นตอ (ดู sheets_client.py) */
 function formatDateDDMMYYYY(isoString){
   if(!isoString) return '—';
-  const datePart = isoString.split('T')[0];
+  const datePart = String(isoString).trim().split(/[T ]/)[0];   // ตัดด้วย T หรือ space ตัวแรกที่เจอ
   const parts = datePart.split('-');
   if(parts.length !== 3) return isoString;
   const [year, month, day] = parts;
-  return `${day}/${month}/${year}`;
+  if(!/^\d{4}$/.test(year) || !/^\d{1,2}$/.test(month) || !/^\d{1,2}$/.test(day)) return isoString;
+  return `${day.padStart(2,'0')}/${month.padStart(2,'0')}/${year}`;
 }
 
 /**
@@ -1636,17 +1662,38 @@ async function refreshAlertStatusPanel(rtuId){
   const savePanel = document.getElementById('mAlertSavePanel');
   const savedPanel = document.getElementById('mAlertSavedPanel');
   const linkedPanel = document.getElementById('mAlertLinkedPanel');
+  const statusBadge = document.getElementById('mAlertStatusBadge');
 
   savePanel.style.display = 'none';
   savedPanel.style.display = 'none';
   linkedPanel.style.display = 'none';
+  statusBadge.style.display = 'none';
 
-  if(!IS_LOGGED_IN) return; // ไม่ login เลย ไม่ต้องโชว์อะไรเกี่ยวกับการบันทึกทั้งหมด
-
+  // /alerts/status เป็น public endpoint ตั้งแต่ต้น (ทุกคนดูได้ ไม่ใช่แค่วิศวกร) — เช็คสถานะเสมอไม่ว่า
+  // จะเป็นใคร เพื่อโชว์ badge อ่านอย่างเดียวใน tab วิเคราะห์ให้ทุกคนเห็น ส่วนฟอร์มบันทึกจริง (ใน tab
+  // การดำเนินการ) ค่อยจำกัดแค่วิศวกรขึ้นไปทีหลังแยกต่างหาก
   try{
     const res = await fetch(`/alerts/status/${encodeURIComponent(rtuId)}`);
     const json = await res.json();
     if(currentJobRtuId !== rtuId) return; // ผู้ใช้เปิด modal อื่นไปแล้วระหว่างรอ fetch
+
+    if(json && json.saved){
+      // badge อ่านอย่างเดียวใน tab วิเคราะห์ — เห็นได้ทุกคนไม่ว่าจะมีสิทธิ์บันทึกหรือไม่
+      statusBadge.style.display = 'block';
+      if(json.linked){
+        statusBadge.style.background = 'rgba(7,156,0,.14)';
+        statusBadge.style.border = '1px solid var(--green)';
+        statusBadge.style.color = 'var(--green)';
+        statusBadge.textContent = `✅ เปิดเป็นเหตุการณ์แล้ว: ${json.incident_id} (บันทึก ${json.alert_id} เมื่อ ${formatDateDDMMYYYY(json.saved_at)})`;
+      } else {
+        statusBadge.style.background = 'rgba(0,156,255,.10)';
+        statusBadge.style.border = '1px solid var(--mwa-sky, #009cff)';
+        statusBadge.style.color = 'var(--mwa-sky, #009cff)';
+        statusBadge.textContent = `📌 บันทึกการแจ้งเตือนไว้แล้ว: ${json.alert_id} เมื่อ ${formatDateDDMMYYYY(json.saved_at)}`;
+      }
+    }
+
+    if(!CAN_MANAGE_JOB) return; // ฟอร์มบันทึก/แผงในนี้ต่อไปอยู่ใน tab การดำเนินการ จำกัดวิศวกรขึ้นไปเท่านั้น
 
     if(json && json.saved){
       // มีการบันทึกไว้แล้ว (ยัง active) — ห้ามบันทึกซ้ำ โชว์แผง "บันทึกแล้ว" แทนฟอร์ม
@@ -1663,6 +1710,8 @@ async function refreshAlertStatusPanel(rtuId){
     }
   }catch(e){
     // เช็คสถานะไม่สำเร็จ (เช่น เน็ตหลุด) — ปล่อยให้เห็นฟอร์มบันทึกไว้ก่อน ดีกว่าไม่เห็นอะไรเลย
+    // (เฉพาะคนที่มีสิทธิ์เห็นฟอร์มอยู่แล้วเท่านั้น)
+    if(CAN_MANAGE_JOB) savePanel.style.display = 'block';
     savePanel.style.display = 'block';
   }
 }
@@ -1749,6 +1798,9 @@ async function saveCurrentAlert(){
     mnf_value: d.a.currentMnf != null ? d.a.currentMnf.toFixed(1) : '',
     cusum: (d.a.cs && d.a.cs.breached) ? `ตัดเกณฑ์ที่วันหลัง baseline #${d.a.cs.breachIndex + 1}` : 'ยังไม่ตัดเกณฑ์',
     trend: (d.a.mk && d.a.mk.trend) ? d.a.mk.trend : '',
+    // วันที่ของเส้นล่าสุด (เส้นสีฟ้า) บนกราฟ flow/pressure — เก็บเป็น ISO ดิบ (เช่น "2026-08-16")
+    // เหมือน timestamp อื่นๆ ในระบบ ไม่ format ที่นี่ ปล่อยให้ตอนแสดงผลค่อยแปลงเป็น dd/mm/yyyy
+    chart_date: (d.hourly.days && d.hourly.days.length) ? d.hourly.days[d.hourly.days.length - 1] : '',
     note: noteEl.value.trim(),
     image_data_url: imageDataUrl,
   };

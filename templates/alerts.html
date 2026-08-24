@@ -89,6 +89,9 @@
             {% if alert.ChartImageURL %}
             <img src="{{ alert.ChartImageURL }}" alt="กราฟ" class="alert-thumb"
                  style="cursor:pointer;" onclick="openImageLightbox(this.src)">
+            {% if alert.ChartDate %}
+            <div style="font-size:0.72rem; color:var(--ink-soft); margin-top:2px;">ข้อมูล ณ {{ alert.ChartDate|date_display }}</div>
+            {% endif %}
             {% else %}
             <span style="color:var(--ink-soft); font-size:0.78rem;">ไม่มีรูป</span>
             {% endif %}
