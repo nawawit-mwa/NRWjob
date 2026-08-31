@@ -78,6 +78,17 @@ def filter_active_incidents(incidents: list) -> list:
     return [i for i in incidents if i.get("Status") != INCIDENT_STATUS_CLOSED]
 
 
+def filter_jobs_with_open_incidents(jobs: list) -> list:
+    """ตัด Job ที่เหตุการณ์แม่ (SiblingJobGroup -> IncidentID) ปิดไปแล้วออกจากหน้า 'ติดตามงาน'
+    ตัดออกทั้งหมดไม่ว่า Job เองจะเสร็จ (ปิดงานแล้ว) หรือยังไม่เสร็จก็ตาม (ถือว่าเหตุการณ์แม่ปิดแล้ว = จบ)
+    ใช้เฉพาะหน้า Dashboard เท่านั้น — ห้ามใช้กับ /jobs/manage หรือ /my-jobs เพราะคนที่รับผิดชอบงาน
+    ยังต้องเห็น/ปิดงานของตัวเองได้อยู่ ไม่ว่าเหตุการณ์แม่จะถูกปิดไปก่อนแล้วหรือไม่ก็ตาม"""
+    closed_incident_ids = {
+        i["IncidentID"] for i in sc.get_all_records("Incidents") if i.get("Status") == INCIDENT_STATUS_CLOSED
+    }
+    return [j for j in jobs if j.get("SiblingJobGroup") not in closed_incident_ids]
+
+
 def get_my_action_jobs(user: dict) -> dict:
     """รวมงานที่ user คนนี้ต้อง 'ลงมือทำอะไรบางอย่าง' ต่อ แบ่งเป็น 3 กลุ่ม:
     - assigned_to_me: งานที่มอบหมายมาถึงตัวเอง (รอรับ/ปฏิเสธ/กำลังดำเนินการ)

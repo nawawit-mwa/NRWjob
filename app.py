@@ -176,6 +176,7 @@ def dashboard():
     jobs = dashboard_service.filter_by_branch_group_and_zone(jobs, branch_group_filter, branch_filter, zone_filter)
     incidents = dashboard_service.filter_by_branch_group_and_zone(incidents, branch_group_filter, branch_filter, zone_filter)
     incidents = dashboard_service.filter_active_incidents(incidents)  # ซ่อนเหตุการณ์ที่ปิดแล้วออกจากตาราง
+    jobs = dashboard_service.filter_jobs_with_open_incidents(jobs)  # ซ่อน Job ที่เหตุการณ์แม่ปิดแล้วออกด้วย
 
     # เรียงงานที่ยังไม่จบก่อน (สถานะไม่ใช่ ปิดงาน/ยกเลิกงาน) เพื่อให้เห็นงานที่ต้องติดตามก่อน
     active_jobs = [j for j in jobs if j.get("Status") not in ("ปิดงาน", "ยกเลิกงาน")]
