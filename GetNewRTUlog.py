@@ -47,15 +47,25 @@ def git_push_auto(repo_dir, commit_message=None):
     except Exception as e:
         print(f"❌ เกิดข้อผิดพลาดที่ไม่คาดคิด: {e}")
 
-def get_latest_csv(folder_path):
-    """ฟังก์ชันหาไฟล์ .csv ที่ถูกสร้างหรือแก้ไขล่าสุดในโฟลเดอร์"""
+def get_latest_csv(folder_path, exclude_files=None):
+    """ฟังก์ชันหาไฟล์ .csv ที่ถูกสร้างหรือแก้ไขล่าสุดในโฟลเดอร์
+    exclude_files: path ของไฟล์ที่ไม่ต้องการนับ (เช่นไฟล์ปลายทางชื่อคงที่ที่ถูก copy ทับทุกรอบ)
+    ป้องกันไม่ให้ไฟล์ปลายทางนั้นถูกเข้าใจผิดว่าเป็น "ไฟล์ดิบล่าสุด" ในรอบที่ไม่มีการดึงข้อมูลใหม่
+    """
     # ค้นหาไฟล์ .csv ทั้งหมดในโฟลเดอร์
     search_pattern = os.path.join(folder_path, "*.csv")
     csv_files = glob.glob(search_pattern)
-    
+
+    if exclude_files:
+        exclude_abs = {os.path.normcase(os.path.abspath(f)) for f in exclude_files}
+        csv_files = [
+            f for f in csv_files
+            if os.path.normcase(os.path.abspath(f)) not in exclude_abs
+        ]
+
     if not csv_files:
         return None
-    
+
     # เรียงลำดับไฟล์ตามเวลาแก้ไขล่าสุด (ไฟล์ล่าสุดจะอยู่ท้ายสุด)
     latest_file = max(csv_files, key=os.path.getmtime)
     return latest_file
@@ -97,14 +107,14 @@ def run_batch_tasks():
         print("✅ รัน script1.py เสร็จสิ้น\n")
 
         # ==========================================
-        # ขั้นตอนที่ 2: ค้นหาไฟล์ CSV ล่าสุดที่เพิ่งสร้างขึ้นมา
+        # ขั้นตอนที่ 2: ค้นหาไฟล์ CSV ล่าสุดที่เพิ่งสร้างขึ้นมา (ยกเว้นไฟล์ปลายทางเอง)
         # ==========================================
         print("--- 2. กำลังค้นหาไฟล์ CSV ล่าสุด ---")
-        latest_csv = get_latest_csv(dir_script2)
+        latest_csv = get_latest_csv(dir_script2, exclude_files=[destination_file1])
 
         if latest_csv:
             print(f"🔎 พบไฟล์ CSV ล่าสุด: {os.path.basename(latest_csv)}")
-            
+
             # ตรวจสอบและสร้างโฟลเดอร์ปลายทางถ้ายังไม่มี
             dest_dir = os.path.dirname(destination_file1)
             if not os.path.exists(dest_dir):
@@ -113,49 +123,35 @@ def run_batch_tasks():
             # คัดลอกและเปลี่ยนชื่อไฟล์ไปยังปลายทาง
             shutil.copy(latest_csv, destination_file1)
             print(f"✅ คัดลอก '{latest_csv}' ไปยัง '{destination_file1}' เรียบร้อย\n")
+        elif os.path.exists(destination_file1):
+            # ไม่มีไฟล์ CSV ใหม่ (เช่น script1.py ข้ามการดึงจาก ORACLE เพราะ cache ยังไม่เก่า)
+            # แต่ไฟล์ปลายทางจากรอบก่อนยังอยู่ ใช้ต่อได้เลยโดยไม่ต้อง copy ทับ
+            print(
+                f"ℹ️ ไม่พบไฟล์ CSV ใหม่ในโฟลเดอร์ '{dir_script2}' (อาจข้ามการดึงจาก ORACLE รอบนี้) "
+                f"— ใช้ไฟล์ปัจจุบันต่อ: '{destination_file1}'\n"
+            )
         else:
-            print(f"❌ ไม่พบไฟล์ .csv ในโฟลเดอร์ '{dir_script1}' การทำงานหยุดลง")
+            print(f"❌ ไม่พบไฟล์ .csv ในโฟลเดอร์ '{dir_script2}' และไม่มีไฟล์ปลายทางเดิม การทำงานหยุดลง")
             return
 
-        
         # ==========================================
-        # ขั้นตอนที่ 3: คัดลอกและเปลี่ยนชื่อทับ
+        # ขั้นตอนที่ 3: รัน script2.py ใน folder_b
         # ==========================================
-        print("--- 3. กำลังคัดลอกและเปลี่ยนชื่อไฟล์ข้ามโฟลเดอร์ ---")
-        if os.path.exists(latest_csv):
-            
-            # ดึงเฉพาะชื่อโฟลเดอร์ปลายทางออกมา (E:\backup_folder)
-            dest_dir = os.path.dirname(destination_file1)
-            
-            # ถ้าโฟลเดอร์ปลายทางยังไม่มีให้สร้างใหม่ก่อน (เพื่อป้องกัน Error)
-            if not os.path.exists(dest_dir):
-                os.makedirs(dest_dir)
-                print(f"📁 สร้างโฟลเดอร์ปลายทาง: {dest_dir}")
-
-            shutil.copy(latest_csv, destination_file1)
-            print(f"✅ คัดลอกไฟล์ไปยัง '{destination_file1}' เรียบร้อย\n")
-        else:
-            print(f"❌ ไม่พบไฟล์ '{latest_csv}' การทำงานหยุดลง")
-            return 
-
-        # ==========================================
-        # ขั้นตอนที่ 4: รัน script2.py ใน folder_b
-        # ==========================================
-        print(f"--- 4. กำลังรัน script2.py ใน {dir_script2} ---")
+        print(f"--- 3. กำลังรัน evaluate_export_rtu_data.py ใน {dir_script2} ---")
         subprocess.run(["python", script2_path], cwd=dir_script2, check=True)
-        print("✅ รัน script2.py เสร็จสิ้น\n")
+        print("✅ รัน evaluate_export_rtu_data.py เสร็จสิ้น\n")
 
         # ==========================================
-        # ขั้นตอนที่ 5: รัน script3.py ใน folder_b
+        # ขั้นตอนที่ 4: รัน script3.py ใน folder_b
         # ==========================================
-        print(f"--- 4. กำลังรัน script3.py ใน {dir_script2} ---")
+        print(f"--- 4. กำลังรัน prepare_dma_csv.py ใน {dir_script2} ---")
         subprocess.run(["python", script3_path], cwd=dir_script3, check=True)
-        print("✅ รัน script3.py เสร็จสิ้น\n")
+        print("✅ รัน prepare_dma_csv.py เสร็จสิ้น\n")
 
-         # ==========================================
-        # ขั้นตอนที่ 6: คัดลอกและเปลี่ยนชื่อไฟล์ข้ามโฟลเดอร์
         # ==========================================
-        print("--- 2. กำลังคัดลอกและเปลี่ยนชื่อไฟล์ข้ามโฟลเดอร์ ---")
+        # ขั้นตอนที่ 5: คัดลอกและเปลี่ยนชื่อไฟล์ข้ามโฟลเดอร์
+        # ==========================================
+        print("--- 5. กำลังคัดลอกและเปลี่ยนชื่อไฟล์ข้ามโฟลเดอร์ ---")
         if os.path.exists(source_file2_1):
             
             # ดึงเฉพาะชื่อโฟลเดอร์ปลายทางออกมา (E:\backup_folder)
