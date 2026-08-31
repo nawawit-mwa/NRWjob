@@ -272,7 +272,7 @@
     </div>
   </header>
 
-  <div class="banner" id="banner">⏳ <div>กำลังพยายามโหลด <code class="mono" id="csvPathLabel">dma_status_summary.csv</code> ...</div></div>
+  <div class="banner" id="banner">⏳ <div>กำลังพยายามโหลด <code class="mono" id="csvPathLabel">flow_log.csv</code> ...</div></div>
 
   <div class="search-box" id="searchBox">
     <span class="icon">🔎</span>
@@ -452,16 +452,10 @@ if(!CAN_MANAGE_JOB){
 
 /* ---------------------------------------------------------------------
    CONFIG
-   4 ไฟล์นี้มาจาก prepare_dma_csv.py ทั้งหมด — HTML แค่โหลดมาวาดกราฟ ไม่คำนวณเอง
+   3 ไฟล์นี้มาจาก prepare_dma_csv.py ทั้งหมด — HTML แค่โหลดมาวาดกราฟ ไม่คำนวณเอง
    (ยกเว้น "โหมดจำลอง" ที่ใช้เมื่อหาไฟล์จริงไม่เจอ ซึ่งยังคำนวณฝั่ง JS อยู่เพื่อให้เดโมได้ในตัว)
 --------------------------------------------------------------------- */
-const ENVELOPE_CSV_URL = '{{ url_for("static", filename="data/dma_hourly_envelope.csv") }}';
-                                                    // แถบเทา min-max + เส้นวันล่าสุด ต่อ interval (96 แถว/DMA)
-                                                    // สำหรับกราฟรายวัน 15 นาที (flow/pressure) — คำนวณจาก Python
-                                                    // แล้ว (rolling_time_of_day_baseline ใน prepare_dma_csv.py)
-                                                    // แทนที่การโหลด flow_log.csv ทั้งไฟล์มาหา min/max เองฝั่ง JS
-                                                    // แบบเดิม — ครอบคลุมทุก DMA ที่ active (ไม่กรองเฉพาะ
-                                                    // watch/alert เหมือน flow_log.csv เพราะไฟล์นี้เล็กพอ)
+const FLOW_CSV_URL    = '{{ url_for("static", filename="data/flow_log.csv") }}';           // ข้อมูลดิบรายชั่วโมง (long format)
 const SERIES_CSV_URL  = '{{ url_for("static", filename="data/dma_daily_series.csv") }}';   // MNF / daily total / CUSUM รายวัน
 const SUMMARY_CSV_URL = '{{ url_for("static", filename="data/dma_status_summary.csv") }}'; // สถานะล่าสุดต่อ DMA (คำนวณไว้แล้วจาก Python)
 const IGNORE_CSV_URL  = '{{ url_for("static", filename="data/rtu_ignore.csv") }}';         // รายชื่อ RTU ที่ไม่ต้องการแสดงใน dashboard (optional,
@@ -475,8 +469,7 @@ const REMARK_CSV_URL = `https://docs.google.com/spreadsheets/d/${REMARK_SHEET_ID
 // loadRemarksMapFromJobLog() ด้านล่าง) เก็บค่าคงที่ชุดนี้ไว้เฉยๆ เผื่ออยากย้อนกลับไปใช้ชีทเดิมในอนาคต
 const REFRESH_MINUTES = 5;                         // ความถี่ในการ fetch ไฟล์ใหม่ (มีผลเฉพาะตอน AUTO_REFRESH_ENABLED = true)
 const AUTO_REFRESH_ENABLED = true;                 // false = โหลดข้อมูลครั้งเดียวตอนเปิดหน้า ไม่ตั้ง setInterval รีเฟรชอัตโนมัติ
-// HISTORY_DAYS ที่เคยอยู่ตรงนี้ถูกลบแล้ว — ใช้แค่จุดเดียวใน hourlyFromFlowCsv() (ตัด dayKeys ของ flow_log.csv
-// เหลือ N วันย้อนหลัง) ซึ่งถูกแทนที่ด้วย envelopeFromCsv()/dma_hourly_envelope.csv ไปแล้ว ไม่มีจุดใช้งานเหลือ
+const HISTORY_DAYS = 30;                           // จำนวนวันย้อนหลังที่ใช้แสดงผล (โหมดจำลองเท่านั้น)
 
 /* ---------------------------------------------------------------------
    JOB MANAGEMENT (ติดตามงานซ่อม) — เชื่อมต่อ Google Sheets ผ่าน Apps Script Web App
@@ -567,27 +560,6 @@ function generateData(){
     const pressure = hourly.map(dayFlows => dayFlows.map(v => Math.max(0.3, 3.0 - (v/def.base-1)*0.6)));
     return {...def, hourly:{flow:hourly, pressure}};
   });
-}
-
-/**
- * โหมดจำลอง (fallback เมื่อหาไฟล์ CSV จริงไม่เจอ) ยังคำนวณฝั่ง JS เองตามที่ตั้งใจไว้ (ดูคอมเมนต์ CONFIG
- * ด้านบน) — แต่ openModal()/กราฟรายวันตอนนี้อ่านจาก d.envelope (รูปแบบเดียวกับ dma_hourly_envelope.csv
- * ของข้อมูลจริง) เท่านั้น ไม่ได้อ่าน d.hourly ตรงๆ อีกต่อไป ฟังก์ชันนี้จึงแปลง d.hourly (Array(30 วัน) ของ
- * Array(24 ชม./วัน) — ความละเอียดรายชั่วโมง คนละสเกลกับข้อมูลจริงที่เป็นราย 15 นาที/96 จุด) ให้เป็น
- * d.envelope shape เดียวกัน โดยขยาย 24 ชม. เป็น 96 จุด (คงค่าเดิมซ้ำ 4 ช่องย่อย/ชม.) แล้วหา min/max จาก
- * 14 วันแรกเหมือนที่ dashboard เคยทำฝั่ง JS กับ flow_log.csv จริงมาก่อน (โหมดจำลองเท่านั้นที่ยังทำแบบนี้)
- */
-function envelopeFromDemoHourly(d){
-  const expand = hourVals => Array.from({length:INTERVALS_PER_DAY},(_,i)=>hourVals[Math.floor(i/4)]);
-  const minMaxByInterval = (days, pick) => Array.from({length:INTERVALS_PER_DAY},(_,i)=>pick(...days.map(day=>day[i])));
-  const histFlowDays = d.hourly.flow.slice(0,14).map(expand);
-  const histPressureDays = d.hourly.pressure.slice(0,14).map(expand);
-  return {
-    flowLast: expand(d.hourly.flow[d.hourly.flow.length-1] || []),
-    flowMin: minMaxByInterval(histFlowDays, Math.min), flowMax: minMaxByInterval(histFlowDays, Math.max),
-    pressureLast: expand(d.hourly.pressure[d.hourly.pressure.length-1] || []),
-    pressureMin: minMaxByInterval(histPressureDays, Math.min), pressureMax: minMaxByInterval(histPressureDays, Math.max),
-  };
 }
 
 function mnfOf(dayFlows){
@@ -681,39 +653,48 @@ function analyze(dma){
 
 /* ---------------------------------------------------------------------
    CSV LOADERS
-   dma_hourly_envelope.csv → ราย 15 นาที (96 จุด/DMA): เส้นล่าสุด + แถบ min-max ย้อนหลัง
-                             (คำนวณไว้แล้วจาก Python — ใช้วาดกราฟ "รูปแบบรายวัน" โดยตรง ไม่คำนวณเองฝั่ง JS
-                             อีกต่อไป — เดิมฟังก์ชันนี้ชื่อ hourlyFromFlowCsv() อ่าน flow_log.csv ดิบทั้งไฟล์
-                             มาหา min/max เอง เปลี่ยนมาอ่านไฟล์นี้แทน)
+   flow_log.csv          → ใช้แค่วาดกราฟ "รูปแบบรายชั่วโมง" (ต้องใช้ raw hourly)
+   dma_daily_series.csv  → mnfSeries / totalSeries / cusum_cplus (คำนวณไว้แล้วจาก Python)
+   dma_status_summary.csv→ สถานะ/threshold/mk/cusum ปัจจุบัน (คำนวณไว้แล้วจาก Python)
+--------------------------------------------------------------------- */
+/* ---------------------------------------------------------------------
+   CSV LOADERS
+   flow_log.csv          → ราย 15 นาที (Q + P) ใช้วาดกราฟ "รูปแบบรายวัน" ความละเอียดสูง
    dma_daily_series.csv  → mnfSeries / totalSeries / cusum_cplus (คำนวณไว้แล้วจาก Python)
    dma_status_summary.csv→ Case A/B/C, hydraulic metrics, threshold/mk/cusum (คำนวณไว้แล้วจาก Python)
 --------------------------------------------------------------------- */
 const INTERVALS_PER_DAY = 96; // ราย 15 นาที ตามสเปก RTU
 
-function envelopeFromCsv(rows){
+function hourlyFromFlowCsv(rows){
   const byDma = {};
   rows.forEach(r=>{
-    if(!r.dma_code || r.interval_idx===undefined || r.interval_idx==='') return;
-    const idx = parseInt(r.interval_idx, 10);
-    if(isNaN(idx) || idx < 0 || idx >= INTERVALS_PER_DAY) return;
+    if(!r.dma_code || !r.timestamp || r.flow_m3hr===undefined || r.flow_m3hr===null || r.flow_m3hr==='') return;
+    
+    // 1. แยก วันที่ (YYYY-MM-DD) และ เวลา (HH:MM) จากข้อความโดยตรง (แก้ปัญหา Timezone +7 ชม.)
+    const str = String(r.timestamp).trim().replace('T', ' ');
+    const parts = str.split(' ');
+    if(parts.length < 2) return;
+    
+    const dayKey = parts[0]; // เช่น '2026-07-08'
+    const timeParts = parts[1].split(':');
+    const hh = parseInt(timeParts[0], 10);
+    const mm = parseInt(timeParts[1], 10);
+    if(isNaN(hh) || isNaN(mm)) return;
+    
+    // 2. คำนวณลำดับจุด 0..95 บนกราฟจาก HH:MM โดยตรง
+    const idx = hh * 4 + Math.floor(mm / 15);
+    if(idx < 0 || idx >= INTERVALS_PER_DAY) return;
 
-    if(!byDma[r.dma_code]){
-      byDma[r.dma_code] = {
-        flowLast: new Array(INTERVALS_PER_DAY).fill(null), flowMin: new Array(INTERVALS_PER_DAY).fill(null),
-        flowMax: new Array(INTERVALS_PER_DAY).fill(null), pressureLast: new Array(INTERVALS_PER_DAY).fill(null),
-        pressureMin: new Array(INTERVALS_PER_DAY).fill(null), pressureMax: new Array(INTERVALS_PER_DAY).fill(null),
-      };
+    if(!byDma[r.dma_code]) byDma[r.dma_code] = {q:{}, p:{}};
+    if(!byDma[r.dma_code].q[dayKey]){
+      byDma[r.dma_code].q[dayKey] = new Array(INTERVALS_PER_DAY).fill(null);
+      byDma[r.dma_code].p[dayKey] = new Array(INTERVALS_PER_DAY).fill(null);
     }
-    const num = v => (v===undefined || v===null || v==='') ? null : Number(v);
-    const d = byDma[r.dma_code];
-    d.flowLast[idx] = num(r.flow_last); d.flowMin[idx] = num(r.flow_min); d.flowMax[idx] = num(r.flow_max);
-    d.pressureLast[idx] = num(r.pressure_last); d.pressureMin[idx] = num(r.pressure_min); d.pressureMax[idx] = num(r.pressure_max);
+    byDma[r.dma_code].q[dayKey][idx] = Number(r.flow_m3hr);
+    if(r.pressure_bar!==undefined && r.pressure_bar!=='') byDma[r.dma_code].p[dayKey][idx] = Number(r.pressure_bar);
   });
 
-  // เติมช่องว่าง (กันกรณี interval ไหนไม่มีแถว/ค่าว่างใน CSV) — dma_hourly_envelope.csv เติม
-  // display-only gap มาให้จากฝั่ง Python แล้ว (interpolate ทั้งสองทิศทางใน prepare_dma_csv.py) ปกติจะไม่มี
-  // ช่องว่างเหลือให้เติมอีก ฟังก์ชันนี้เป็นแค่ตาข่ายกันพลาดชั้นสุดท้ายฝั่ง JS เท่านั้น (ย้ายมาจาก fillGaps()
-  // เดิมของ hourlyFromFlowCsv() logic เดียวกันทุกประการ)
+  // ส่วนจัดการเติมค่าว่าง (Gaps) คงเดิม
   const fillGaps = arr => {
     for(let i=0;i<arr.length;i++){
       if(arr[i]===null){
@@ -724,17 +705,15 @@ function envelopeFromCsv(rows){
     return arr;
   };
 
+  // ส่งออกข้อมูลตามประวัติวัน + รายการวันที่ (days) เรียงคู่กับ flow/pressure — ใช้แสดงวันที่ของ
+  // เส้นล่าสุด (เส้นสีฟ้า) บนกราฟได้ ก่อนหน้านี้คำนวณ dayKeys ไว้แล้วแต่ไม่เคยส่งออกมาเลย
   const out = {};
   Object.entries(byDma).forEach(([code, d])=>{
-    // เช็คก่อน fillGaps ว่ามีข้อมูลแรงดันจริงอยู่บ้างไหม (เดิม hourlyFromFlowCsv() ปล่อยให้ pressure เป็น
-    // array ว่างถ้าไม่มีคอลัมน์ pressure_bar ใน flow_log.csv เลย — fillGaps() เติม 0 ทุกจุดถ้าไม่เช็คจุดนี้
-    // ก่อน จะกลายเป็นกราฟเส้นแรงดัน 0 บาร์แบนๆ ที่ดูเหมือนมีข้อมูลจริงทั้งที่ไม่มี)
-    const pressureAvailable = d.pressureLast.some(v => v !== null);
+    const dayKeys = Object.keys(d.q).sort().slice(-HISTORY_DAYS);
     out[code] = {
-      flowLast: fillGaps(d.flowLast), flowMin: fillGaps(d.flowMin), flowMax: fillGaps(d.flowMax),
-      pressureLast: pressureAvailable ? fillGaps(d.pressureLast) : [],
-      pressureMin: pressureAvailable ? fillGaps(d.pressureMin) : [],
-      pressureMax: pressureAvailable ? fillGaps(d.pressureMax) : [],
+      flow: dayKeys.map(k=>fillGaps(d.q[k])),
+      pressure: dayKeys.map(k=>fillGaps(d.p[k])),
+      days: dayKeys,
     };
   });
   return out;
@@ -800,10 +779,6 @@ function summaryFromCsv(rows){
       proximityEstimate: r.proximity_estimate || null,
       favadVolumeTotal: Number(r.favad_volume_total||0),
       userType: r.user_type, pipeMaterial: r.pipe_material, favadN1: r.favad_n1!==undefined? Number(r.favad_n1): null,
-      // วันที่ (ISO, ไม่ format) ของ "วันล่าสุด" ที่ dma_hourly_envelope.csv ใช้เป็นเส้นเทียบ — เดิมอ่านจาก
-      // dayKeys ตัวสุดท้ายของ flow_log.csv ที่ parse เองฝั่ง JS ตอนนี้ dma_status_summary.csv มีคอลัมน์นี้
-      // อยู่แล้ว (last_data_date) ไม่ต้องพึ่ง flow_log.csv อีกต่อไป
-      lastDataDate: r.last_data_date || null,
     };
   });
   return out;
@@ -946,10 +921,7 @@ function displayPct(d){
 }
 
 const HOURLY_NOTE_DEFAULT = 'แถบเทา = ช่วง flow ปกติ (min–max ย้อนหลัง) · เส้นฟ้า = วันล่าสุด · ความละเอียด 15 นาที/จุด (96 จุด/วัน) ตามข้อมูล RTU';
-// เดิมข้อความนี้บอกว่า "สถานะ ปกติ ไม่ถูกส่งเข้า flow_log.csv" — ไม่จริงแล้วตั้งแต่เปลี่ยนมาใช้
-// dma_hourly_envelope.csv ที่ export ให้ทุก DMA ที่ active (ดู prepare_dma_csv.py) ข้อความนี้เหลือไว้เป็น
-// fallback เผื่อกรณี pipeline ข้าม DMA นี้ไปจริงๆ (เช่น baseline คำนวณไม่ได้) เท่านั้น
-const HOURLY_NOTE_EMPTY = 'ไม่มีข้อมูลราย 15 นาทีสำหรับจุดวัด RTU นี้ในรอบข้อมูลล่าสุด (MNF/CUSUM ด้านบนยังใช้งานได้ตามปกติ)';
+const HOURLY_NOTE_EMPTY = 'ไม่มีข้อมูลราย 15 นาทีสำหรับจุดวัด RTU นี้ — สถานะ "ปกติ" จึงไม่ถูกส่งเข้า flow_log.csv เพื่อลดขนาดไฟล์ (ดูกราฟรายวันได้เฉพาะ DMA ที่อยู่ในสถานะเฝ้าระวัง/แจ้งเตือน — MNF/CUSUM ด้านบนยังใช้งานได้ตามปกติ)';
 const PRESSURE_NOTE_DEFAULT = 'ใช้ยืนยันร่วมกับ flow สูง: ถ้าแรงดันตกพร้อมกับ flow เพิ่มขึ้นอย่างต่อเนื่อง = สัญญาณท่อแตกที่น่าเชื่อถือกว่าดู flow อย่างเดียว';
 const PRESSURE_NOTE_EMPTY = 'ไม่มีข้อมูลแรงดันราย 15 นาทีสำหรับจุดวัด RTUนี้ (เหตุผลเดียวกับกราฟการไหลด้านบน)';
 
@@ -964,10 +936,10 @@ function renderAll(){
 }
 
 async function refreshFromCsv(isFirstLoad){
-  document.getElementById('csvPathLabel').textContent = `${ENVELOPE_CSV_URL}, ${SERIES_CSV_URL}, ${SUMMARY_CSV_URL}`;
+  document.getElementById('csvPathLabel').textContent = `${FLOW_CSV_URL}, ${SERIES_CSV_URL}, ${SUMMARY_CSV_URL}`;
   try{
-    const [envelopeRows, seriesRows, summaryRows, ignoreSet, remarksByDma, linkedMap] = await Promise.all([
-      loadCsv(ENVELOPE_CSV_URL), loadCsv(SERIES_CSV_URL), loadCsv(SUMMARY_CSV_URL), loadIgnoreList(IGNORE_CSV_URL),
+    const [flowRows, seriesRows, summaryRows, ignoreSet, remarksByDma, linkedMap] = await Promise.all([
+      loadCsv(FLOW_CSV_URL), loadCsv(SERIES_CSV_URL), loadCsv(SUMMARY_CSV_URL), loadIgnoreList(IGNORE_CSV_URL),
       loadRemarksMap(REMARK_CSV_URL),   // "มีหมายเหตุ" กลับมาอ่านจากชีท remark เดิมแทน job_log ตามที่สั่ง
       // (loadRemarksMapFromJobLog() ยังเก็บไว้เหมือนเดิม ไม่ได้ลบ — สลับกลับมาใช้ได้ทันทีถ้าต้องการในอนาคต)
       IS_LOGGED_IN
@@ -975,7 +947,7 @@ async function refreshFromCsv(isFirstLoad){
         : Promise.resolve({}),   // ไม่ login ไม่ต้องยิงเลย (endpoint บังคับ login_required อยู่แล้วด้วย)
     ]);
     linkedIncidentMap = linkedMap || {};
-    const envelopeByDma = envelopeFromCsv(envelopeRows);
+    const hourlyByDma = hourlyFromFlowCsv(flowRows);
     const seriesByDma = seriesFromCsv(seriesRows);
     const summaryByDma = summaryFromCsv(summaryRows);
     pipelineGeneratedAt = (summaryRows[0] && summaryRows[0].generated_at) ? summaryRows[0].generated_at : null;
@@ -988,7 +960,7 @@ async function refreshFromCsv(isFirstLoad){
       const breachIdx = sr.cPlusSeries.findIndex(v=>v>s.cusumH);
       const remark = remarksByDma[code] || null;   // UI display เท่านั้น — ไม่กระทบสถิติ/สถานะที่คำนวณจาก Python เลย
       return {
-        code, name: s.name, envelope: envelopeByDma[code] || null,
+        code, name: s.name, hourly: hourlyByDma[code] || {flow:[], pressure:[], days:[]},
         a: {
           mnfSeries: sr.mnfSeries, totalSeries: sr.totalSeries,
           mean: s.mean, sd: s.sd, threshold: s.threshold, watchThreshold: s.watchThreshold,
@@ -1002,7 +974,7 @@ async function refreshFromCsv(isFirstLoad){
           pressureDropConfirmed: s.pressureDropConfirmed, hardThresholdBreached: s.hardThresholdBreached,
           rEffMedian: s.rEffMedian, lossFactorMedian: s.lossFactorMedian,
           proximityEstimate: s.proximityEstimate, favadVolumeTotal: s.favadVolumeTotal,
-          userType: s.userType, pipeMaterial: s.pipeMaterial, lastDataDate: s.lastDataDate,
+          userType: s.userType, pipeMaterial: s.pipeMaterial,
           remark, hasRemark: !!remark,
         },
       };
@@ -1012,17 +984,17 @@ async function refreshFromCsv(isFirstLoad){
       ? `CSV (คำนวณโดย Python) — รีเฟรชทุก ${REFRESH_MINUTES} นาที`
       : `CSV (คำนวณโดย Python) — Auto-refresh ปิดอยู่ (ข้อมูล ณ ตอนโหลดหน้านี้)`;
     document.getElementById('csvPathLabel').textContent = ignoreSet.size
-      ? `${ENVELOPE_CSV_URL}, ${SERIES_CSV_URL}, ${SUMMARY_CSV_URL} · ซ่อนอยู่ ${ignoreSet.size} RTU ตาม ${IGNORE_CSV_URL}`
-      : `${ENVELOPE_CSV_URL}, ${SERIES_CSV_URL}, ${SUMMARY_CSV_URL}`;
+      ? `${FLOW_CSV_URL}, ${SERIES_CSV_URL}, ${SUMMARY_CSV_URL} · ซ่อนอยู่ ${ignoreSet.size} RTU ตาม ${IGNORE_CSV_URL}`
+      : `${FLOW_CSV_URL}, ${SERIES_CSV_URL}, ${SUMMARY_CSV_URL}`;
     document.getElementById('banner').style.display = 'none';
     renderAll();
   }catch(err){
     if(isFirstLoad){
-      data = generateData().map(d=>({...d, a:analyze(d), envelope:envelopeFromDemoHourly(d)}));
+      data = generateData().map(d=>({...d, a:analyze(d)}));
       document.getElementById('sourceLabel').textContent = 'ข้อมูลจำลอง (Synthetic — fallback, คำนวณใน JS)';
       document.getElementById('banner').innerHTML =
         `⚠️ <div><b>ไม่พบ/อ่านไฟล์ CSV ไม่สำเร็จ</b> (${err.message}) — กำลังแสดง<b>ข้อมูลจำลอง</b>แทน
-         รันสคริปต์ <code class="mono">prepare_dma_csv.py</code> ก่อนเพื่อสร้างไฟล์ทั้ง 4 ไฟล์
+         รันสคริปต์ <code class="mono">prepare_dma_csv.py</code> ก่อนเพื่อสร้างไฟล์ทั้ง 3 ไฟล์
          แล้วเปิดผ่าน local server เช่น <code class="mono">python -m http.server</code> เพื่อให้ fetch อ่านไฟล์ในเครื่องได้
          (เปิดไฟล์ .html ตรงๆ จาก disk เบราว์เซอร์จะบล็อกด้วยข้อจำกัด CORS)</div>`;
       renderAll();
@@ -1461,23 +1433,17 @@ function openModal(code){
   //   options:chartOpts(true)
   // });
 
-  // dma_hourly_envelope.csv มีข้อมูล flow_last/min/max/pressure_* คำนวณไว้แล้วจาก Python (96 จุด/DMA ตรงๆ
-  // ไม่ต้องหา min/max เองจากข้อมูลดิบฝั่ง JS อีกต่อไป — เดิมอ่านจาก d.hourly ที่ parse จาก flow_log.csv)
-  const hasHourly = !!(d.envelope && d.envelope.flowLast && d.envelope.flowLast.length);
+  const hasHourly = !!(d.hourly.flow && d.hourly.flow.length);
   const hourlyCanvas = document.getElementById('chartHourly');
   const hourlyNoteEl = document.getElementById('hourlyNote');
   const hourlyTitleEl = document.getElementById('hourlyChartTitle');
   if(hourlyChart){ hourlyChart.destroy(); hourlyChart = null; }
 
-  // วันที่ของเส้นล่าสุด (เส้นสีฟ้า) — เดิมอ่านจาก dayKeys ตัวสุดท้ายของ flow_log.csv ที่ parse เองฝั่ง JS
-  // ตอนนี้ dma_status_summary.csv มีคอลัมน์ last_data_date อยู่แล้ว (ตัว pipeline คำนวณไว้ให้) ใช้ตัวเดียว
-  // กับทั้งกราฟ flow และ pressure ได้เหมือนเดิม เพราะทั้งคู่มาจาก "วันล่าสุด" DMA เดียวกัน
-  const lastPlottedDate = d.a.lastDataDate ? formatDateDDMMYYYY(d.a.lastDataDate) : null;
-
-  const intervalLabels = Array.from({length:INTERVALS_PER_DAY},(_,i)=>{
-    const h = Math.floor(i/4).toString().padStart(2,'0'), m = ((i%4)*15).toString().padStart(2,'0');
-    return `${h}:${m}`;
-  });
+  // วันที่ของเส้นล่าสุด (เส้นสีฟ้า) — ทั้ง flow และ pressure มาจาก dayKeys ชุดเดียวกัน (ไฟล์ flow_log.csv
+  // เดียวกัน) จึงใช้ d.hourly.days ตัวเดียวกันได้กับทั้งสองกราฟ
+  const lastPlottedDate = (d.hourly.days && d.hourly.days.length)
+    ? formatDateDDMMYYYY(d.hourly.days[d.hourly.days.length - 1])
+    : null;
 
   if(hasHourly){
     hourlyCanvas.style.display = '';
@@ -1485,13 +1451,21 @@ function openModal(code){
     hourlyTitleEl.textContent = lastPlottedDate
       ? `รูปแบบการไหลรายวัน (ราย 15 นาที) — ล่าสุด (${lastPlottedDate}) เทียบช่วงปกติ`
       : 'รูปแบบการไหลรายวัน (ราย 15 นาที) — ล่าสุด เทียบช่วงปกติ';
+    const lastDayFlow = d.hourly.flow[d.hourly.flow.length-1] || [];
+    const histFlowDays = d.hourly.flow.slice(0,14);
+    const flowMin = Array.from({length:INTERVALS_PER_DAY},(_,i)=>Math.min(...histFlowDays.map(day=>day[i]).filter(v=>v!=null)));
+    const flowMax = Array.from({length:INTERVALS_PER_DAY},(_,i)=>Math.max(...histFlowDays.map(day=>day[i]).filter(v=>v!=null)));
+    const intervalLabels = Array.from({length:INTERVALS_PER_DAY},(_,i)=>{
+      const h = Math.floor(i/4).toString().padStart(2,'0'), m = ((i%4)*15).toString().padStart(2,'0');
+      return `${h}:${m}`;
+    });
 
     hourlyChart = new Chart(hourlyCanvas, {
       type:'line',
       data:{ labels:intervalLabels, datasets:[
-        {label:'ช่วงปกติ (สูงสุด)', data:d.envelope.flowMax, borderColor:'transparent', backgroundColor:'rgba(139,160,190,.16)', fill:'+1', pointRadius:0},
-        {label:'ช่วงปกติ (ต่ำสุด)', data:d.envelope.flowMin, borderColor:'transparent', backgroundColor:'transparent', fill:false, pointRadius:0},
-        {label:'วันล่าสุด', data:d.envelope.flowLast, borderColor:'#38bfc7', backgroundColor:'transparent', borderWidth:2, pointRadius:0, tension:.2},
+        {label:'ช่วงปกติ (สูงสุด)', data:flowMax, borderColor:'transparent', backgroundColor:'rgba(139,160,190,.16)', fill:'+1', pointRadius:0},
+        {label:'ช่วงปกติ (ต่ำสุด)', data:flowMin, borderColor:'transparent', backgroundColor:'transparent', fill:false, pointRadius:0},
+        {label:'วันล่าสุด', data:lastDayFlow, borderColor:'#38bfc7', backgroundColor:'transparent', borderWidth:2, pointRadius:0, tension:.2},
       ]},
       options:chartOpts(false)
     });
@@ -1506,7 +1480,14 @@ function openModal(code){
     ? `แรงดันน้ำรายวัน (ราย 15 นาที) — ล่าสุด (${lastPlottedDate}) เทียบช่วงปกติ`
     : 'แรงดันน้ำรายวัน (ราย 15 นาที) — ล่าสุด เทียบช่วงปกติ';
 
-  const lastDayPressure = (d.envelope && d.envelope.pressureLast) || [];
+  const intervalLabelsForPressure = Array.from({length:INTERVALS_PER_DAY},(_,i)=>{
+    const h = Math.floor(i/4).toString().padStart(2,'0'), m = ((i%4)*15).toString().padStart(2,'0');
+    return `${h}:${m}`;
+  });
+  const lastDayPressure = (d.hourly.pressure[d.hourly.pressure.length-1]) || [];
+  const histPressureDays = d.hourly.pressure.slice(0,14);
+  const pMin = Array.from({length:INTERVALS_PER_DAY},(_,i)=>Math.min(...histPressureDays.map(day=>day[i]).filter(v=>v!=null)));
+  const pMax = Array.from({length:INTERVALS_PER_DAY},(_,i)=>Math.max(...histPressureDays.map(day=>day[i]).filter(v=>v!=null)));
 
   const pressureCanvas = document.getElementById('chartPressure');
   const pressureNoteEl = document.getElementById('pressureNote');
@@ -1517,9 +1498,9 @@ function openModal(code){
     pressureNoteEl.textContent = PRESSURE_NOTE_DEFAULT;
     pressureChart = new Chart(pressureCanvas, {
       type:'line',
-      data:{ labels:intervalLabels, datasets:[
-        {label:'ช่วงปกติ (สูงสุด)', data:d.envelope.pressureMax, borderColor:'transparent', backgroundColor:'rgba(139,160,190,.16)', fill:'+1', pointRadius:0},
-        {label:'ช่วงปกติ (ต่ำสุด)', data:d.envelope.pressureMin, borderColor:'transparent', backgroundColor:'transparent', fill:false, pointRadius:0},
+      data:{ labels:intervalLabelsForPressure, datasets:[
+        {label:'ช่วงปกติ (สูงสุด)', data:pMax, borderColor:'transparent', backgroundColor:'rgba(139,160,190,.16)', fill:'+1', pointRadius:0},
+        {label:'ช่วงปกติ (ต่ำสุด)', data:pMin, borderColor:'transparent', backgroundColor:'transparent', fill:false, pointRadius:0},
         {label:'วันล่าสุด', data:lastDayPressure, borderColor:'#e8a33d', backgroundColor:'transparent', borderWidth:2, pointRadius:0, tension:.2},
       ]},
       options:chartOpts(false)
@@ -1826,9 +1807,7 @@ async function saveCurrentAlert(){
     trend: (d.a.mk && d.a.mk.trend) ? d.a.mk.trend : '',
     // วันที่ของเส้นล่าสุด (เส้นสีฟ้า) บนกราฟ flow/pressure — เก็บเป็น ISO ดิบ (เช่น "2026-08-16")
     // เหมือน timestamp อื่นๆ ในระบบ ไม่ format ที่นี่ ปล่อยให้ตอนแสดงผลค่อยแปลงเป็น dd/mm/yyyy
-    // เดิมอ่านจาก d.hourly.days (dayKeys ของ flow_log.csv) ตอนนี้อ่านจาก d.a.lastDataDate
-    // (คอลัมน์ last_data_date ใน dma_status_summary.csv) แทน
-    chart_date: d.a.lastDataDate || '',
+    chart_date: (d.hourly.days && d.hourly.days.length) ? d.hourly.days[d.hourly.days.length - 1] : '',
     note: noteEl.value.trim(),
     image_data_url: imageDataUrl,
   };
