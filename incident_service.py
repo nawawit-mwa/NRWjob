@@ -197,7 +197,9 @@ def update_incident_details(incident_id: str, user: dict, description: str = Non
 
 
 def close_incident(incident_id: str, user: dict):
-    """ปิดเหตุการณ์ - ปิดได้ทันทีไม่ต้องรองานลูกปิดครบก่อน"""
+    """ปิดเหตุการณ์ - ปิดได้ทันทีไม่ต้องรองานลูกปิดครบก่อน
+    Job ลูกที่ยังไม่ปิด (Status ไม่ใช่ 'ปิดงาน'/'ยกเลิกงาน') จะถูก 'บังคับปิดงานทันที' ไปด้วย
+    (ข้ามขั้นตอน workflow ปกติ เช่น ส่งงาน/ตรวจสอบ) พร้อมบันทึก Remarks ว่าใครเป็นคนปิดเหตุการณ์"""
     incident = sc.find_one("Incidents", "IncidentID", incident_id)
     if not incident:
         raise ValueError("ไม่พบเหตุการณ์นี้")
@@ -211,3 +213,15 @@ def close_incident(incident_id: str, user: dict):
         "ClosedBy": user["UserID"],
         "ClosedAt": _now(),
     })
+
+    closer_name = user.get("Name") or user.get("UserID", "")
+    sibling_jobs = sc.find_many("Jobs", "SiblingJobGroup", incident_id)
+    for job in sibling_jobs:
+        if job.get("Status") in ("ปิดงาน", "ยกเลิกงาน"):
+            continue  # ปิด/ยกเลิกไปแล้ว ไม่ต้องแตะซ้ำ
+        sc.update_row("Jobs", "JobID", job["JobID"], {
+            "Status": "ปิดงาน",
+            "Remarks": f"เหตุการณ์ปิดแล้วโดย {closer_name}",
+            "ClosedBy": user["UserID"],
+            "ClosedAt": _now(),
+        })
