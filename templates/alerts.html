@@ -101,7 +101,9 @@
             <span class="mono" style="font-size:0.78rem; color:var(--ink-soft);">{{ alert.SavedAt|date_display }}</span>
           </td>
           <td>
-            {% if perms.already_linked %}
+            {% if perms.already_linked and perms.incident_closed %}
+            <span class="badge status-cancel">เหตุการณ์ปิดแล้ว</span>
+            {% elif perms.already_linked %}
             <span class="badge status-done">เปิดเป็นเหตุการณ์แล้ว</span>
             {% else %}
             <span class="badge status-pending">ยังไม่แปลง</span>

@@ -144,11 +144,19 @@ def get_alert_permissions(alert: dict, user: dict) -> dict:
     can_convert = is_authorized and not already_linked and not already_cancelled
     can_cancel = is_authorized and not already_linked and not already_cancelled
 
+    # เช็คสถานะจริงของเหตุการณ์ที่เชื่อมโยงไว้ (ปิดแล้วหรือยัง) — เพื่อแสดงสถานะให้ตรงในหน้ารายการ
+    incident_closed = False
+    if already_linked:
+        linked_incident = sc.find_one("Incidents", "IncidentID", alert["LinkedIncidentID"])
+        if linked_incident and linked_incident.get("Status") == "ปิดแล้ว":
+            incident_closed = True
+
     return {
         "can_convert": can_convert,
         "can_cancel": can_cancel,
         "already_linked": already_linked,
         "already_cancelled": already_cancelled,
+        "incident_closed": incident_closed,
     }
 
 
