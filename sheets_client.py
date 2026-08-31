@@ -30,6 +30,7 @@ _client = None
 _spreadsheet = None
 _ws_cache = {}          # sheet_name -> worksheet object
 _header_cache = {}      # sheet_name -> list of header names
+_header_loaded_at = {}  # sheet_name -> timestamp (epoch) ที่โหลด header ล่าสุด (ใช้กับ TTL เดียวกับ records)
 _records_cache = {}     # sheet_name -> list of dict (ข้อมูลปัจจุบันของ sheet ตาม cache)
 _loaded_sheets = set()  # sheet_name ที่เคยโหลดข้อมูลจริงจาก API มาไว้ใน cache แล้ว
 _loaded_at = {}         # sheet_name -> timestamp (epoch) ที่โหลดข้อมูลล่าสุด (ใช้กับ TTL)
@@ -153,13 +154,22 @@ def set_headers(sheet_name: str, headers: list):
     ws = get_worksheet(sheet_name)
     _with_retry(ws.update, "A1", [headers])
     _header_cache[sheet_name] = headers
+    _header_loaded_at[sheet_name] = time.time()
     _records_cache.pop(sheet_name, None)
 
 
 def get_headers(sheet_name: str):
-    if sheet_name not in _header_cache:
+    """คืนรายชื่อ header ของ sheet — ใช้ cache แบบมี TTL เดียวกับ get_all_records() (เดิมไม่มี TTL
+    เลย cache ค้างถาวรจนกว่าจะ restart process ทำให้พังตอนเพิ่มคอลัมน์ใหม่เข้า Sheet ตรงๆ ผ่านเบราว์เซอร์
+    แล้วแอปยังจำหัวตารางชุดเก่าค้างอยู่ — เป็นบั๊กรูปแบบเดียวกับที่เคยเจอตอน login หา user ไม่เจอ)"""
+    is_stale = (
+        sheet_name in _header_loaded_at
+        and (time.time() - _header_loaded_at[sheet_name]) > CACHE_TTL_SECONDS
+    )
+    if sheet_name not in _header_cache or is_stale:
         ws = get_worksheet(sheet_name)
         _header_cache[sheet_name] = _with_retry(ws.row_values, 1)
+        _header_loaded_at[sheet_name] = time.time()
     return _header_cache[sheet_name]
 
 
@@ -242,6 +252,13 @@ def update_row(sheet_name: str, id_field: str, id_value, updates: dict):
     ws = get_worksheet(sheet_name)
 
     missing_fields = [field for field in updates if field not in headers]
+    if missing_fields:
+        # อาจเป็นเพราะ cache header เก่าค้างอยู่ (เพิ่งเพิ่มคอลัมน์ใน Sheet ตรงๆ ไม่นานมานี้ ยังไม่ถึง
+        # TTL 5 นาทีให้รีเฟรชอัตโนมัติ) ลองบังคับโหลด header ใหม่อีกครั้งก่อนสรุปว่าคอลัมน์ไม่มีจริง
+        # (self-healing แบบเดียวกับที่แก้ปัญหา login หา user ไม่เจอตอน cache ค้าง)
+        _header_cache.pop(sheet_name, None)
+        headers = get_headers(sheet_name)
+        missing_fields = [field for field in updates if field not in headers]
     if missing_fields:
         raise ValueError(
             f"อัปเดต {sheet_name} ไม่สำเร็จ: ไม่พบคอลัมน์ {missing_fields} ใน header จริงของ Sheet "
