@@ -94,26 +94,26 @@ def get_alerts_for_user(user: dict) -> list:
     """คืนรายการแจ้งเตือนที่บันทึกไว้ ในขอบเขตพื้นที่ของ user (ตรรกะเดียวกับ dashboard_service
     ใช้กับ Incidents — Admin เห็นหมด, รองผู้ว่าการ/ผู้ช่วยผู้ว่าการ เห็นตามกลุ่มสาขา, ที่เหลือเห็นตามสาขาตน)
     ไม่แสดงรายการที่ถูกยกเลิกแล้ว (Status == ยกเลิกแล้ว) เลย — ยังเก็บแถวไว้ใน Sheet เป็นประวัติ
-    (soft-cancel) แค่ไม่โผล่ในรายการที่แสดงผลบนหน้าเว็บอีกต่อไป"""
+    (soft-cancel) แค่ไม่โผล่ในรายการที่แสดงผลบนหน้าเว็บอีกต่อไป
+    เรียงรายการล่าสุด (SavedAt) ขึ้นก่อนเสมอ — ปกติ Sheet เก็บแถวใหม่ต่อท้ายล่างสุด (เก่าสุดขึ้นก่อน)
+    ถ้าไม่เรียงเองจะดูย้อนลำดับกับที่ผู้ใช้คาดหวัง"""
     all_alerts = [
         a for a in sc.get_all_records("SavedAlerts") if a.get("Status") != ALERT_STATUS_CANCELLED
     ]
     role = user.get("Role")
 
     if role == ROLE_ADMIN:
-        return all_alerts
-
-    if role in (ROLE_DEPUTY_GOVERNOR, ROLE_ASSISTANT_GOVERNOR):
+        scoped_alerts = all_alerts
+    elif role in (ROLE_DEPUTY_GOVERNOR, ROLE_ASSISTANT_GOVERNOR):
         branch_group_id = user.get("BranchGroupID")
         branches = sc.find_many("Branches", "BranchGroupID", branch_group_id)
         branch_ids = {b["BranchID"] for b in branches}
-        return [a for a in all_alerts if a.get("BranchID") in branch_ids]
+        scoped_alerts = [a for a in all_alerts if a.get("BranchID") in branch_ids]
+    else:
+        branch_id = user.get("BranchID")
+        scoped_alerts = [a for a in all_alerts if a.get("BranchID") == branch_id] if branch_id else []
 
-    branch_id = user.get("BranchID")
-    if branch_id:
-        return [a for a in all_alerts if a.get("BranchID") == branch_id]
-
-    return []
+    return sorted(scoped_alerts, key=lambda a: a.get("SavedAt", ""), reverse=True)
 
 
 def get_active_alert_for_rtu(rtu_id: str) -> dict:
