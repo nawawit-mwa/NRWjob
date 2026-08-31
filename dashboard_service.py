@@ -10,6 +10,7 @@ from constants import (
     ROLE_ADMIN, ROLE_DEPUTY_GOVERNOR, ROLE_ASSISTANT_GOVERNOR,
     ROLE_BRANCH_MANAGER, ROLE_DIVISION_DIRECTOR, ROLE_SECTION_CHIEF,
     ROLE_ENGINEER, ROLE_FIELD_TECH, ROLE_CONTRACTOR, ROLE_VIEWER,
+    INCIDENT_STATUS_CLOSED,
 )
 
 
@@ -67,6 +68,14 @@ def get_dashboard_incidents(user: dict) -> list:
     if branch_id:
         return [i for i in all_incidents if i.get("BranchID") == branch_id]
     return []
+
+
+def filter_active_incidents(incidents: list) -> list:
+    """ตัดเหตุการณ์ที่ปิดแล้ว (Status == ปิดแล้ว) ออกจากรายการที่จะแสดงในตาราง
+    ใช้แค่ตอน 'แสดงรายการ' เท่านั้น — ห้ามใช้แทน get_dashboard_incidents() ตรงๆ ตอนเช็คสิทธิ์เข้าดู
+    รายละเอียดเหตุการณ์ใดเหตุการณ์หนึ่ง (เช่น incident_ids_visible ใน incident_tree route) เพราะจะทำให้
+    ลิงก์ตรงไปดูเหตุการณ์ที่ปิดไปแล้ว (เช่นจากหน้า 'แสดง MNF ผิดปกติ') ขึ้น 'ไม่พบเหตุการณ์' ผิดพลาด"""
+    return [i for i in incidents if i.get("Status") != INCIDENT_STATUS_CLOSED]
 
 
 def get_my_action_jobs(user: dict) -> dict:

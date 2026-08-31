@@ -175,6 +175,7 @@ def dashboard():
     zone_filter = request.args.get("zone", "")
     jobs = dashboard_service.filter_by_branch_group_and_zone(jobs, branch_group_filter, branch_filter, zone_filter)
     incidents = dashboard_service.filter_by_branch_group_and_zone(incidents, branch_group_filter, branch_filter, zone_filter)
+    incidents = dashboard_service.filter_active_incidents(incidents)  # ซ่อนเหตุการณ์ที่ปิดแล้วออกจากตาราง
 
     # เรียงงานที่ยังไม่จบก่อน (สถานะไม่ใช่ ปิดงาน/ยกเลิกงาน) เพื่อให้เห็นงานที่ต้องติดตามก่อน
     active_jobs = [j for j in jobs if j.get("Status") not in ("ปิดงาน", "ยกเลิกงาน")]
@@ -459,8 +460,11 @@ def alert_status(rtu_id):
 @login_required
 def incident_tree():
     user = request.current_user
-    incidents = dashboard_service.get_dashboard_incidents(user)
-    incident_ids_visible = {i["IncidentID"] for i in incidents}
+    all_visible_incidents = dashboard_service.get_dashboard_incidents(user)
+    incident_ids_visible = {i["IncidentID"] for i in all_visible_incidents}  # ใช้เช็คสิทธิ์เข้าดู
+    # รายละเอียด ต้องอิงรายการเต็มไม่กรอง กันลิงก์ตรงไปดูเหตุการณ์ที่ปิดแล้วพัง (เช่นจากหน้า
+    # "แสดง MNF ผิดปกติ")
+    incidents = dashboard_service.filter_active_incidents(all_visible_incidents)  # ตารางด้านบนซ่อนที่ปิดแล้ว
 
     selected_id = request.args.get("incident_id", "")
     selected_incident = None
