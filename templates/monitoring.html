@@ -330,6 +330,7 @@
 
     <div id="tabAnalysis" class="mtab-panel active">
       <div id="mHardBanner" style="display:none;margin-bottom:12px;padding:10px 14px;border-radius:10px;background:var(--red-soft);border:1px solid var(--red);color:var(--red);font-size:12.5px;font-weight:600;">⚡ <span id="mHardBannerText"></span></div>
+      <div id="mZigzagBanner" style="display:none;margin-bottom:12px;padding:10px 14px;border-radius:10px;background:var(--amber-soft);border:1px solid var(--amber);color:var(--amber);font-size:12.5px;font-weight:600;">⚠️ <span id="mZigzagBannerText"></span></div>
       <div id="mRemarkPanel" style="display:none;margin-bottom:12px;padding:10px 14px;border-radius:10px;background:var(--remark-soft);border:1px solid var(--remark);color:var(--remark);font-size:12.5px;">
         <div style="font-weight:700;margin-bottom:4px;">📌 หมายเหตุจากระบบ / Remark<span id="mRemarkCategory" class="mono" style="font-weight:400;font-size:11px;"></span></div>
         <div id="mRemarkText" style="font-weight:400;white-space:pre-wrap;"></div>
@@ -804,6 +805,10 @@ function summaryFromCsv(rows){
       // dayKeys ตัวสุดท้ายของ flow_log.csv ที่ parse เองฝั่ง JS ตอนนี้ dma_status_summary.csv มีคอลัมน์นี้
       // อยู่แล้ว (last_data_date) ไม่ต้องพึ่ง flow_log.csv อีกต่อไป
       lastDataDate: r.last_data_date || null,
+      // diagnostic เท่านั้น — ไม่มีผลต่อ case/status ใดๆ แค่เตือนให้คนไปเช็คข้อมูลดิบ ดูที่มาที่
+      // prepare_dma_csv.py คอมเมนต์ RTU_ZIGZAG_SIGN_CHANGE_RATIO
+      rtuZigzagFlag: String(r.rtu_zigzag_flag).toLowerCase()==='true',
+      rtuZigzagRatio: (r.rtu_zigzag_ratio!==undefined && r.rtu_zigzag_ratio!=='') ? Number(r.rtu_zigzag_ratio) : null,
     };
   });
   return out;
@@ -1389,6 +1394,7 @@ function openModal(code){
       </div>
       <div class="mkpi"><div class="l">ช่วง Night Flow (MNF Window) ที่ตั้งไว้</div><div class="v mono">${windowTxt}</div></div>`;
     document.getElementById('mHardBanner').style.display = 'none';
+    document.getElementById('mZigzagBanner').style.display = 'none';
 
     [mnfChart, cusumChart, hourlyChart, pressureChart].forEach(c => { if(c) c.destroy(); });
     mnfChart = cusumChart = hourlyChart = pressureChart = null;
@@ -1422,6 +1428,19 @@ function openModal(code){
     document.getElementById('mHardBannerText').textContent = d.a.caseReason || 'เกิน Hard Flow Threshold — เตือนทันทีโดยไม่รอผลสถิติ';
   } else {
     hardBanner.style.display = 'none';
+  }
+  // diagnostic เท่านั้น (ไม่กระทบ case/status) — เตือนว่าข้อมูล flow แกว่งขึ้นลงสลับทิศทางถี่ผิดปกติ อาจเกิด
+  // จาก RTU เวลาคลาดเคลื่อน/ข้อมูล 2 ชุดปนกัน ควรไปเช็คข้อมูลดิบก่อนเชื่อผลวิเคราะห์เต็มที่ — ดูที่มาของเกณฑ์
+  // ที่ RTU_ZIGZAG_SIGN_CHANGE_RATIO ใน prepare_dma_csv.py
+  const zigzagBanner = document.getElementById('mZigzagBanner');
+  if(d.a.rtuZigzagFlag){
+    zigzagBanner.style.display = 'block';
+    const pct = d.a.rtuZigzagRatio!=null ? `${(d.a.rtuZigzagRatio*100).toFixed(0)}%` : '';
+    document.getElementById('mZigzagBannerText').textContent =
+      `ข้อมูล flow แกว่งขึ้นลงสลับทิศทางถี่ผิดปกติ${pct?` (${pct} ของจุดข้อมูล)`:''} — อาจเกิดจากนาฬิกา RTU `+
+      `คลาดเคลื่อนหรือข้อมูลปนกัน 2 ชุด ควรตรวจสอบข้อมูลดิบก่อนเชื่อผลวิเคราะห์นี้เต็มที่`;
+  } else {
+    zigzagBanner.style.display = 'none';
   }
   // mkBadge/cusumNote อยู่ใน CUSUM chart-box ที่ comment ไว้ด้านบน — comment ตามไปด้วยกัน
   // document.getElementById('mkBadge').textContent = d.a.mk.significant ? `(Z=${d.a.mk.Z.toFixed(2)}, มีนัยสำคัญ)` : `(Z=${d.a.mk.Z.toFixed(2)}, ยังไม่ชัดเจน)`;
