@@ -106,6 +106,13 @@ def run_batch_tasks():
     source_file2_3 = r"C:\Users\00100156\Desktop\BI\NRW_Monitoring\flow_log.csv"
     destination_file2_3 = r"C:\NRWjob\static\data\flow_log.csv"
 
+    # dma_hourly_envelope.csv -- ไฟล์ที่กราฟรายวัน 15 นาทีใน dashboard ใช้ (ENVELOPE_CSV_URL ใน monitoring.html)
+    # เดิมไม่มี copy step นี้เลย ทำให้ prepare_dma_csv.py สร้างไฟล์ใหม่ถูกต้องทุกรอบในเครื่อง แต่ static folder
+    # ที่ dashboard โหลดจริงค้างเป็นเวอร์ชันเก่าตลอด (กราฟไม่ตรงกับตัวเลขใน dma_status_summary.csv ที่ถูกคัดลอก
+    # อัตโนมัติอยู่แล้ว) -- เพิ่มให้คัดลอกเหมือน 3 ไฟล์ด้านบนทุกประการ
+    source_file2_4 = r"C:\Users\00100156\Desktop\BI\NRW_Monitoring\dma_hourly_envelope.csv"
+    destination_file2_4 = r"C:\NRWjob\static\data\dma_hourly_envelope.csv"
+
     try:
         # ==========================================
         # ขั้นตอนที่ 1: รัน script1.py ใน folder_a
@@ -214,8 +221,24 @@ def run_batch_tasks():
             print(f"✅ คัดลอกไฟล์ไปยัง '{destination_file2_3}' เรียบร้อย\n")
         else:
             print(f"❌ ไม่พบไฟล์ '{source_file2_3}' การทำงานหยุดลง")
-            return 
-        
+            return
+
+        if os.path.exists(source_file2_4):
+
+            # ดึงเฉพาะชื่อโฟลเดอร์ปลายทางออกมา (E:\backup_folder)
+            dest_dir = os.path.dirname(destination_file2_4)
+
+            # ถ้าโฟลเดอร์ปลายทางยังไม่มีให้สร้างใหม่ก่อน (เพื่อป้องกัน Error)
+            if not os.path.exists(dest_dir):
+                os.makedirs(dest_dir)
+                print(f"📁 สร้างโฟลเดอร์ปลายทาง: {dest_dir}")
+
+            shutil.copy(source_file2_4, destination_file2_4)
+            print(f"✅ คัดลอกไฟล์ไปยัง '{destination_file2_4}' เรียบร้อย\n")
+        else:
+            print(f"❌ ไม่พบไฟล์ '{source_file2_4}' การทำงานหยุดลง")
+            return
+
         print("🎉 การทำงานทั้งหมดเสร็จสมบูรณ์!")
 
     except subprocess.CalledProcessError as e:
