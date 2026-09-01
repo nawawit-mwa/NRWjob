@@ -47,13 +47,22 @@ def git_push_auto(repo_dir, commit_message=None):
     except Exception as e:
         print(f"❌ เกิดข้อผิดพลาดที่ไม่คาดคิด: {e}")
 
-def get_latest_csv(folder_path, exclude_files=None):
+def get_latest_csv(folder_path, exclude_files=None, pattern="*.csv"):
     """ฟังก์ชันหาไฟล์ .csv ที่ถูกสร้างหรือแก้ไขล่าสุดในโฟลเดอร์
     exclude_files: path ของไฟล์ที่ไม่ต้องการนับ (เช่นไฟล์ปลายทางชื่อคงที่ที่ถูก copy ทับทุกรอบ)
     ป้องกันไม่ให้ไฟล์ปลายทางนั้นถูกเข้าใจผิดว่าเป็น "ไฟล์ดิบล่าสุด" ในรอบที่ไม่มีการดึงข้อมูลใหม่
+    pattern: glob pattern ของชื่อไฟล์ที่นับเป็น "ไฟล์ดิบ" ได้ (default "*.csv" = ทุกไฟล์ .csv ในโฟลเดอร์)
+    เดิมใช้ "*.csv" แบบกว้างสุด ซึ่งเป็นปัญหาเมื่อโฟลเดอร์เดียวกัน (NRW_Monitoring) มีทั้งไฟล์ raw จาก
+    WLMAmeterExport.py (ชื่อ VIEW_METER_HIST_RTU_*.csv) และไฟล์ output ของ pipeline เอง
+    (dma_status_summary.csv, dma_hourly_envelope.csv, rtu_quality_report.csv ฯลฯ) ปนกันอยู่ — รอบไหนที่
+    WLMAmeterExport.py ข้ามการดึง Oracle (cache ยังไม่เก่า) จะไม่มีไฟล์ raw ใหม่เกิดขึ้นเลย แต่ไฟล์ output
+    จากรอบก่อนหน้าที่เพิ่งถูกเขียนทับท้ายสุดจะ "ใหม่กว่า" เสมอ ทำให้ถูกเข้าใจผิดเป็น "ไฟล์ดิบล่าสุด" และถูก
+    copy ไปทับ rtu_raw_export.csv จนพัง (บั๊กที่เจอจริงและแก้ไปแล้ว) — เรียกจาก run_batch_tasks() ด้วย
+    pattern="VIEW_METER_HIST_RTU_*.csv" ให้ตรงกับชื่อไฟล์ที่ WLMAmeterExport.py สร้างจริงเท่านั้น กันไม่ให้
+    ไปหยิบไฟล์ output ของ pipeline เองมาใช้ผิดอีก
     """
-    # ค้นหาไฟล์ .csv ทั้งหมดในโฟลเดอร์
-    search_pattern = os.path.join(folder_path, "*.csv")
+    # ค้นหาไฟล์ที่ตรง pattern ในโฟลเดอร์ (ไม่ใช่ทุกไฟล์ .csv แบบเดิม — ดู docstring ด้านบน)
+    search_pattern = os.path.join(folder_path, pattern)
     csv_files = glob.glob(search_pattern)
 
     if exclude_files:
@@ -107,10 +116,17 @@ def run_batch_tasks():
         print("✅ รัน script1.py เสร็จสิ้น\n")
 
         # ==========================================
-        # ขั้นตอนที่ 2: ค้นหาไฟล์ CSV ล่าสุดที่เพิ่งสร้างขึ้นมา (ยกเว้นไฟล์ปลายทางเอง)
+        # ขั้นตอนที่ 2: ค้นหาไฟล์ CSV ดิบล่าสุดที่ WLMAmeterExport.py เพิ่งสร้างขึ้นมา (ยกเว้นไฟล์ปลายทางเอง)
+        # จำกัด pattern เหลือแค่ VIEW_METER_HIST_RTU_*.csv (ชื่อไฟล์ raw จริงจาก WLMAmeterExport.py บรรทัด
+        # 113) ไม่ใช่ "*.csv" กว้างๆ เหมือนเดิม — กันไม่ให้ไปหยิบไฟล์ output ของ pipeline เอง
+        # (dma_status_summary.csv, dma_hourly_envelope.csv ฯลฯ ที่อยู่โฟลเดอร์เดียวกัน) มาเข้าใจผิดว่าเป็น
+        # ไฟล์ raw ใหม่ ตอนที่ WLMAmeterExport.py ข้ามการดึง Oracle เพราะ cache ยังไม่เก่า (ดู docstring
+        # ของ get_latest_csv ด้านบนสำหรับรายละเอียดบั๊กเดิม)
         # ==========================================
-        print("--- 2. กำลังค้นหาไฟล์ CSV ล่าสุด ---")
-        latest_csv = get_latest_csv(dir_script2, exclude_files=[destination_file1])
+        print("--- 2. กำลังค้นหาไฟล์ CSV ดิบล่าสุด ---")
+        latest_csv = get_latest_csv(
+            dir_script2, exclude_files=[destination_file1], pattern="VIEW_METER_HIST_RTU_*.csv"
+        )
 
         if latest_csv:
             print(f"🔎 พบไฟล์ CSV ล่าสุด: {os.path.basename(latest_csv)}")
