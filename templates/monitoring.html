@@ -1580,6 +1580,22 @@ function escapeHtml(str){
   return String(str ?? '').replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
 }
 
+// ลิงก์ไปเปิด INC/ALT ที่ backend (incident_service.zip: app.py) — INC มี route ดูรายละเอียดเจาะจงตัวเดียว
+// อยู่แล้ว (/incidents/tree?incident_id=...) ส่วน ALT ยังไม่มี route ดูรายละเอียดเจาะจงตัวเดียว (เช็ค app.py
+// เต็มไฟล์แล้ว มีแค่ /alerts แบบ list รวม ไม่รับ query param กรอง) ผู้ใช้เลือก "ข้อ 1" คือลิงก์ไปหน้า list
+// เฉยๆ ไปก่อน — ทั้งสอง route มี @login_required ที่ backend คนไม่ login คลิกแล้วจะโดนเด้งไปหน้า login
+// (พฤติกรรมปกติของระบบ ไม่ได้ทำอะไรเพิ่มตรงนี้) เปิด target="_blank" เหมือน external link อื่นในไฟล์นี้
+// (ดู LINK นี้ บรรทัดบนสุดของหน้า) กันหน้า dashboard หลักถูกพาออกไปจากที่ดูอยู่
+function incidentLinkHtml(incidentId){
+  if(!incidentId) return '';
+  const id = escapeHtml(incidentId);
+  return `<a href="/incidents/tree?incident_id=${encodeURIComponent(incidentId)}" target="_blank" rel="noopener noreferrer">${id}</a>`;
+}
+function alertLinkHtml(alertId){
+  if(!alertId) return '';
+  return `<a href="/alerts" target="_blank" rel="noopener noreferrer">${escapeHtml(alertId)}</a>`;
+}
+
 function fmtJobTimestamp(iso){
   const dt = new Date(iso);
   if(isNaN(dt.getTime())) return String(iso ?? '—');
@@ -1729,12 +1745,12 @@ async function refreshAlertStatusPanel(rtuId){
         statusBadge.style.background = 'rgba(7,156,0,.14)';
         statusBadge.style.border = '1px solid var(--green)';
         statusBadge.style.color = 'var(--green)';
-        statusBadge.textContent = `✅ เปิดเป็นเหตุการณ์แล้ว: ${json.incident_id} (บันทึก ${json.alert_id} เมื่อ ${formatDateDDMMYYYY(json.saved_at)})`;
+        statusBadge.innerHTML = `✅ เปิดเป็นเหตุการณ์แล้ว: ${incidentLinkHtml(json.incident_id)} (บันทึก ${alertLinkHtml(json.alert_id)} เมื่อ ${escapeHtml(formatDateDDMMYYYY(json.saved_at))})`;
       } else {
         statusBadge.style.background = 'rgba(0,156,255,.10)';
         statusBadge.style.border = '1px solid var(--mwa-sky, #009cff)';
         statusBadge.style.color = 'var(--mwa-sky, #009cff)';
-        statusBadge.textContent = `📌 บันทึกการแจ้งเตือนไว้แล้ว: ${json.alert_id} เมื่อ ${formatDateDDMMYYYY(json.saved_at)}`;
+        statusBadge.innerHTML = `📌 บันทึกการแจ้งเตือนไว้แล้ว: ${alertLinkHtml(json.alert_id)} เมื่อ ${escapeHtml(formatDateDDMMYYYY(json.saved_at))}`;
       }
     }
 
@@ -1743,11 +1759,11 @@ async function refreshAlertStatusPanel(rtuId){
     if(json && json.saved){
       // มีการบันทึกไว้แล้ว (ยัง active) — ห้ามบันทึกซ้ำ โชว์แผง "บันทึกแล้ว" แทนฟอร์ม
       savedPanel.style.display = 'block';
-      document.getElementById('mAlertSavedId').textContent = json.alert_id;
+      document.getElementById('mAlertSavedId').innerHTML = alertLinkHtml(json.alert_id);
       document.getElementById('mAlertSavedDate').textContent = formatDateDDMMYYYY(json.saved_at);
       if(json.linked){
         linkedPanel.style.display = 'block';
-        document.getElementById('mAlertLinkedIncident').textContent = json.incident_id;
+        document.getElementById('mAlertLinkedIncident').innerHTML = incidentLinkHtml(json.incident_id);
       }
     } else {
       // ยังไม่เคยบันทึก (หรือบันทึกเดิมถูกยกเลิกไปแล้ว) — โชว์ฟอร์มบันทึกใหม่ได้ตามปกติ
