@@ -114,13 +114,13 @@
     <div class="mt-chart-grid">
       <div>
         <div style="font-size:0.78rem; font-weight:700; color:var(--ink-soft); margin-bottom:4px;">
-          Flow (F) — เส้นทึบ = 7 วันล่าสุด, เส้นประ = เดือน baseline
+          Flow (F) — แถบเทา = ช่วง min-max เดือน baseline, เส้นทึบ = ค่าเฉลี่ย 7 วันล่าสุด
         </div>
         <canvas id="mtChartF"></canvas>
       </div>
       <div>
         <div style="font-size:0.78rem; font-weight:700; color:var(--ink-soft); margin-bottom:4px;">
-          Pressure (P) — เส้นทึบ = 7 วันล่าสุด, เส้นประ = เดือน baseline
+          Pressure (P) — แถบเทา = ช่วง min-max เดือน baseline, เส้นทึบ = ค่าเฉลี่ย 7 วันล่าสุด
         </div>
         <canvas id="mtChartP"></canvas>
       </div>
@@ -153,8 +153,7 @@
 <script>
 (function () {
   const SUMMARY_CSV_URL = "{{ url_for('static', filename='data/mediumterm_dma_summary.csv') }}";
-  const DAILY_CURRENT_CSV_URL = "{{ url_for('static', filename='data/mediumterm_daily_current.csv') }}";
-  const DAILY_BASELINE_CSV_URL = "{{ url_for('static', filename='data/mediumterm_daily_baseline.csv') }}";
+  const ENVELOPE_CSV_URL = "{{ url_for('static', filename='data/mediumterm_hourly_envelope.csv') }}";
   const BRANCH_MAP_URL = "{{ url_for('mediumterm_rtu_branch_map') }}";
   const REMARKS_LATEST_URL = "{{ url_for('mediumterm_remarks_latest') }}";
   const REMARKS_FOR_RTU_URL = "{{ url_for('mediumterm_remarks_for_rtu', rtu_id='__ID__') }}";
@@ -163,12 +162,88 @@
   // สี — ใช้ token สีเดียวกับธีมหลักของเว็บ (var(--mwa-green)/--amber/--danger) ไม่ใช่สีสุ่มใหม่
   const COLOR_LABEL = { green: "mt-pill-green", yellow: "mt-pill-yellow", red: "mt-pill-red", gray: "mt-pill-gray" };
 
-  let rows = [];               // แถวตารางหลัก (รวม branch map + remark ล่าสุดแล้ว)
-  let dailyCurrentByDma = {};  // { dma_code: [{date, avg_f, avg_p}, ...] } เรียงตามวัน
-  let dailyBaselineByDma = {};
+  // กราฟรูปแบบรายวัน (แกน x = เวลาในหนึ่งวัน 00:00-24:00 ราย 15 นาที) — รูปแบบเดียวกับ hourlyChart/
+  // pressureChart ในหน้า monitoring.html เดิม ต่างกันแค่ความหมาย: แถบเทา = min-max ของ "เดือน baseline"
+  // (ไม่ใช่ 60 วันย้อนหลัง) และเส้นทึบ = ค่าเฉลี่ย 7 วันล่าสุด (ไม่ใช่ค่าจริงวันเดียวล่าสุด)
+  const INTERVALS_PER_DAY = 96;
+  const intervalLabels = Array.from({ length: INTERVALS_PER_DAY }, (_, i) => {
+    const h = Math.floor(i / 4).toString().padStart(2, "0"), m = ((i % 4) * 15).toString().padStart(2, "0");
+    return `${h}:${m}`;
+  });
+
+  let rows = [];              // แถวตารางหลัก (รวม branch map + remark ล่าสุดแล้ว)
+  let envelopeByDma = {};     // { dma_code: {flowCurrent[], flowBaselineMin[], flowBaselineMax[], pressure...[]} }
   let sortKey = "mnf_delta_pct";
   let sortDir = "desc";
   let chartF = null, chartP = null;
+
+  function chartOpts() {
+    return {
+      responsive: true, maintainAspectRatio: true,
+      interaction: { mode: "index", intersect: false },
+      plugins: { legend: { display: true, labels: { boxWidth: 10, font: { size: 10 } } } },
+      scales: {
+        x: { ticks: { font: { size: 9 }, maxTicksLimit: 8 } },
+        y: { ticks: { font: { size: 9 } } },
+      },
+      elements: { point: { hoverRadius: 4 } },
+    };
+  }
+
+  function envelopeFromCsv(envRows) {
+    const byDma = {};
+    envRows.forEach(r => {
+      if (!r.dma_code || r.interval_idx === undefined || r.interval_idx === "") return;
+      const idx = parseInt(r.interval_idx, 10);
+      if (isNaN(idx) || idx < 0 || idx >= INTERVALS_PER_DAY) return;
+
+      if (!byDma[r.dma_code]) {
+        byDma[r.dma_code] = {
+          flowCurrent: new Array(INTERVALS_PER_DAY).fill(null),
+          flowBaselineMin: new Array(INTERVALS_PER_DAY).fill(null),
+          flowBaselineMax: new Array(INTERVALS_PER_DAY).fill(null),
+          pressureCurrent: new Array(INTERVALS_PER_DAY).fill(null),
+          pressureBaselineMin: new Array(INTERVALS_PER_DAY).fill(null),
+          pressureBaselineMax: new Array(INTERVALS_PER_DAY).fill(null),
+        };
+      }
+      const num = v => (v === undefined || v === null || v === "") ? null : Number(v);
+      const d = byDma[r.dma_code];
+      d.flowCurrent[idx] = num(r.flow_current);
+      d.flowBaselineMin[idx] = num(r.flow_baseline_min);
+      d.flowBaselineMax[idx] = num(r.flow_baseline_max);
+      d.pressureCurrent[idx] = num(r.pressure_current);
+      d.pressureBaselineMin[idx] = num(r.pressure_baseline_min);
+      d.pressureBaselineMax[idx] = num(r.pressure_baseline_max);
+    });
+
+    // เติมช่องว่าง (กันกรณี interval ไหนไม่มีแถว/ค่าว่างใน CSV) — ตาข่ายกันพลาดชั้นสุดท้ายฝั่ง JS เท่านั้น
+    // (ข้อมูลจริงจาก build_envelope_stats() ฝั่ง Python ควรมีครบ 96 interval อยู่แล้ว) ตรรกะเดียวกับ
+    // fillGaps() ใน monitoring.html
+    const fillGaps = arr => {
+      for (let i = 0; i < arr.length; i++) {
+        if (arr[i] === null) {
+          const prev = arr[(i - 1 + arr.length) % arr.length], next = arr[(i + 1) % arr.length];
+          arr[i] = (prev !== null && next !== null) ? (prev + next) / 2 : (prev ?? next ?? 0);
+        }
+      }
+      return arr;
+    };
+
+    const out = {};
+    Object.entries(byDma).forEach(([code, d]) => {
+      const pressureAvailable = d.pressureCurrent.some(v => v !== null);
+      out[code] = {
+        flowCurrent: fillGaps(d.flowCurrent),
+        flowBaselineMin: fillGaps(d.flowBaselineMin),
+        flowBaselineMax: fillGaps(d.flowBaselineMax),
+        pressureCurrent: pressureAvailable ? fillGaps(d.pressureCurrent) : [],
+        pressureBaselineMin: pressureAvailable ? fillGaps(d.pressureBaselineMin) : [],
+        pressureBaselineMax: pressureAvailable ? fillGaps(d.pressureBaselineMax) : [],
+      };
+    });
+    return out;
+  }
 
   function parseCsv(url) {
     return new Promise((resolve, reject) => {
@@ -180,29 +255,17 @@
     });
   }
 
-  function groupByDma(dailyRows) {
-    const out = {};
-    for (const r of dailyRows) {
-      if (!r.dma_code) continue;
-      (out[r.dma_code] = out[r.dma_code] || []).push(r);
-    }
-    for (const code in out) out[code].sort((a, b) => (a.date > b.date ? 1 : -1));
-    return out;
-  }
-
   function fmtPct(v) { return v === null || v === undefined || isNaN(v) ? "—" : (v > 0 ? "+" : "") + v.toFixed(1) + "%"; }
   function fmtNum(v, d) { return v === null || v === undefined || isNaN(v) ? "—" : (v > 0 ? "+" : "") + v.toFixed(d); }
 
   function loadAll() {
     Promise.all([
       parseCsv(SUMMARY_CSV_URL),
-      parseCsv(DAILY_CURRENT_CSV_URL),
-      parseCsv(DAILY_BASELINE_CSV_URL),
+      parseCsv(ENVELOPE_CSV_URL),
       fetch(BRANCH_MAP_URL).then(r => r.json()),
       fetch(REMARKS_LATEST_URL).then(r => r.json()),
-    ]).then(([summary, dailyCurrent, dailyBaseline, branchMap, remarksLatest]) => {
-      dailyCurrentByDma = groupByDma(dailyCurrent);
-      dailyBaselineByDma = groupByDma(dailyBaseline);
+    ]).then(([summary, envelopeRows, branchMap, remarksLatest]) => {
+      envelopeByDma = envelopeFromCsv(envelopeRows);
 
       const baselineMonth = summary.length ? summary[0].baseline_month : "–";
       document.getElementById("mtBaselineMonthLabel").textContent = baselineMonth || "–";
@@ -295,32 +358,26 @@
   document.getElementById("mtFilterBranch").addEventListener("change", renderTable);
 
   // ---- Popup กราฟ + remark ----
-  function buildChart(canvasId, currentSeries, baselineSeries, valueKey, existingChart) {
+  // แถบเทา (min-max เดือน baseline) + เส้นทึบ (ค่าเฉลี่ย 7 วันล่าสุด) ตามรูปแบบ hourlyChart/pressureChart
+  // ของ monitoring.html เดิม: dataset "max" ใช้ fill:'+1' ไล่สีลงมาถึง dataset "min" ที่ตามมา (สร้างแถบ)
+  function buildEnvelopeChart(canvasId, envelope, currentKey, minKey, maxKey, lineColor, existingChart) {
     if (existingChart) existingChart.destroy();
-    const maxLen = Math.max(currentSeries.length, baselineSeries.length);
-    const labels = Array.from({ length: maxLen }, (_, i) => `วันที่ ${i + 1}`);
+    const hasData = !!(envelope && envelope[currentKey] && envelope[currentKey].length);
+    if (!hasData) return null;
     return new Chart(document.getElementById(canvasId), {
       type: "line",
       data: {
-        labels,
+        labels: intervalLabels,
         datasets: [
-          {
-            label: "7 วันล่าสุด",
-            data: currentSeries.map(d => d[valueKey]),
-            borderColor: "#009cff", backgroundColor: "#009cff", tension: 0.25, spanGaps: true,
-          },
-          {
-            label: "เดือน baseline",
-            data: baselineSeries.map(d => d[valueKey]),
-            borderColor: "#5c7488", backgroundColor: "#5c7488", borderDash: [5, 4], tension: 0.15, spanGaps: true,
-          },
+          { label: "baseline (สูงสุด)", data: envelope[maxKey], borderColor: "transparent",
+            backgroundColor: "rgba(139,160,190,.16)", fill: "+1", pointRadius: 0 },
+          { label: "baseline (ต่ำสุด)", data: envelope[minKey], borderColor: "transparent",
+            backgroundColor: "transparent", fill: false, pointRadius: 0 },
+          { label: "เฉลี่ย 7 วันล่าสุด", data: envelope[currentKey], borderColor: lineColor,
+            backgroundColor: "transparent", borderWidth: 2, pointRadius: 0, tension: 0.2 },
         ],
       },
-      options: {
-        responsive: true, maintainAspectRatio: true,
-        plugins: { legend: { display: true, labels: { boxWidth: 10, font: { size: 10 } } } },
-        scales: { x: { ticks: { font: { size: 9 } } }, y: { ticks: { font: { size: 9 } } } },
-      },
+      options: chartOpts(),
     });
   }
 
@@ -342,13 +399,14 @@
   function openPopup(dmaCode) {
     const row = rows.find(r => r.dma_code === dmaCode);
     document.getElementById("mtPopupTitle").textContent = dmaCode;
+    const windowTxt = row && row.current_window_start && row.current_window_end
+      ? ` • ช่วง 7 วันล่าสุด: ${row.current_window_start} ถึง ${row.current_window_end}` : "";
     document.getElementById("mtPopupSub").textContent =
-      row ? `${row.branch_name || ""} • MNF ${fmtPct(row.mnf_delta_pct)} • ปริมาณน้ำเข้า ${fmtPct(row.inflow_delta_pct)}` : "";
+      row ? `${row.branch_name || ""} • MNF ${fmtPct(row.mnf_delta_pct)} • ปริมาณน้ำเข้า ${fmtPct(row.inflow_delta_pct)}${windowTxt}` : "";
 
-    const cur = dailyCurrentByDma[dmaCode] || [];
-    const base = dailyBaselineByDma[dmaCode] || [];
-    chartF = buildChart("mtChartF", cur, base, "avg_f", chartF);
-    chartP = buildChart("mtChartP", cur, base, "avg_p", chartP);
+    const env = envelopeByDma[dmaCode] || {};
+    chartF = buildEnvelopeChart("mtChartF", env, "flowCurrent", "flowBaselineMin", "flowBaselineMax", "#38bfc7", chartF);
+    chartP = buildEnvelopeChart("mtChartP", env, "pressureCurrent", "pressureBaselineMin", "pressureBaselineMax", "#e8a33d", chartP);
 
     const rtuIdInput = document.getElementById("mtRemarkRtuId");
     if (rtuIdInput) rtuIdInput.value = dmaCode;
