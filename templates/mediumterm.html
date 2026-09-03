@@ -116,9 +116,8 @@
         </div>
       </div>
       <div class="mt-field mt-checkbox-row">
-        <label><input type="checkbox" id="mtHideZeroBaseline" checked> ซ่อน DM ที่ข้อมูล baseline เป็น 0</label>
-        <label><input type="checkbox" id="mtHideZeroCurrent" checked> ซ่อน DM ที่ข้อมูลปัจจุบันเป็น 0</label>
-        <label><input type="checkbox" id="mtShowOnlyZero"> แสดงเฉพาะ DM ที่ข้อมูลเป็น 0 (baseline หรือปัจจุบัน)</label>
+        <label><input type="checkbox" id="mtHideNearZeroMnf" checked> ซ่อน DM ที่ MNF ≈ 0 (baseline หรือปัจจุบัน ต่ำกว่า 5)</label>
+        <label><input type="checkbox" id="mtShowOnlyNearZeroMnf"> แสดงเฉพาะ DM ที่ MNF ≈ 0 (baseline หรือปัจจุบัน ต่ำกว่า 5)</label>
       </div>
       <div class="mt-meta" id="mtRowCount"></div>
     </div>
@@ -131,7 +130,7 @@
           <tr>
             <th data-key="dma_code">DM</th>
             <th data-key="branch_name">สาขา</th>
-            <th data-key="baseline_avg_mnf" class="mt-num">MNF baseline</th>
+            <th data-key="baseline_avg_mnf" class="mt-num">MNF เริ่มต้น</th>
             <th data-key="current_avg_mnf" class="mt-num">MNF ปัจจุบัน</th>
             <th data-key="mnf_delta_pct" class="mt-num">MNF Δ%</th>
             <th data-key="mnf_delta_abs" class="mt-num">MNF Δ (m³/hr)</th>
@@ -232,7 +231,10 @@
   // ชื่อหมวดเหตุผล — เก็บแยกจาก checkbox ซ่อนข้อมูล 0 เพราะอ่านค่าจาก checkbox ตรงๆ ตอน render แทน
   let activeFilters = { group: "", branch: "", remark: "" };
 
-  function isZero(v) { return typeof v === "number" && v === 0; }
+  // MNF ใกล้ 0 (มักหมายถึงมิเตอร์เสีย/ไม่มีข้อมูลจริง มากกว่า flow จริงที่เป็น 0 พอดี) — ใช้เกณฑ์ "ต่ำกว่า 5"
+  // (m³/hr) แทนเช็คเท่ากับ 0 เป๊ะๆ ตามที่ขอปรับ เดิมเช็คทั้ง MNF และปริมาณน้ำเข้ารวมกัน ตอนนี้ดู MNF อย่างเดียว
+  const MNF_NEAR_ZERO_THRESHOLD = 5;
+  function isNearZeroMnf(v) { return typeof v === "number" && v < MNF_NEAR_ZERO_THRESHOLD; }
 
   function chartOpts() {
     return {
@@ -360,9 +362,8 @@
   }
 
   function renderTable() {
-    const hideZeroBaseline = document.getElementById("mtHideZeroBaseline").checked;
-    const hideZeroCurrent = document.getElementById("mtHideZeroCurrent").checked;
-    const showOnlyZero = document.getElementById("mtShowOnlyZero").checked;
+    const hideNearZero = document.getElementById("mtHideNearZeroMnf").checked;
+    const showOnlyNearZero = document.getElementById("mtShowOnlyNearZeroMnf").checked;
     const { group, branch, remark } = activeFilters;
 
     let filtered = rows.filter(r => {
@@ -371,16 +372,14 @@
       if (remark === "__none__" && r.remark_obj) return false;
       if (remark && remark !== "__none__" && (!r.remark_obj || r.remark_obj.ReasonCategory !== remark)) return false;
 
-      // baseline/ปัจจุบัน = 0 มักหมายถึงไม่มีข้อมูลจริง (มิเตอร์เสีย/ยังไม่มีข้อมูลครบ) ไม่ใช่ค่าจริงที่วัดได้
-      // เป็น 0 — ซ่อนไว้เป็นค่าเริ่มต้นกันรก, หรือกลับกันจะกรองมาดูเฉพาะแถวที่เป็น 0 ก็ได้ (สอง checkbox นี้
-      // สลับกันใช้ ไม่เปิดพร้อมกัน — ดู syncZeroCheckboxes())
-      const baseZero = isZero(r.baseline_avg_mnf) || isZero(r.baseline_avg_daily_total);
-      const curZero = isZero(r.current_avg_mnf) || isZero(r.current_avg_daily_total);
-      if (showOnlyZero) {
-        if (!baseZero && !curZero) return false;
-      } else {
-        if (hideZeroBaseline && baseZero) return false;
-        if (hideZeroCurrent && curZero) return false;
+      // MNF baseline หรือปัจจุบัน ต่ำกว่าเกณฑ์ (ใกล้ 0) มักหมายถึงมิเตอร์เสีย/ไม่มีข้อมูลจริง — ซ่อนไว้เป็น
+      // ค่าเริ่มต้นกันรก หรือกลับกันจะกรองมาดูเฉพาะแถวนี้ก็ได้ (สอง checkbox สลับกันใช้ ไม่เปิดพร้อมกัน —
+      // ดู syncZeroCheckboxes())
+      const nearZero = isNearZeroMnf(r.baseline_avg_mnf) || isNearZeroMnf(r.current_avg_mnf);
+      if (showOnlyNearZero) {
+        if (!nearZero) return false;
+      } else if (hideNearZero && nearZero) {
+        return false;
       }
       return true;
     });
@@ -465,21 +464,19 @@
   setupBtnGroup("mtFilterBranchBtns", (value) => { activeFilters.branch = value; renderTable(); });
   setupBtnGroup("mtFilterRemarkBtns", (value) => { activeFilters.remark = value; renderTable(); });
 
-  // checkbox ซ่อน 0 (baseline/ปัจจุบัน) กับ checkbox "แสดงเฉพาะ 0" เป็นตรรกะตรงข้ามกัน เปิดพร้อมกันแล้วจะขัดกัน
-  // เอง (ซ่อนแล้วก็แสดงเฉพาะ = ไม่เหลือแถวไหนเลย) — สลับกันใช้แทน: เปิดฝั่งหนึ่งจะปิดอีกฝั่งให้อัตโนมัติ
-  const hideBaseCb = document.getElementById("mtHideZeroBaseline");
-  const hideCurCb = document.getElementById("mtHideZeroCurrent");
-  const onlyZeroCb = document.getElementById("mtShowOnlyZero");
+  // checkbox ซ่อน MNF≈0 กับ checkbox "แสดงเฉพาะ MNF≈0" เป็นตรรกะตรงข้ามกัน เปิดพร้อมกันแล้วจะขัดกันเอง
+  // (ซ่อนแล้วก็แสดงเฉพาะ = ไม่เหลือแถวไหนเลย) — สลับกันใช้แทน: เปิดฝั่งหนึ่งจะปิดอีกฝั่งให้อัตโนมัติ
+  const hideNearZeroCb = document.getElementById("mtHideNearZeroMnf");
+  const onlyNearZeroCb = document.getElementById("mtShowOnlyNearZeroMnf");
   function syncZeroCheckboxes(changed) {
-    if (changed === onlyZeroCb && onlyZeroCb.checked) {
-      hideBaseCb.checked = false;
-      hideCurCb.checked = false;
-    } else if ((changed === hideBaseCb || changed === hideCurCb) && changed.checked) {
-      onlyZeroCb.checked = false;
+    if (changed === onlyNearZeroCb && onlyNearZeroCb.checked) {
+      hideNearZeroCb.checked = false;
+    } else if (changed === hideNearZeroCb && changed.checked) {
+      onlyNearZeroCb.checked = false;
     }
     renderTable();
   }
-  [hideBaseCb, hideCurCb, onlyZeroCb].forEach(cb => cb.addEventListener("change", () => syncZeroCheckboxes(cb)));
+  [hideNearZeroCb, onlyNearZeroCb].forEach(cb => cb.addEventListener("change", () => syncZeroCheckboxes(cb)));
 
   // ---- Popup กราฟ + remark ----
   // แถบเทา (min-max เดือน baseline) + เส้นทึบ (ค่าเฉลี่ย 7 วันล่าสุด) ตามรูปแบบ hourlyChart/pressureChart
