@@ -74,7 +74,7 @@ SHEET_SCHEMAS = {
     # ทุกครั้งที่มีคนบันทึกเหตุผลของแนวโน้ม MNF/ปริมาณน้ำเข้าที่เพิ่มขึ้น (ไม่ลบทิ้งเมื่อปิดงานเหมือน
     # sheet "remark" เดิม) — ดู trend_remark_service.py
     "TrendRemarks": [
-        "RemarkID", "RTUID", "ReasonCategory", "Detail", "RecordedBy", "RecordedAt",
+        "RemarkID", "RTUID", "ReasonCategory", "Detail", "EventDate", "RecordedBy", "RecordedAt",
     ],
 }
 

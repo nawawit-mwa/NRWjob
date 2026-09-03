@@ -198,12 +198,14 @@ def mediumterm_save_remark():
     rtu_id = request.form.get("rtu_id", "").strip()
     reason_category = request.form.get("reason_category", "").strip()
     detail = request.form.get("detail", "").strip()
+    event_date = request.form.get("event_date", "").strip()
     if not rtu_id or not reason_category:
         return jsonify({"success": False, "error": "ข้อมูลไม่ครบ"}), 400
 
     row = trend_remark_service.save_trend_remark(
         rtu_id=rtu_id, reason_category=reason_category, detail=detail,
         recorded_by=user.get("Name") or user.get("UserID"),
+        event_date=event_date or None,
     )
     return jsonify({"success": True, "remark": row})
 

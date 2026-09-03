@@ -8,12 +8,27 @@
   /* หน้านี้แยกออกมาต่างหากจาก monitoring.html เดิม (Case A/B/C) — จับ "แนวโน้มค่อยๆ เพิ่มขึ้นระยะกลาง"
      (เทียบ 7 วันล่าสุด กับ baseline เดือนคงที่) คนละกลไกกับ CUSUM/sustained-breach เดิม จึงไม่ปนสี/สถานะ
      ของสองระบบเข้าด้วยกัน */
-  .mt-toolbar { display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; margin-bottom:16px; }
+  .mt-toolbar { display:flex; gap:20px; flex-wrap:wrap; align-items:flex-start; margin-bottom:16px; }
   .mt-field { display:flex; flex-direction:column; gap:4px; }
   .mt-field label { font-size:0.76rem; color:var(--ink-soft); font-weight:600; }
   .mt-field select { padding:7px 10px; border:1px solid var(--line); border-radius:6px;
     font-family:var(--font-ui); font-size:0.85rem; min-width:160px; }
-  .mt-meta { font-size:0.78rem; color:var(--ink-soft); margin-left:auto; }
+  .mt-meta { font-size:0.78rem; color:var(--ink-soft); margin-left:auto; padding-top:4px; }
+
+  /* ตัวกรอง ภาค/สาขา/Remark แบบปุ่มเลือก (แทน <select> เดิม) */
+  .mt-btn-group { display:flex; flex-wrap:wrap; gap:6px; max-width:420px; }
+  .mt-btn-group.scroll { max-height:96px; overflow-y:auto; padding:4px; border:1px solid var(--line);
+    border-radius:8px; }
+  .mt-filter-btn { padding:5px 12px; border:1px solid var(--line); border-radius:999px;
+    background:var(--panel); font-family:var(--font-ui); font-size:0.78rem; cursor:pointer;
+    color:var(--ink-soft); white-space:nowrap; }
+  .mt-filter-btn.active { background:var(--mwa-sky); color:#fff; border-color:var(--mwa-sky); }
+  .mt-filter-btn[hidden] { display:none; }
+
+  .mt-checkbox-row { gap:6px; padding-top:4px; }
+  .mt-checkbox-row label { display:flex; align-items:center; gap:6px; font-size:0.8rem;
+    color:var(--ink-soft); font-weight:400; cursor:pointer; }
+  .mt-checkbox-row input[type="checkbox"] { cursor:pointer; }
 
   table.mt-table th { cursor:pointer; user-select:none; white-space:normal; }
   table.mt-table th.sorted::after { content:" " attr(data-arrow); }
@@ -43,8 +58,9 @@
   @media (max-width:640px) { .mt-chart-grid { grid-template-columns:1fr; } }
 
   .mt-remark-form { display:flex; gap:8px; flex-wrap:wrap; align-items:flex-start; margin-top:6px; }
-  .mt-remark-form select, .mt-remark-form input[type="text"] { padding:7px 10px; border:1px solid var(--line);
-    border-radius:6px; font-family:var(--font-ui); font-size:0.82rem; }
+  .mt-remark-form select, .mt-remark-form input[type="text"], .mt-remark-form input[type="date"] {
+    padding:7px 10px; border:1px solid var(--line); border-radius:6px; font-family:var(--font-ui);
+    font-size:0.82rem; }
   .mt-remark-form input[type="text"] { flex:1; min-width:160px; }
   .mt-remark-history { margin-top:14px; border-top:1px solid var(--line); padding-top:10px; }
   .mt-remark-item { font-size:0.8rem; padding:6px 0; border-bottom:1px dashed var(--line); }
@@ -63,22 +79,36 @@
 
   <div class="mt-toolbar">
     <div class="mt-field">
-      <label for="mtFilterGroup">ภาค</label>
-      <select id="mtFilterGroup">
-        <option value="">ทั้งหมด</option>
+      <label>ภาค</label>
+      <div class="mt-btn-group" id="mtFilterGroupBtns">
+        <button type="button" class="mt-filter-btn active" data-value="">ทั้งหมด</button>
         {% for g in branch_groups %}
-        <option value="{{ g.BranchGroupID }}">{{ g.BranchGroupName }}</option>
+        <button type="button" class="mt-filter-btn" data-value="{{ g.BranchGroupID }}">{{ g.BranchGroupName }}</button>
         {% endfor %}
-      </select>
+      </div>
     </div>
     <div class="mt-field">
-      <label for="mtFilterBranch">สาขา</label>
-      <select id="mtFilterBranch">
-        <option value="">ทั้งหมด</option>
+      <label>สาขา</label>
+      <div class="mt-btn-group scroll" id="mtFilterBranchBtns">
+        <button type="button" class="mt-filter-btn active" data-value="">ทั้งหมด</button>
         {% for b in branches %}
-        <option value="{{ b.BranchID }}" data-group="{{ b.BranchGroupID }}">{{ b.BranchName }}</option>
+        <button type="button" class="mt-filter-btn" data-value="{{ b.BranchID }}" data-group="{{ b.BranchGroupID }}">{{ b.BranchName }}</button>
         {% endfor %}
-      </select>
+      </div>
+    </div>
+    <div class="mt-field">
+      <label>Remark</label>
+      <div class="mt-btn-group" id="mtFilterRemarkBtns">
+        <button type="button" class="mt-filter-btn active" data-value="">ทั้งหมด</button>
+        <button type="button" class="mt-filter-btn" data-value="__none__">ยังไม่มี remark</button>
+        {% for r in reason_categories %}
+        <button type="button" class="mt-filter-btn" data-value="{{ r }}">{{ r }}</button>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="mt-field mt-checkbox-row">
+      <label><input type="checkbox" id="mtHideZeroBaseline" checked> ซ่อน DMA ที่ข้อมูล baseline เป็น 0</label>
+      <label><input type="checkbox" id="mtHideZeroCurrent" checked> ซ่อน DMA ที่ข้อมูลปัจจุบันเป็น 0</label>
     </div>
     <div class="mt-meta" id="mtRowCount"></div>
   </div>
@@ -136,6 +166,7 @@
           <option value="{{ r }}">{{ r }}</option>
           {% endfor %}
         </select>
+        <input type="date" id="mtRemarkEventDate" required title="วันที่เกิดเหตุการณ์">
         <input type="text" id="mtRemarkDetail" placeholder="รายละเอียดเพิ่มเติม (ถ้ามี)">
         <button type="submit" class="btn-primary btn-sm">บันทึก</button>
       </form>
@@ -176,6 +207,11 @@
   let sortKey = "mnf_delta_pct";
   let sortDir = "desc";
   let chartF = null, chartP = null;
+  // ตัวกรองแบบปุ่ม: group/branch = ภาค/สาขา, remark = "" (ทั้งหมด) / "__none__" (ยังไม่มี remark) /
+  // ชื่อหมวดเหตุผล — เก็บแยกจาก checkbox ซ่อนข้อมูล 0 เพราะอ่านค่าจาก checkbox ตรงๆ ตอน render แทน
+  let activeFilters = { group: "", branch: "", remark: "" };
+
+  function isZero(v) { return typeof v === "number" && v === 0; }
 
   function chartOpts() {
     return {
@@ -278,7 +314,9 @@
           branch_id: b.BranchID || "",
           branch_name: b.BranchName || "",
           branch_group_id: b.BranchGroupID || "",
-          remark_text: remark ? `${remark.ReasonCategory}${remark.Detail ? " — " + remark.Detail : ""}` : "",
+          remark_text: remark
+            ? `${remark.ReasonCategory}${remark.Detail ? " — " + remark.Detail : ""}${remark.EventDate ? " (" + remark.EventDate + ")" : ""}`
+            : "",
           remark_obj: remark || null,
         };
       });
@@ -290,18 +328,22 @@
     });
   }
 
-  function currentFilters() {
-    return {
-      group: document.getElementById("mtFilterGroup").value,
-      branch: document.getElementById("mtFilterBranch").value,
-    };
-  }
-
   function renderTable() {
-    const { group, branch } = currentFilters();
-    let filtered = rows.filter(r =>
-      (!group || r.branch_group_id === group) && (!branch || r.branch_id === branch)
-    );
+    const hideZeroBaseline = document.getElementById("mtHideZeroBaseline").checked;
+    const hideZeroCurrent = document.getElementById("mtHideZeroCurrent").checked;
+    const { group, branch, remark } = activeFilters;
+
+    let filtered = rows.filter(r => {
+      if (group && r.branch_group_id !== group) return false;
+      if (branch && r.branch_id !== branch) return false;
+      if (remark === "__none__" && r.remark_obj) return false;
+      if (remark && remark !== "__none__" && (!r.remark_obj || r.remark_obj.ReasonCategory !== remark)) return false;
+      // baseline/ปัจจุบัน = 0 มักหมายถึงไม่มีข้อมูลจริง (มิเตอร์เสีย/ยังไม่มีข้อมูลครบ) ไม่ใช่ค่าจริงที่วัดได้
+      // เป็น 0 — ซ่อนไว้เป็นค่าเริ่มต้นกันรก ปลดออกได้จาก checkbox ถ้าต้องการเห็นด้วย
+      if (hideZeroBaseline && (isZero(r.baseline_avg_mnf) || isZero(r.baseline_avg_daily_total))) return false;
+      if (hideZeroCurrent && (isZero(r.current_avg_mnf) || isZero(r.current_avg_daily_total))) return false;
+      return true;
+    });
 
     filtered.sort((a, b) => {
       let av = a[sortKey], bv = b[sortKey];
@@ -347,15 +389,40 @@
     });
   });
 
-  document.getElementById("mtFilterGroup").addEventListener("change", () => {
-    const groupId = document.getElementById("mtFilterGroup").value;
-    document.querySelectorAll("#mtFilterBranch option[data-group]").forEach(opt => {
-      opt.hidden = !!groupId && opt.getAttribute("data-group") !== groupId;
+  // ---- ตัวกรองแบบปุ่ม (ภาค/สาขา/Remark) ----
+  function setupBtnGroup(containerId, onSelect) {
+    const container = document.getElementById(containerId);
+    container.querySelectorAll(".mt-filter-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        container.querySelectorAll(".mt-filter-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        onSelect(btn.getAttribute("data-value"));
+      });
     });
-    document.getElementById("mtFilterBranch").value = "";
+  }
+
+  function selectBranchGroupBtn(value) {
+    const container = document.getElementById("mtFilterBranchBtns");
+    container.querySelectorAll(".mt-filter-btn").forEach(b => b.classList.remove("active"));
+    const target = container.querySelector(`.mt-filter-btn[data-value="${value}"]`);
+    (target || container.querySelector('.mt-filter-btn[data-value=""]')).classList.add("active");
+  }
+
+  setupBtnGroup("mtFilterGroupBtns", (value) => {
+    activeFilters.group = value;
+    // ซ่อนปุ่มสาขาที่ไม่ได้อยู่ในภาคนี้ (เหมือน select เดิม) แล้วรีเซ็ตตัวกรองสาขากลับ "ทั้งหมด"
+    document.querySelectorAll("#mtFilterBranchBtns .mt-filter-btn[data-group]").forEach(btn => {
+      btn.hidden = !!value && btn.getAttribute("data-group") !== value;
+    });
+    activeFilters.branch = "";
+    selectBranchGroupBtn("");
     renderTable();
   });
-  document.getElementById("mtFilterBranch").addEventListener("change", renderTable);
+  setupBtnGroup("mtFilterBranchBtns", (value) => { activeFilters.branch = value; renderTable(); });
+  setupBtnGroup("mtFilterRemarkBtns", (value) => { activeFilters.remark = value; renderTable(); });
+
+  document.getElementById("mtHideZeroBaseline").addEventListener("change", renderTable);
+  document.getElementById("mtHideZeroCurrent").addEventListener("change", renderTable);
 
   // ---- Popup กราฟ + remark ----
   // แถบเทา (min-max เดือน baseline) + เส้นทึบ (ค่าเฉลี่ย 7 วันล่าสุด) ตามรูปแบบ hourlyChart/pressureChart
@@ -390,7 +457,7 @@
         el.innerHTML = list.map(r => `
           <div class="mt-remark-item">
             <b>${r.ReasonCategory}</b>${r.Detail ? " — " + r.Detail : ""}
-            <div class="meta">${r.RecordedBy} • ${r.RecordedAt}</div>
+            <div class="meta">วันที่เหตุการณ์ ${r.EventDate || "—"} • บันทึกโดย ${r.RecordedBy} เมื่อ ${r.RecordedAt}</div>
           </div>
         `).join("");
       });
@@ -410,6 +477,8 @@
 
     const rtuIdInput = document.getElementById("mtRemarkRtuId");
     if (rtuIdInput) rtuIdInput.value = dmaCode;
+    const eventDateInput = document.getElementById("mtRemarkEventDate");
+    if (eventDateInput) eventDateInput.value = new Date().toISOString().slice(0, 10); // default = วันนี้
     loadRemarkHistory(dmaCode);
 
     document.getElementById("mtPopupOverlay").classList.add("open");
@@ -429,9 +498,11 @@
       e.preventDefault();
       const rtuId = document.getElementById("mtRemarkRtuId").value;
       const reason = document.getElementById("mtRemarkReason").value;
+      const eventDate = document.getElementById("mtRemarkEventDate").value;
       const detail = document.getElementById("mtRemarkDetail").value;
       const fd = new FormData();
-      fd.append("rtu_id", rtuId); fd.append("reason_category", reason); fd.append("detail", detail);
+      fd.append("rtu_id", rtuId); fd.append("reason_category", reason);
+      fd.append("event_date", eventDate); fd.append("detail", detail);
       fetch(SAVE_REMARK_URL, { method: "POST", body: fd })
         .then(r => r.json())
         .then(data => {
@@ -442,7 +513,8 @@
           const row = rows.find(r => r.dma_code === rtuId);
           if (row) {
             row.remark_obj = data.remark;
-            row.remark_text = `${data.remark.ReasonCategory}${data.remark.Detail ? " — " + data.remark.Detail : ""}`;
+            row.remark_text = `${data.remark.ReasonCategory}${data.remark.Detail ? " — " + data.remark.Detail : ""}` +
+              (data.remark.EventDate ? ` (${data.remark.EventDate})` : "");
             renderTable();
           }
         })

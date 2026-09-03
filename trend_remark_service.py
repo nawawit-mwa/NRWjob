@@ -9,7 +9,7 @@ trend_remark_service.py
 ที่มีอยู่แล้ว เพราะ get_or_create_worksheet สร้างเฉพาะ tab ที่ยังไม่มีเท่านั้น)
 
 หมวดเหตุผล (ReasonCategory) ที่เสนอ — ผู้ใช้เลือกจาก dropdown ในหน้าเว็บ (แก้ list นี้ได้ตามต้องการ):
-    น้ำขายเพิ่ม / ปรับประตูน้ำ DMA / เติมเอง / อื่นๆ
+    น้ำขายเพิ่ม / ปรับประตูน้ำ DMA / อยู่ขั้นตอน ALC / อื่นๆ
 """
 
 from datetime import datetime
@@ -18,11 +18,14 @@ import sheets_client as sc
 
 TREND_REMARK_SHEET_NAME = "TrendRemarks"
 
-REASON_CATEGORIES = ["น้ำขายเพิ่ม", "ปรับประตูน้ำ DMA", "เติมเอง", "อื่นๆ"]
+REASON_CATEGORIES = ["น้ำขายเพิ่ม", "ปรับประตูน้ำ DMA", "อยู่ขั้นตอน ALC", "อื่นๆ"]
 
 
-def save_trend_remark(rtu_id: str, reason_category: str, detail: str, recorded_by: str) -> dict:
+def save_trend_remark(rtu_id: str, reason_category: str, detail: str, recorded_by: str,
+                       event_date: str = None) -> dict:
     """บันทึก remark ใหม่ 1 แถว (append เสมอ ไม่ overwrite ของเดิม — เก็บเป็นประวัติสะสมต่อ DMA)
+    event_date = วันที่เหตุการณ์จริงเกิดขึ้น (ผู้ใช้กรอกเอง เช่น วันที่ปรับประตูน้ำ) แยกจาก RecordedAt
+    ที่เป็นเวลาที่ "กดบันทึก" — ถ้าไม่ส่งมา fallback เป็นวันที่วันนี้
     คืน dict ของแถวที่เพิ่งบันทึก (มี RemarkID ให้ใช้อ้างอิงต่อได้)"""
     if reason_category not in REASON_CATEGORIES:
         reason_category = "อื่นๆ"
@@ -32,6 +35,7 @@ def save_trend_remark(rtu_id: str, reason_category: str, detail: str, recorded_b
         "RTUID": rtu_id,
         "ReasonCategory": reason_category,
         "Detail": detail or "",
+        "EventDate": event_date or datetime.now().strftime("%Y-%m-%d"),
         "RecordedBy": recorded_by,
         "RecordedAt": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     }
