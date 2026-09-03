@@ -21,6 +21,8 @@
           <div class="side-nav-label">ภาพรวม</div>
           <a href="{{ url_for('monitoring') }}"
              class="side-nav-item {{ 'active' if active_page == 'monitoring' }}">ติดตาม MNF/RTU</a>
+          <a href="{{ url_for('mediumterm_trend') }}"
+             class="side-nav-item {{ 'active' if active_page == 'mediumterm' }}">ติดตาม MNF เทียบ ก.ย. 68</a>
           <a href="{{ url_for('incident_tree') }}"
              class="side-nav-item {{ 'active' if active_page == 'incident_tree' }}">ติดตามเหตุการณ์</a>
           <a href="{{ url_for('dashboard') }}"
@@ -62,6 +64,8 @@
           <div class="side-nav-label">ภาพรวม</div>
           <a href="{{ url_for('monitoring') }}"
              class="side-nav-item {{ 'active' if active_page == 'monitoring' }}">ติดตาม MNF/RTU</a>
+          <a href="{{ url_for('mediumterm_trend') }}"
+             class="side-nav-item {{ 'active' if active_page == 'mediumterm' }}">ติดตาม MNF เทียบ ก.ย. 68</a>
         </div>
       </nav>
       <div class="side-nav-footer">

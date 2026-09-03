@@ -68,6 +68,14 @@ SHEET_SCHEMAS = {
 
     # --- Viewer scope ---
     "ViewerScopes": ["ScopeID", "UserID", "BranchID", "ViewAsRole", "AssignedBy", "AssignedAt"],
+
+    # --- Remark ของ "ระบบเตือนแนวโน้มระยะกลาง" (medium-term trend) — คนละ sheet กับ "remark" เดิมที่ผูก
+    # กับ flow ปิดงาน (remark_service.py) โดยเจตนา เพราะเป็นคนละ feature กัน: sheet นี้เก็บประวัติสะสม
+    # ทุกครั้งที่มีคนบันทึกเหตุผลของแนวโน้ม MNF/ปริมาณน้ำเข้าที่เพิ่มขึ้น (ไม่ลบทิ้งเมื่อปิดงานเหมือน
+    # sheet "remark" เดิม) — ดู trend_remark_service.py
+    "TrendRemarks": [
+        "RemarkID", "RTUID", "ReasonCategory", "Detail", "RecordedBy", "RecordedAt",
+    ],
 }
 
 

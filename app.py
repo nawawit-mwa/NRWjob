@@ -20,6 +20,7 @@ import job_service
 import org_service
 import remark_service
 import sheets_client as sc
+import trend_remark_service
 from constants import (
     ROLE_ADMIN, ROLE_DEPUTY_GOVERNOR, ROLE_ASSISTANT_GOVERNOR, ASSIGNER_ROLES,
     ROLE_ENGINEER, ROLE_LEVELS,
@@ -130,6 +131,81 @@ def monitoring():
     return render_template(
         "monitoring.html", user=user, active_page="monitoring", can_manage_job=can_manage_job
     )
+
+
+@app.route("/mediumterm")
+def mediumterm_trend():
+    """หน้าใหม่: ระบบเตือนแนวโน้ม MNF/ปริมาณน้ำเข้าเพิ่มขึ้นระยะกลาง (เทียบ 7 วันล่าสุด กับ baseline
+    เดือนคงที่) — แยกออกจากตัวจับสัญญาณเฉียบพลัน Case A/B/C ในหน้า monitoring เดิมโดยเจตนา (คนละกลไก
+    คนละไฟล์ข้อมูล คนละ threshold ไม่ปนกัน) ตัวเลข MNF/ปริมาณน้ำเข้าทั้งหมดโหลดจาก
+    static/data/mediumterm_*.csv ฝั่ง JS เอง (เหมือน monitoring.html เดิมที่โหลด dma_status_summary.csv
+    ฝั่ง client) — route นี้แค่ส่ง option ตัวกรองภาค/สาขา + สิทธิ์บันทึก remark ให้ template
+    ดูได้โดยไม่ต้อง login เหมือนหน้า monitoring หลัก (ต้อง login เฉพาะตอนจะบันทึก remark เท่านั้น)"""
+    user = get_optional_user()
+    can_add_remark = bool(user)
+
+    branch_groups = sc.get_all_records("BranchGroups")
+    branches = sc.get_all_records("Branches")
+
+    return render_template(
+        "mediumterm.html", user=user, active_page="mediumterm",
+        can_add_remark=can_add_remark,
+        branch_groups=branch_groups, branches=branches,
+        reason_categories=trend_remark_service.REASON_CATEGORIES,
+    )
+
+
+@app.route("/mediumterm/rtu-branch-map")
+def mediumterm_rtu_branch_map():
+    """คืน {RTUID: {BranchID, BranchName, BranchGroupID, BranchGroupName}} ของทุก DMA ในครั้งเดียว —
+    ให้ฝั่ง JS ใช้กรองตารางตามภาค/สาขาได้ (ตัวเลข MNF/ปริมาณน้ำเข้าอยู่ใน CSV แยกจาก Google Sheet
+    จึงต้อง join กันฝั่ง client)"""
+    rtus = sc.get_all_records("RTUs")
+    branches = {b["BranchID"]: b for b in sc.get_all_records("Branches")}
+    branch_groups = {g["BranchGroupID"]: g for g in sc.get_all_records("BranchGroups")}
+
+    result = {}
+    for rtu in rtus:
+        branch = branches.get(rtu.get("BranchID"), {})
+        group = branch_groups.get(branch.get("BranchGroupID"), {})
+        result[rtu["RTUID"]] = {
+            "BranchID": rtu.get("BranchID", ""),
+            "BranchName": branch.get("BranchName", ""),
+            "BranchGroupID": branch.get("BranchGroupID", ""),
+            "BranchGroupName": group.get("BranchGroupName", ""),
+        }
+    return jsonify(result)
+
+
+@app.route("/mediumterm/remarks-latest")
+def mediumterm_remarks_latest():
+    """คืน remark ล่าสุดของทุก DMA ในครั้งเดียว (bulk) — สำหรับโชว์แบบย่อในตารางหลัก"""
+    return jsonify(trend_remark_service.get_latest_remarks_map())
+
+
+@app.route("/mediumterm/remarks/<rtu_id>")
+def mediumterm_remarks_for_rtu(rtu_id):
+    """คืนประวัติ remark ทั้งหมดของ DMA นี้ เรียงใหม่สุดก่อน (สำหรับ popup กราฟ)"""
+    return jsonify(trend_remark_service.get_remarks_for_rtu(rtu_id))
+
+
+@app.route("/mediumterm/save-remark", methods=["POST"])
+@login_required
+def mediumterm_save_remark():
+    """บันทึก remark ใหม่ 1 แถว (append เข้าประวัติ ไม่ overwrite ของเดิม) — ต้อง login เท่านั้น
+    (เอาชื่อผู้บันทึกจาก session เสมอ ไม่รับจาก client กันปลอมชื่อ)"""
+    user = request.current_user
+    rtu_id = request.form.get("rtu_id", "").strip()
+    reason_category = request.form.get("reason_category", "").strip()
+    detail = request.form.get("detail", "").strip()
+    if not rtu_id or not reason_category:
+        return jsonify({"success": False, "error": "ข้อมูลไม่ครบ"}), 400
+
+    row = trend_remark_service.save_trend_remark(
+        rtu_id=rtu_id, reason_category=reason_category, detail=detail,
+        recorded_by=user.get("Name") or user.get("UserID"),
+    )
+    return jsonify({"success": True, "remark": row})
 
 
 @app.route("/login", methods=["GET", "POST"])

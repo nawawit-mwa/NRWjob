@@ -1,0 +1,398 @@
+{% extends "base_sidebar.html" %}
+{% block title %}แนวโน้มระยะกลาง — Smart NRW{% endblock %}
+
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<style>
+  /* หน้านี้แยกออกมาต่างหากจาก monitoring.html เดิม (Case A/B/C) — จับ "แนวโน้มค่อยๆ เพิ่มขึ้นระยะกลาง"
+     (เทียบ 7 วันล่าสุด กับ baseline เดือนคงที่) คนละกลไกกับ CUSUM/sustained-breach เดิม จึงไม่ปนสี/สถานะ
+     ของสองระบบเข้าด้วยกัน */
+  .mt-toolbar { display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; margin-bottom:16px; }
+  .mt-field { display:flex; flex-direction:column; gap:4px; }
+  .mt-field label { font-size:0.76rem; color:var(--ink-soft); font-weight:600; }
+  .mt-field select { padding:7px 10px; border:1px solid var(--line); border-radius:6px;
+    font-family:var(--font-ui); font-size:0.85rem; min-width:160px; }
+  .mt-meta { font-size:0.78rem; color:var(--ink-soft); margin-left:auto; }
+
+  table.mt-table th { cursor:pointer; user-select:none; white-space:normal; }
+  table.mt-table th.sorted::after { content:" " attr(data-arrow); }
+  table.mt-table td.mt-num { text-align:right; font-variant-numeric:tabular-nums; }
+  table.mt-table tr { cursor:pointer; }
+
+  .mt-pill { display:inline-block; padding:2px 9px; border-radius:999px; font-size:0.78rem; font-weight:700; }
+  .mt-pill-green { background:#e0f4de; color:var(--mwa-green); }
+  .mt-pill-yellow { background:#f7ecd6; color:var(--amber); }
+  .mt-pill-red { background:#fbe9e4; color:var(--danger); }
+  .mt-pill-gray { background:#eef2f6; color:var(--ink-soft); }
+
+  .mt-remark-cell { font-size:0.78rem; color:var(--ink-soft); max-width:220px; white-space:normal; }
+  .mt-remark-cell b { color:var(--ink); }
+
+  .mt-popup-overlay { display:none; position:fixed; inset:0; background:rgba(10,25,40,0.55);
+    align-items:center; justify-content:center; z-index:100; padding:20px; }
+  .mt-popup-overlay.open { display:flex; }
+  .mt-popup-box { position:relative; background:var(--panel); border-radius:14px; padding:26px 28px;
+    width:100%; max-width:820px; max-height:88vh; overflow-y:auto; box-shadow:0 24px 60px rgba(5,25,40,0.4); }
+  .mt-popup-close { position:absolute; top:14px; right:14px; background:none; border:1px solid var(--line);
+    color:var(--ink-soft); width:28px; height:28px; border-radius:8px; cursor:pointer; font-size:0.85rem; }
+  .mt-popup-box h3 { margin:0 0 4px; font-size:1.1rem; color:var(--mwa-navy-deep); }
+  .mt-popup-sub { font-size:0.82rem; color:var(--ink-soft); margin-bottom:16px; }
+  .mt-chart-grid { display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-bottom:18px; }
+  .mt-chart-grid canvas { max-height:220px; }
+  @media (max-width:640px) { .mt-chart-grid { grid-template-columns:1fr; } }
+
+  .mt-remark-form { display:flex; gap:8px; flex-wrap:wrap; align-items:flex-start; margin-top:6px; }
+  .mt-remark-form select, .mt-remark-form input[type="text"] { padding:7px 10px; border:1px solid var(--line);
+    border-radius:6px; font-family:var(--font-ui); font-size:0.82rem; }
+  .mt-remark-form input[type="text"] { flex:1; min-width:160px; }
+  .mt-remark-history { margin-top:14px; border-top:1px solid var(--line); padding-top:10px; }
+  .mt-remark-item { font-size:0.8rem; padding:6px 0; border-bottom:1px dashed var(--line); }
+  .mt-remark-item:last-child { border-bottom:none; }
+  .mt-remark-item .meta { color:var(--ink-soft); font-size:0.72rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+  <div class="section-title">📈 แนวโน้ม MNF / ปริมาณน้ำเข้าเพิ่มขึ้นระยะกลาง</div>
+  <p class="mt-popup-sub" style="margin-bottom:18px;">
+    เปรียบเทียบค่าเฉลี่ย 7 วันล่าสุด กับ baseline เดือน <b id="mtBaselineMonthLabel">–</b>
+    (คนละระบบกับการจับสัญญาณเฉียบพลัน Case A/B/C ในหน้า "ติดตาม MNF/RTU")
+  </p>
+
+  <div class="mt-toolbar">
+    <div class="mt-field">
+      <label for="mtFilterGroup">ภาค</label>
+      <select id="mtFilterGroup">
+        <option value="">ทั้งหมด</option>
+        {% for g in branch_groups %}
+        <option value="{{ g.BranchGroupID }}">{{ g.BranchGroupName }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="mt-field">
+      <label for="mtFilterBranch">สาขา</label>
+      <select id="mtFilterBranch">
+        <option value="">ทั้งหมด</option>
+        {% for b in branches %}
+        <option value="{{ b.BranchID }}" data-group="{{ b.BranchGroupID }}">{{ b.BranchName }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="mt-meta" id="mtRowCount"></div>
+  </div>
+
+  <div class="panel">
+    <div style="overflow-x:auto;">
+      <table class="mt-table">
+        <thead>
+          <tr>
+            <th data-key="dma_code">DMA</th>
+            <th data-key="branch_name">สาขา</th>
+            <th data-key="mnf_delta_pct" class="mt-num">MNF Δ%</th>
+            <th data-key="mnf_delta_abs" class="mt-num">MNF Δ (m³/hr)</th>
+            <th data-key="inflow_delta_pct" class="mt-num">ปริมาณน้ำเข้า Δ%</th>
+            <th data-key="inflow_delta_abs" class="mt-num">ปริมาณน้ำเข้า Δ (m³/วัน)</th>
+            <th data-key="remark_text">Remark ล่าสุด</th>
+          </tr>
+        </thead>
+        <tbody id="mtTableBody">
+          <tr><td colspan="7" class="empty-state">กำลังโหลดข้อมูล…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="mt-popup-overlay" id="mtPopupOverlay">
+  <div class="mt-popup-box">
+    <button type="button" class="mt-popup-close" id="mtPopupClose">✕</button>
+    <h3 id="mtPopupTitle">–</h3>
+    <div class="mt-popup-sub" id="mtPopupSub">–</div>
+
+    <div class="mt-chart-grid">
+      <div>
+        <div style="font-size:0.78rem; font-weight:700; color:var(--ink-soft); margin-bottom:4px;">
+          Flow (F) — เส้นทึบ = 7 วันล่าสุด, เส้นประ = เดือน baseline
+        </div>
+        <canvas id="mtChartF"></canvas>
+      </div>
+      <div>
+        <div style="font-size:0.78rem; font-weight:700; color:var(--ink-soft); margin-bottom:4px;">
+          Pressure (P) — เส้นทึบ = 7 วันล่าสุด, เส้นประ = เดือน baseline
+        </div>
+        <canvas id="mtChartP"></canvas>
+      </div>
+    </div>
+
+    {% if can_add_remark %}
+    <div class="pp-actions" style="border-top:1px solid var(--line); padding-top:14px;">
+      <div style="font-size:0.85rem; font-weight:700;">บันทึกเหตุผล (remark)</div>
+      <form class="mt-remark-form" id="mtRemarkForm">
+        <input type="hidden" id="mtRemarkRtuId" value="">
+        <select id="mtRemarkReason" required>
+          {% for r in reason_categories %}
+          <option value="{{ r }}">{{ r }}</option>
+          {% endfor %}
+        </select>
+        <input type="text" id="mtRemarkDetail" placeholder="รายละเอียดเพิ่มเติม (ถ้ามี)">
+        <button type="submit" class="btn-primary btn-sm">บันทึก</button>
+      </form>
+    </div>
+    {% else %}
+    <p class="mt-popup-sub">เข้าสู่ระบบเพื่อบันทึก remark</p>
+    {% endif %}
+
+    <div class="mt-remark-history" id="mtRemarkHistory"></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(function () {
+  const SUMMARY_CSV_URL = "{{ url_for('static', filename='data/mediumterm_dma_summary.csv') }}";
+  const DAILY_CURRENT_CSV_URL = "{{ url_for('static', filename='data/mediumterm_daily_current.csv') }}";
+  const DAILY_BASELINE_CSV_URL = "{{ url_for('static', filename='data/mediumterm_daily_baseline.csv') }}";
+  const BRANCH_MAP_URL = "{{ url_for('mediumterm_rtu_branch_map') }}";
+  const REMARKS_LATEST_URL = "{{ url_for('mediumterm_remarks_latest') }}";
+  const REMARKS_FOR_RTU_URL = "{{ url_for('mediumterm_remarks_for_rtu', rtu_id='__ID__') }}";
+  const SAVE_REMARK_URL = "{{ url_for('mediumterm_save_remark') }}";
+
+  // สี — ใช้ token สีเดียวกับธีมหลักของเว็บ (var(--mwa-green)/--amber/--danger) ไม่ใช่สีสุ่มใหม่
+  const COLOR_LABEL = { green: "mt-pill-green", yellow: "mt-pill-yellow", red: "mt-pill-red", gray: "mt-pill-gray" };
+
+  let rows = [];               // แถวตารางหลัก (รวม branch map + remark ล่าสุดแล้ว)
+  let dailyCurrentByDma = {};  // { dma_code: [{date, avg_f, avg_p}, ...] } เรียงตามวัน
+  let dailyBaselineByDma = {};
+  let sortKey = "mnf_delta_pct";
+  let sortDir = "desc";
+  let chartF = null, chartP = null;
+
+  function parseCsv(url) {
+    return new Promise((resolve, reject) => {
+      Papa.parse(url, {
+        download: true, header: true, dynamicTyping: true, skipEmptyLines: true,
+        complete: (res) => resolve(res.data),
+        error: reject,
+      });
+    });
+  }
+
+  function groupByDma(dailyRows) {
+    const out = {};
+    for (const r of dailyRows) {
+      if (!r.dma_code) continue;
+      (out[r.dma_code] = out[r.dma_code] || []).push(r);
+    }
+    for (const code in out) out[code].sort((a, b) => (a.date > b.date ? 1 : -1));
+    return out;
+  }
+
+  function fmtPct(v) { return v === null || v === undefined || isNaN(v) ? "—" : (v > 0 ? "+" : "") + v.toFixed(1) + "%"; }
+  function fmtNum(v, d) { return v === null || v === undefined || isNaN(v) ? "—" : (v > 0 ? "+" : "") + v.toFixed(d); }
+
+  function loadAll() {
+    Promise.all([
+      parseCsv(SUMMARY_CSV_URL),
+      parseCsv(DAILY_CURRENT_CSV_URL),
+      parseCsv(DAILY_BASELINE_CSV_URL),
+      fetch(BRANCH_MAP_URL).then(r => r.json()),
+      fetch(REMARKS_LATEST_URL).then(r => r.json()),
+    ]).then(([summary, dailyCurrent, dailyBaseline, branchMap, remarksLatest]) => {
+      dailyCurrentByDma = groupByDma(dailyCurrent);
+      dailyBaselineByDma = groupByDma(dailyBaseline);
+
+      const baselineMonth = summary.length ? summary[0].baseline_month : "–";
+      document.getElementById("mtBaselineMonthLabel").textContent = baselineMonth || "–";
+
+      rows = summary.filter(r => r.dma_code).map(r => {
+        const b = branchMap[r.dma_code] || {};
+        const remark = remarksLatest[r.dma_code];
+        return {
+          ...r,
+          branch_id: b.BranchID || "",
+          branch_name: b.BranchName || "",
+          branch_group_id: b.BranchGroupID || "",
+          remark_text: remark ? `${remark.ReasonCategory}${remark.Detail ? " — " + remark.Detail : ""}` : "",
+          remark_obj: remark || null,
+        };
+      });
+      renderTable();
+    }).catch(err => {
+      document.getElementById("mtTableBody").innerHTML =
+        `<tr><td colspan="7" class="empty-state">โหลดข้อมูลไม่สำเร็จ: ${err}</td></tr>`;
+      console.error(err);
+    });
+  }
+
+  function currentFilters() {
+    return {
+      group: document.getElementById("mtFilterGroup").value,
+      branch: document.getElementById("mtFilterBranch").value,
+    };
+  }
+
+  function renderTable() {
+    const { group, branch } = currentFilters();
+    let filtered = rows.filter(r =>
+      (!group || r.branch_group_id === group) && (!branch || r.branch_id === branch)
+    );
+
+    filtered.sort((a, b) => {
+      let av = a[sortKey], bv = b[sortKey];
+      if (av === null || av === undefined || av === "") av = sortDir === "asc" ? Infinity : -Infinity;
+      if (bv === null || bv === undefined || bv === "") bv = sortDir === "asc" ? Infinity : -Infinity;
+      if (typeof av === "string") return sortDir === "asc" ? av.localeCompare(bv) : bv.localeCompare(av);
+      return sortDir === "asc" ? av - bv : bv - av;
+    });
+
+    document.getElementById("mtRowCount").textContent = `${filtered.length.toLocaleString()} DMA`;
+
+    const tbody = document.getElementById("mtTableBody");
+    if (!filtered.length) {
+      tbody.innerHTML = `<tr><td colspan="7" class="empty-state">ไม่มี DMA ตรงตัวกรอง</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = filtered.map(r => `
+      <tr data-dma="${r.dma_code}">
+        <td>${r.dma_code}</td>
+        <td>${r.branch_name || "—"}</td>
+        <td class="mt-num"><span class="mt-pill ${COLOR_LABEL[r.mnf_color] || 'mt-pill-gray'}">${fmtPct(r.mnf_delta_pct)}</span></td>
+        <td class="mt-num">${fmtNum(r.mnf_delta_abs, 2)}</td>
+        <td class="mt-num"><span class="mt-pill ${COLOR_LABEL[r.inflow_color] || 'mt-pill-gray'}">${fmtPct(r.inflow_delta_pct)}</span></td>
+        <td class="mt-num">${fmtNum(r.inflow_delta_abs, 1)}</td>
+        <td class="mt-remark-cell">${r.remark_text || "—"}</td>
+      </tr>
+    `).join("");
+
+    tbody.querySelectorAll("tr[data-dma]").forEach(tr => {
+      tr.addEventListener("click", () => openPopup(tr.getAttribute("data-dma")));
+    });
+  }
+
+  document.querySelectorAll("table.mt-table th[data-key]").forEach(th => {
+    th.addEventListener("click", () => {
+      const key = th.getAttribute("data-key");
+      if (sortKey === key) { sortDir = sortDir === "asc" ? "desc" : "asc"; }
+      else { sortKey = key; sortDir = "desc"; }
+      document.querySelectorAll("table.mt-table th").forEach(h => { h.classList.remove("sorted"); h.removeAttribute("data-arrow"); });
+      th.classList.add("sorted");
+      th.setAttribute("data-arrow", sortDir === "asc" ? "▲" : "▼");
+      renderTable();
+    });
+  });
+
+  document.getElementById("mtFilterGroup").addEventListener("change", () => {
+    const groupId = document.getElementById("mtFilterGroup").value;
+    document.querySelectorAll("#mtFilterBranch option[data-group]").forEach(opt => {
+      opt.hidden = !!groupId && opt.getAttribute("data-group") !== groupId;
+    });
+    document.getElementById("mtFilterBranch").value = "";
+    renderTable();
+  });
+  document.getElementById("mtFilterBranch").addEventListener("change", renderTable);
+
+  // ---- Popup กราฟ + remark ----
+  function buildChart(canvasId, currentSeries, baselineSeries, valueKey, existingChart) {
+    if (existingChart) existingChart.destroy();
+    const maxLen = Math.max(currentSeries.length, baselineSeries.length);
+    const labels = Array.from({ length: maxLen }, (_, i) => `วันที่ ${i + 1}`);
+    return new Chart(document.getElementById(canvasId), {
+      type: "line",
+      data: {
+        labels,
+        datasets: [
+          {
+            label: "7 วันล่าสุด",
+            data: currentSeries.map(d => d[valueKey]),
+            borderColor: "#009cff", backgroundColor: "#009cff", tension: 0.25, spanGaps: true,
+          },
+          {
+            label: "เดือน baseline",
+            data: baselineSeries.map(d => d[valueKey]),
+            borderColor: "#5c7488", backgroundColor: "#5c7488", borderDash: [5, 4], tension: 0.15, spanGaps: true,
+          },
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: true,
+        plugins: { legend: { display: true, labels: { boxWidth: 10, font: { size: 10 } } } },
+        scales: { x: { ticks: { font: { size: 9 } } }, y: { ticks: { font: { size: 9 } } } },
+      },
+    });
+  }
+
+  function loadRemarkHistory(rtuId) {
+    fetch(REMARKS_FOR_RTU_URL.replace("__ID__", encodeURIComponent(rtuId)))
+      .then(r => r.json())
+      .then(list => {
+        const el = document.getElementById("mtRemarkHistory");
+        if (!list.length) { el.innerHTML = `<p class="mt-popup-sub">ยังไม่เคยมีการบันทึก remark</p>`; return; }
+        el.innerHTML = list.map(r => `
+          <div class="mt-remark-item">
+            <b>${r.ReasonCategory}</b>${r.Detail ? " — " + r.Detail : ""}
+            <div class="meta">${r.RecordedBy} • ${r.RecordedAt}</div>
+          </div>
+        `).join("");
+      });
+  }
+
+  function openPopup(dmaCode) {
+    const row = rows.find(r => r.dma_code === dmaCode);
+    document.getElementById("mtPopupTitle").textContent = dmaCode;
+    document.getElementById("mtPopupSub").textContent =
+      row ? `${row.branch_name || ""} • MNF ${fmtPct(row.mnf_delta_pct)} • ปริมาณน้ำเข้า ${fmtPct(row.inflow_delta_pct)}` : "";
+
+    const cur = dailyCurrentByDma[dmaCode] || [];
+    const base = dailyBaselineByDma[dmaCode] || [];
+    chartF = buildChart("mtChartF", cur, base, "avg_f", chartF);
+    chartP = buildChart("mtChartP", cur, base, "avg_p", chartP);
+
+    const rtuIdInput = document.getElementById("mtRemarkRtuId");
+    if (rtuIdInput) rtuIdInput.value = dmaCode;
+    loadRemarkHistory(dmaCode);
+
+    document.getElementById("mtPopupOverlay").classList.add("open");
+  }
+  document.getElementById("mtPopupClose").addEventListener("click", () => {
+    document.getElementById("mtPopupOverlay").classList.remove("open");
+  });
+  document.getElementById("mtPopupOverlay").addEventListener("click", (e) => {
+    if (e.target === document.getElementById("mtPopupOverlay")) {
+      document.getElementById("mtPopupOverlay").classList.remove("open");
+    }
+  });
+
+  const remarkForm = document.getElementById("mtRemarkForm");
+  if (remarkForm) {
+    remarkForm.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const rtuId = document.getElementById("mtRemarkRtuId").value;
+      const reason = document.getElementById("mtRemarkReason").value;
+      const detail = document.getElementById("mtRemarkDetail").value;
+      const fd = new FormData();
+      fd.append("rtu_id", rtuId); fd.append("reason_category", reason); fd.append("detail", detail);
+      fetch(SAVE_REMARK_URL, { method: "POST", body: fd })
+        .then(r => r.json())
+        .then(data => {
+          if (!data.success) { alert(data.error || "บันทึกไม่สำเร็จ"); return; }
+          document.getElementById("mtRemarkDetail").value = "";
+          loadRemarkHistory(rtuId);
+          // อัปเดตแถวในตารางหลักให้เห็น remark ใหม่ทันทีโดยไม่ต้องโหลดหน้าใหม่
+          const row = rows.find(r => r.dma_code === rtuId);
+          if (row) {
+            row.remark_obj = data.remark;
+            row.remark_text = `${data.remark.ReasonCategory}${data.remark.Detail ? " — " + data.remark.Detail : ""}`;
+            renderTable();
+          }
+        })
+        .catch(() => alert("เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง"));
+    });
+  }
+
+  loadAll();
+})();
+</script>
+{% endblock %}
