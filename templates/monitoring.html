@@ -754,6 +754,7 @@ function seriesFromCsv(rows){
     out[code] = {
       mnfSeries: list.map(r=>Number(r.mnf)),
       totalSeries: list.map(r=>Number(r.daily_total)),
+      dateSeries: list.map(r=>r.date),   // ใช้ทำแกน X ของกราฟ "MNF รายวัน" ให้โชว์วันที่จริงแทน D1/D2/...
       cPlusSeries: list.filter(r=>r.cusum_cplus!=='' && r.cusum_cplus!=null).map(r=>Number(r.cusum_cplus)),
     };
   });
@@ -989,13 +990,13 @@ async function refreshFromCsv(isFirstLoad){
     if(!codes.length) throw new Error('อ่านไฟล์ได้แต่ไม่พบจุดวัด RTU ที่ใช้ได้ใน dma_status_summary.csv');
 
     data = codes.map(code=>{
-      const s = summaryByDma[code], sr = seriesByDma[code] || {mnfSeries:[], totalSeries:[], cPlusSeries:[]};
+      const s = summaryByDma[code], sr = seriesByDma[code] || {mnfSeries:[], totalSeries:[], dateSeries:[], cPlusSeries:[]};
       const breachIdx = sr.cPlusSeries.findIndex(v=>v>s.cusumH);
       const remark = remarksByDma[code] || null;   // UI display เท่านั้น — ไม่กระทบสถิติ/สถานะที่คำนวณจาก Python เลย
       return {
         code, name: s.name, envelope: envelopeByDma[code] || null,
         a: {
-          mnfSeries: sr.mnfSeries, totalSeries: sr.totalSeries,
+          mnfSeries: sr.mnfSeries, totalSeries: sr.totalSeries, dateSeries: sr.dateSeries,
           mean: s.mean, sd: s.sd, threshold: s.threshold, watchThreshold: s.watchThreshold,
           status: s.status, case: s.case, caseReason: s.caseReason, currentMnf: s.currentMnf,
           noDataDays: s.noDataDays, mnfStart: s.mnfStart, mnfEnd: s.mnfEnd,
@@ -1456,7 +1457,12 @@ function openModal(code){
     document.getElementById(id).style.display = '';
   });
 
-  const labels = Array.from({length:d.a.mnfSeries.length},(_,i)=>`D${i+1}`);
+  // แกน X: ใช้วันที่จริงจาก dma_daily_series.csv (dateSeries) ถ้ามี — โหมดจำลอง (fallback, ไม่มีไฟล์จริง)
+  // ไม่มีวันที่จริงให้ใช้ ก็ยังคงเป็น D1/D2/... เหมือนเดิม
+  const hasRealDates = d.a.dateSeries && d.a.dateSeries.length === d.a.mnfSeries.length;
+  const labels = hasRealDates
+    ? d.a.dateSeries.map(formatDateDDMM)
+    : Array.from({length:d.a.mnfSeries.length},(_,i)=>`D${i+1}`);
   if(mnfChart) mnfChart.destroy();
   mnfChart = new Chart(document.getElementById('chartMnf'), {
     type:'line',
@@ -1580,6 +1586,22 @@ function escapeHtml(str){
   return String(str ?? '').replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
 }
 
+// ลิงก์ไปเปิด INC/ALT ที่ backend (incident_service.zip: app.py) — INC มี route ดูรายละเอียดเจาะจงตัวเดียว
+// อยู่แล้ว (/incidents/tree?incident_id=...) ส่วน ALT ยังไม่มี route ดูรายละเอียดเจาะจงตัวเดียว (เช็ค app.py
+// เต็มไฟล์แล้ว มีแค่ /alerts แบบ list รวม ไม่รับ query param กรอง) ผู้ใช้เลือก "ข้อ 1" คือลิงก์ไปหน้า list
+// เฉยๆ ไปก่อน — ทั้งสอง route มี @login_required ที่ backend คนไม่ login คลิกแล้วจะโดนเด้งไปหน้า login
+// (พฤติกรรมปกติของระบบ ไม่ได้ทำอะไรเพิ่มตรงนี้) เปิด target="_blank" เหมือน external link อื่นในไฟล์นี้
+// (ดู LINK นี้ บรรทัดบนสุดของหน้า) กันหน้า dashboard หลักถูกพาออกไปจากที่ดูอยู่
+function incidentLinkHtml(incidentId){
+  if(!incidentId) return '';
+  const id = escapeHtml(incidentId);
+  return `<a href="/incidents/tree?incident_id=${encodeURIComponent(incidentId)}" target="_blank" rel="noopener noreferrer">${id}</a>`;
+}
+function alertLinkHtml(alertId){
+  if(!alertId) return '';
+  return `<a href="/alerts" target="_blank" rel="noopener noreferrer">${escapeHtml(alertId)}</a>`;
+}
+
 function fmtJobTimestamp(iso){
   const dt = new Date(iso);
   if(isNaN(dt.getTime())) return String(iso ?? '—');
@@ -1699,6 +1721,18 @@ function formatDateDDMMYYYY(isoString){
   return `${day.padStart(2,'0')}/${month.padStart(2,'0')}/${year}`;
 }
 
+// รูปแบบสั้น (ไม่มีปี) สำหรับใช้เป็น label แกน X ของกราฟ เช่น "30/08" — ใช้ตรรกะ parse เดียวกับ
+// formatDateDDMMYYYY() ด้านบนทุกประการ
+function formatDateDDMM(isoString){
+  if(!isoString) return '';
+  const datePart = String(isoString).trim().split(/[T ]/)[0];
+  const parts = datePart.split('-');
+  if(parts.length !== 3) return isoString;
+  const [, month, day] = parts;
+  if(!/^\d{1,2}$/.test(month) || !/^\d{1,2}$/.test(day)) return isoString;
+  return `${day.padStart(2,'0')}/${month.padStart(2,'0')}`;
+}
+
 /**
  * เช็คสถานะแจ้งเตือน MNF ของ RTU นี้แล้วอัปเดตแผงทั้ง 3 (บันทึกใหม่/บันทึกแล้ว/เปิดเป็นเหตุการณ์แล้ว)
  * ให้ตรงกันเสมอ — เรียกทั้งตอนเปิด modal และหลังบันทึกสำเร็จ (ไม่ต้องปิดเปิด popup ใหม่)
@@ -1729,12 +1763,12 @@ async function refreshAlertStatusPanel(rtuId){
         statusBadge.style.background = 'rgba(7,156,0,.14)';
         statusBadge.style.border = '1px solid var(--green)';
         statusBadge.style.color = 'var(--green)';
-        statusBadge.textContent = `✅ เปิดเป็นเหตุการณ์แล้ว: ${json.incident_id} (บันทึก ${json.alert_id} เมื่อ ${formatDateDDMMYYYY(json.saved_at)})`;
+        statusBadge.innerHTML = `✅ เปิดเป็นเหตุการณ์แล้ว: ${incidentLinkHtml(json.incident_id)} (บันทึก ${alertLinkHtml(json.alert_id)} เมื่อ ${escapeHtml(formatDateDDMMYYYY(json.saved_at))})`;
       } else {
         statusBadge.style.background = 'rgba(0,156,255,.10)';
         statusBadge.style.border = '1px solid var(--mwa-sky, #009cff)';
         statusBadge.style.color = 'var(--mwa-sky, #009cff)';
-        statusBadge.textContent = `📌 บันทึกการแจ้งเตือนไว้แล้ว: ${json.alert_id} เมื่อ ${formatDateDDMMYYYY(json.saved_at)}`;
+        statusBadge.innerHTML = `📌 บันทึกการแจ้งเตือนไว้แล้ว: ${alertLinkHtml(json.alert_id)} เมื่อ ${escapeHtml(formatDateDDMMYYYY(json.saved_at))}`;
       }
     }
 
@@ -1743,11 +1777,11 @@ async function refreshAlertStatusPanel(rtuId){
     if(json && json.saved){
       // มีการบันทึกไว้แล้ว (ยัง active) — ห้ามบันทึกซ้ำ โชว์แผง "บันทึกแล้ว" แทนฟอร์ม
       savedPanel.style.display = 'block';
-      document.getElementById('mAlertSavedId').textContent = json.alert_id;
+      document.getElementById('mAlertSavedId').innerHTML = alertLinkHtml(json.alert_id);
       document.getElementById('mAlertSavedDate').textContent = formatDateDDMMYYYY(json.saved_at);
       if(json.linked){
         linkedPanel.style.display = 'block';
-        document.getElementById('mAlertLinkedIncident').textContent = json.incident_id;
+        document.getElementById('mAlertLinkedIncident').innerHTML = incidentLinkHtml(json.incident_id);
       }
     } else {
       // ยังไม่เคยบันทึก (หรือบันทึกเดิมถูกยกเลิกไปแล้ว) — โชว์ฟอร์มบันทึกใหม่ได้ตามปกติ
