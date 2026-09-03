@@ -567,6 +567,19 @@
   // ---- Popup กราฟ + remark ----
   // แถบเทา (min-max เดือน baseline) + เส้นทึบ (ค่าเฉลี่ย 7 วันล่าสุด) ตามรูปแบบ hourlyChart/pressureChart
   // ของ monitoring.html เดิม: dataset "max" ใช้ fill:'+1' ไล่สีลงมาถึง dataset "min" ที่ตามมา (สร้างแถบ)
+  // baseline แสดงเป็นเส้นปะสีเทาเข้มเส้นเดียว = ค่าเฉลี่ยของ baseline (เฉลี่ยจาก min/max ต่อ interval
+  // เพราะข้อมูลดิบมีแค่ min/max ให้ ไม่มีคอลัมน์ค่าเฉลี่ยแยกต่างหาก) — ไม่แสดงแถบแรเงาช่วง min-max แล้ว
+  // ตามที่ขอปรับ ให้กราฟดูง่ายขึ้น เทียบเส้นค่าเฉลี่ย baseline กับเส้นค่าปัจจุบันตรงๆ
+  function baselineAvgSeries(minArr, maxArr) {
+    return minArr.map((mn, i) => {
+      const mx = maxArr[i];
+      if (mn === null && mx === null) return null;
+      if (mn === null) return mx;
+      if (mx === null) return mn;
+      return (mn + mx) / 2;
+    });
+  }
+
   function buildEnvelopeChart(canvasId, envelope, currentKey, minKey, maxKey, lineColor, existingChart) {
     if (existingChart) existingChart.destroy();
     const hasData = !!(envelope && envelope[currentKey] && envelope[currentKey].length);
@@ -576,10 +589,9 @@
       data: {
         labels: intervalLabels,
         datasets: [
-          { label: "baseline (สูงสุด)", data: envelope[maxKey], borderColor: "transparent",
-            backgroundColor: "rgba(139,160,190,.16)", fill: "+1", pointRadius: 0 },
-          { label: "baseline (ต่ำสุด)", data: envelope[minKey], borderColor: "transparent",
-            backgroundColor: "transparent", fill: false, pointRadius: 0 },
+          { label: "baseline (ค่าเฉลี่ย)", data: baselineAvgSeries(envelope[minKey], envelope[maxKey]),
+            borderColor: "#4b4b4b", borderDash: [6, 4], backgroundColor: "transparent",
+            borderWidth: 2, pointRadius: 0, tension: 0.2 },
           { label: "เฉลี่ย 7 วันล่าสุด", data: envelope[currentKey], borderColor: lineColor,
             backgroundColor: "transparent", borderWidth: 2, pointRadius: 0, tension: 0.2 },
         ],

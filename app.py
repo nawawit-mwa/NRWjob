@@ -165,27 +165,40 @@ def mediumterm_rtu_branch_map():
     /rtus/<rtu_id>/info ใช้อยู่แล้วสำหรับหน้า monitoring หลัก) ใช้ .get() แทน [] ทุกจุด + ห่อ try/except
     กันแถวไหนใน Sheet ไม่มีค่า RTUID (เซลล์ว่าง) แล้วทำให้ทั้ง endpoint 500 ไปเงียบๆ (พังแบบนี้เคยเจอมาแล้ว
     ตอน TrendRemarks — พอฝั่ง JS จับ error แบบเงียบ กลายเป็นตัวกรองภาค/สาขาไม่ขึ้นค่าเลยแทนที่จะเห็น error
-    ชัดเจน จึงต้องกันตั้งแต่ backend ไม่ให้ error หลุดออกไปตั้งแต่ต้น)"""
+    ชัดเจน จึงต้องกันตั้งแต่ backend ไม่ให้ error หลุดออกไปตั้งแต่ต้น)
+
+    หมายเหตุบั๊กที่เจอจริง (ทำให้ error แบบไม่แน่นอน 'บางทีก็ได้บางทีก็ไม่ได้'): gspread.get_all_records()
+    จะ numericise ค่าที่หน้าตาเป็นตัวเลขล้วนให้กลายเป็น int อัตโนมัติ (เช่นถ้า RTUID/BranchID/BranchGroupID
+    แถวไหนเป็นตัวเลขล้วน จะได้ int ไม่ใช่ str) พอเอาไปเป็นคีย์ dict ตรงๆ จะได้ dict ที่คีย์ปนกันทั้ง int และ
+    str แล้ว jsonify() (ใช้ json.dumps(..., sort_keys=True) เป็นค่าเริ่มต้นของ Flask) จะ error
+    "'<' not supported between instances of 'int' and 'str'" ตอนเรียงคีย์ — แก้โดยบังคับ str() ทุกคีย์/
+    ค่าที่ใช้จับคู่ เหมือนกับที่ sc.find_one()/find_many() ทำอยู่แล้ว (str(...) == str(...)) ด้วยเหตุผลเดียวกัน"""
     try:
         rtus = sc.get_all_records("RTUs")
-        branches = {b.get("BranchID"): b for b in sc.get_all_records("Branches") if b.get("BranchID")}
+        branches = {
+            str(b.get("BranchID")): b for b in sc.get_all_records("Branches") if b.get("BranchID")
+        }
         branch_groups = {
-            g.get("BranchGroupID"): g for g in sc.get_all_records("BranchGroups") if g.get("BranchGroupID")
+            str(g.get("BranchGroupID")): g
+            for g in sc.get_all_records("BranchGroups") if g.get("BranchGroupID")
         }
 
         result = {}
         skipped_no_rtuid = 0
         for rtu in rtus:
-            rtu_id = rtu.get("RTUID")
-            if not rtu_id:
+            rtu_id_raw = rtu.get("RTUID")
+            if not rtu_id_raw:
                 skipped_no_rtuid += 1
                 continue  # แถวว่าง/ไม่มี RTUID ใน Sheet — ข้ามแทนที่จะ error ทั้ง endpoint
-            branch = branches.get(rtu.get("BranchID"), {})
-            group = branch_groups.get(branch.get("BranchGroupID"), {})
+            rtu_id = str(rtu_id_raw)
+            branch_id = str(rtu.get("BranchID")) if rtu.get("BranchID") else ""
+            branch = branches.get(branch_id, {})
+            group_id = str(branch.get("BranchGroupID")) if branch.get("BranchGroupID") else ""
+            group = branch_groups.get(group_id, {})
             result[rtu_id] = {
-                "BranchID": rtu.get("BranchID", ""),
+                "BranchID": branch_id,
                 "BranchName": branch.get("BranchName", ""),
-                "BranchGroupID": branch.get("BranchGroupID", ""),
+                "BranchGroupID": group_id,
                 "BranchGroupName": group.get("BranchGroupName", ""),
             }
         # ถ้าจับคู่ไม่ได้เลยสักแถว แนบข้อมูลวินิจฉัยไปในคีย์สำรอง "_debug" ด้วย (RTUID จริงจะไม่ชนคีย์นี้
