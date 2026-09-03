@@ -57,6 +57,16 @@
     color:var(--ink-soft); width:28px; height:28px; border-radius:8px; cursor:pointer; font-size:0.85rem; }
   .mt-popup-box h3 { margin:0 0 4px; font-size:1.1rem; color:var(--mwa-navy-deep); }
   .mt-popup-sub { font-size:0.82rem; color:var(--ink-soft); margin-bottom:16px; }
+
+  /* ลูกศรก่อนหน้า/ถัดไป ใน popup — เลื่อนดู DM ก่อนหน้า/ถัดไปตามลำดับที่ตารางแสดงอยู่ตอนนั้น (หลังกรอง/เรียง)
+     โดยไม่ต้องปิด popup แล้วไปกดแถวใหม่ */
+  .mt-popup-nav { display:flex; align-items:center; justify-content:space-between; gap:10px;
+    margin:2px 0 14px; }
+  .mt-popup-nav-btn { padding:6px 14px; border:1px solid var(--line); border-radius:8px;
+    background:var(--panel); font-family:var(--font-ui); font-size:0.82rem; cursor:pointer;
+    color:var(--mwa-navy-deep); font-weight:600; }
+  .mt-popup-nav-btn:disabled { opacity:.4; cursor:not-allowed; }
+  .mt-popup-pos { font-size:0.78rem; color:var(--ink-soft); white-space:nowrap; }
   .mt-chart-grid { display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-bottom:18px; }
   .mt-chart-grid canvas { max-height:220px; }
   @media (max-width:640px) { .mt-chart-grid { grid-template-columns:1fr; } }
@@ -155,6 +165,12 @@
     <h3 id="mtPopupTitle">–</h3>
     <div class="mt-popup-sub" id="mtPopupSub">–</div>
 
+    <div class="mt-popup-nav">
+      <button type="button" class="mt-popup-nav-btn" id="mtPopupPrevBtn">‹ ก่อนหน้า</button>
+      <span class="mt-popup-pos" id="mtPopupPosLabel"></span>
+      <button type="button" class="mt-popup-nav-btn" id="mtPopupNextBtn">ถัดไป ›</button>
+    </div>
+
     <div class="mt-chart-grid">
       <div>
         <div style="font-size:0.78rem; font-weight:700; color:var(--ink-soft); margin-bottom:4px;">
@@ -223,6 +239,8 @@
   });
 
   let rows = [];              // แถวตารางหลัก (รวม branch map + remark ล่าสุดแล้ว)
+  let filteredRows = [];      // แถวหลังกรอง/เรียงล่าสุดที่ตารางแสดงอยู่จริง — ใช้เดินหน้า/ถอยหลังใน popup
+  let currentPopupDma = null; // dma_code ของ popup ที่เปิดอยู่ตอนนี้ (null = ปิดอยู่)
   let envelopeByDma = {};     // { dma_code: {flowCurrent[], flowBaselineMin[], flowBaselineMax[], pressure...[]} }
   let sortKey = "mnf_delta_pct";
   let sortDir = "desc";
@@ -397,6 +415,10 @@
     });
 
     document.getElementById("mtRowCount").textContent = `${filtered.length.toLocaleString()} DM`;
+    filteredRows = filtered;
+    // ถ้า popup เปิดอยู่ตอนที่ตัวกรอง/การเรียงเปลี่ยน (เช่นแก้ checkbox ระหว่างเปิด popup ค้างไว้) อัปเดต
+    // ตำแหน่งลูกศรก่อนหน้า/ถัดไปให้ตรงกับลำดับใหม่ด้วย (ไม่ต้อง reload กราฟ แค่ enable/disable ปุ่ม)
+    if (currentPopupDma) updatePopupNav();
 
     const tbody = document.getElementById("mtTableBody");
     if (!filtered.length) {
@@ -522,6 +544,7 @@
   }
 
   function openPopup(dmaCode) {
+    currentPopupDma = dmaCode;
     const row = rows.find(r => r.dma_code === dmaCode);
     document.getElementById("mtPopupTitle").textContent = dmaCode;
     const windowTxt = row && row.current_window_start && row.current_window_end
@@ -538,14 +561,42 @@
     const eventDateInput = document.getElementById("mtRemarkEventDate");
     if (eventDateInput) eventDateInput.value = new Date().toISOString().slice(0, 10); // default = วันนี้
     loadRemarkHistory(dmaCode);
+    updatePopupNav();
 
     document.getElementById("mtPopupOverlay").classList.add("open");
   }
+
+  // ลูกศรก่อนหน้า/ถัดไป — เดินตามลำดับของ filteredRows (ตารางหลังกรอง/เรียงล่าสุด) ไม่ใช่ rows ทั้งหมด
+  // เผื่อ dmaCode ปัจจุบันไม่อยู่ใน filteredRows แล้ว (เช่นเปลี่ยนตัวกรองระหว่างเปิด popup ค้างไว้) ปิดปุ่มทั้งคู่
+  function updatePopupNav() {
+    const idx = filteredRows.findIndex(r => r.dma_code === currentPopupDma);
+    const prevBtn = document.getElementById("mtPopupPrevBtn");
+    const nextBtn = document.getElementById("mtPopupNextBtn");
+    const posLabel = document.getElementById("mtPopupPosLabel");
+    if (idx < 0 || !filteredRows.length) {
+      prevBtn.disabled = true; nextBtn.disabled = true; posLabel.textContent = "";
+      return;
+    }
+    prevBtn.disabled = idx <= 0;
+    nextBtn.disabled = idx >= filteredRows.length - 1;
+    posLabel.textContent = `${idx + 1} / ${filteredRows.length}`;
+  }
+  document.getElementById("mtPopupPrevBtn").addEventListener("click", () => {
+    const idx = filteredRows.findIndex(r => r.dma_code === currentPopupDma);
+    if (idx > 0) openPopup(filteredRows[idx - 1].dma_code);
+  });
+  document.getElementById("mtPopupNextBtn").addEventListener("click", () => {
+    const idx = filteredRows.findIndex(r => r.dma_code === currentPopupDma);
+    if (idx >= 0 && idx < filteredRows.length - 1) openPopup(filteredRows[idx + 1].dma_code);
+  });
+
   document.getElementById("mtPopupClose").addEventListener("click", () => {
+    currentPopupDma = null;
     document.getElementById("mtPopupOverlay").classList.remove("open");
   });
   document.getElementById("mtPopupOverlay").addEventListener("click", (e) => {
     if (e.target === document.getElementById("mtPopupOverlay")) {
+      currentPopupDma = null;
       document.getElementById("mtPopupOverlay").classList.remove("open");
     }
   });
