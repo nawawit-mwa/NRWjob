@@ -361,8 +361,14 @@
       parseCsv(ENVELOPE_CSV_URL),
       fetchJsonSafe(BRANCH_MAP_URL, {}),
       fetchJsonSafe(REMARKS_LATEST_URL, {}),
-    ]).then(([summary, envelopeRows, branchMap, remarksLatest]) => {
+    ]).then(([summary, envelopeRows, branchMapRaw, remarksLatest]) => {
       envelopeByDma = envelopeFromCsv(envelopeRows);
+
+      // "_debug" เป็นคีย์สำรองที่ /mediumterm/rtu-branch-map แนบมาเฉพาะตอนจับคู่ RTUID ไม่ได้เลยสักแถว
+      // (ดู app.py) ต้องแยกออกจาก branchMap ก่อนใช้งานจริง ไม่งั้นจะโดนนับเป็น RTU ปลอมอีกตัว
+      const branchMapDebug = branchMapRaw._debug || null;
+      const branchMap = { ...branchMapRaw };
+      delete branchMap._debug;
 
       const baselineMonth = summary.length ? summary[0].baseline_month : "–";
       document.getElementById("mtBaselineMonthLabel").textContent = baselineMonth || "–";
@@ -397,21 +403,35 @@
       if (rows.length && matchedCount === 0) {
         // ตัวอย่าง dma_code (จาก CSV) เทียบกับ RTUID (จาก branch map/Google Sheet) — ใส่ลงในหน้าตรงๆ เลย
         // (ไม่ต้องเปิด dev tools) เพื่อให้เห็นรูปแบบที่ไม่ตรงกันชัดๆ เช่น มี/ไม่มี prefix, ตัวพิมพ์เล็ก/ใหญ่,
-        // เว้นวรรค ฯลฯ — ยังคง log ไว้ใน console ด้วยเผื่อต้องดูละเอียดกว่านี้
+        // เว้นวรรค ฯลฯ — ถ้า branch map ว่างเปล่าทั้งชุด (0 คีย์) จะไม่มีตัวอย่าง RTUID ให้เทียบเลย กรณีนี้ใช้
+        // branchMapDebug (จาก app.py) บอกสาเหตุแทน เช่น sheet RTUs มีกี่แถว/error อะไร — ยังคง log ไว้ใน
+        // console ด้วยเผื่อต้องดูละเอียดกว่านี้
         const sampleDma = rows.slice(0, 5).map(r => r.dma_code);
         const sampleRtuId = Object.keys(branchMap).slice(0, 5);
         console.warn(
           "[mediumterm] จับคู่ dma_code กับ branch map ไม่ติดเลยสักแถว — ตัวกรองภาค/สาขาจะไม่ทำงาน " +
           "(ตรวจว่า dma_code ใน CSV ตรงกับ RTUID ใน Google Sheet tab RTUs หรือไม่)",
-          { sampleDma, sampleRtuId }
+          { sampleDma, sampleRtuId, branchMapDebug }
         );
+        let debugLine = `ตัวอย่าง RTUID ใน Google Sheet: <code>${escapeHtml(sampleRtuId.join(", ") || "(ไม่มีข้อมูลเลย)")}</code>`;
+        if (branchMapDebug) {
+          if (branchMapDebug.error) {
+            debugLine = `สาเหตุจากฝั่งเซิร์ฟเวอร์: <code>${escapeHtml(branchMapDebug.error)}</code>`;
+          } else {
+            debugLine =
+              `sheet "RTUs" มีทั้งหมด ${branchMapDebug.rtus_total} แถว ` +
+              `(ไม่มีค่า RTUID ${branchMapDebug.skipped_no_rtuid} แถว)<br>` +
+              `ชื่อคอลัมน์ที่เจอในแถวแรกของ sheet "RTUs": ` +
+              `<code>${escapeHtml((branchMapDebug.sample_rtu_row_keys || []).join(", ") || "—")}</code>`;
+          }
+        }
         const warnEl = document.createElement("div");
         warnEl.className = "mt-popup-sub";
         warnEl.style.cssText = "color:var(--danger); margin:-8px 0 12px;";
         warnEl.innerHTML =
           "⚠ จับคู่ข้อมูลสาขาไม่ได้ — ตัวกรองภาค/สาขาจะไม่มีผล (DM/สาขายังแสดงในตารางได้ตามปกติ)<br>" +
           `ตัวอย่าง dma_code ในตาราง: <code>${escapeHtml(sampleDma.join(", ") || "—")}</code><br>` +
-          `ตัวอย่าง RTUID ใน Google Sheet: <code>${escapeHtml(sampleRtuId.join(", ") || "(ไม่มีข้อมูลเลย)")}</code>`;
+          debugLine;
         document.querySelector(".mt-toolbar").insertAdjacentElement("beforebegin", warnEl);
       }
 

@@ -174,9 +174,11 @@ def mediumterm_rtu_branch_map():
         }
 
         result = {}
+        skipped_no_rtuid = 0
         for rtu in rtus:
             rtu_id = rtu.get("RTUID")
             if not rtu_id:
+                skipped_no_rtuid += 1
                 continue  # แถวว่าง/ไม่มี RTUID ใน Sheet — ข้ามแทนที่จะ error ทั้ง endpoint
             branch = branches.get(rtu.get("BranchID"), {})
             group = branch_groups.get(branch.get("BranchGroupID"), {})
@@ -186,10 +188,20 @@ def mediumterm_rtu_branch_map():
                 "BranchGroupID": branch.get("BranchGroupID", ""),
                 "BranchGroupName": group.get("BranchGroupName", ""),
             }
+        # ถ้าจับคู่ไม่ได้เลยสักแถว แนบข้อมูลวินิจฉัยไปในคีย์สำรอง "_debug" ด้วย (RTUID จริงจะไม่ชนคีย์นี้
+        # แน่นอน เพราะรูปแบบ DM-xx-xx-xx-xx) — ให้ฝั่งเว็บโชว์ตรงๆ ได้เลยโดยไม่ต้องเข้าไปดู log บนเซิร์ฟเวอร์
+        # (ผู้ใช้เข้าถึง log ฝั่ง Render ไม่ได้สะดวก)
+        if not result:
+            result["_debug"] = {
+                "rtus_total": len(rtus),
+                "skipped_no_rtuid": skipped_no_rtuid,
+                "sample_rtu_row_keys": list(rtus[0].keys()) if rtus else [],
+                "sample_rtu_row": rtus[0] if rtus else None,
+            }
         return jsonify(result)
     except Exception as e:
         print(f"[mediumterm_rtu_branch_map] โหลด branch map ไม่สำเร็จ: {e}")
-        return jsonify({})
+        return jsonify({"_debug": {"error": str(e)}})
 
 
 @app.route("/mediumterm/remarks-latest")
