@@ -340,6 +340,9 @@
   function fmtNum(v, d) { return v === null || v === undefined || isNaN(v) ? "—" : (v > 0 ? "+" : "") + v.toFixed(d); }
   // ค่าตัวเลขดิบ (baseline/ปัจจุบัน) ไม่ใช่ผลต่าง — ไม่ต้องมี +/- นำหน้าแบบ fmtNum
   function fmtMag(v, d) { return v === null || v === undefined || isNaN(v) ? "—" : Number(v).toFixed(d); }
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
 
   // อ่าน JSON แบบกันพัง — ถ้า endpoint error (เช่น Google Sheet tab ยังไม่ถูกสร้าง) เซิร์ฟเวอร์บางเวอร์ชัน
   // อาจตอบเป็นหน้า error HTML แทน JSON กลับมา ซึ่งจะทำให้ r.json() throw "Unexpected token '<'" (parse HTML
@@ -392,16 +395,23 @@
       // ปกติ — เตือนไว้ในคอนโซล + หัวตารางให้เห็นชัดแทนที่จะงงว่าทำไมกรองไม่ขึ้น
       const matchedCount = rows.filter(r => r.branch_id).length;
       if (rows.length && matchedCount === 0) {
+        // ตัวอย่าง dma_code (จาก CSV) เทียบกับ RTUID (จาก branch map/Google Sheet) — ใส่ลงในหน้าตรงๆ เลย
+        // (ไม่ต้องเปิด dev tools) เพื่อให้เห็นรูปแบบที่ไม่ตรงกันชัดๆ เช่น มี/ไม่มี prefix, ตัวพิมพ์เล็ก/ใหญ่,
+        // เว้นวรรค ฯลฯ — ยังคง log ไว้ใน console ด้วยเผื่อต้องดูละเอียดกว่านี้
+        const sampleDma = rows.slice(0, 5).map(r => r.dma_code);
+        const sampleRtuId = Object.keys(branchMap).slice(0, 5);
         console.warn(
           "[mediumterm] จับคู่ dma_code กับ branch map ไม่ติดเลยสักแถว — ตัวกรองภาค/สาขาจะไม่ทำงาน " +
           "(ตรวจว่า dma_code ใน CSV ตรงกับ RTUID ใน Google Sheet tab RTUs หรือไม่)",
-          { sampleDmaCode: rows[0].dma_code, branchMapKeys: Object.keys(branchMap).slice(0, 5) }
+          { sampleDma, sampleRtuId }
         );
         const warnEl = document.createElement("div");
         warnEl.className = "mt-popup-sub";
         warnEl.style.cssText = "color:var(--danger); margin:-8px 0 12px;";
-        warnEl.textContent =
-          "⚠ จับคู่ข้อมูลสาขาไม่ได้ — ตัวกรองภาค/สาขาจะไม่มีผล (DM/สาขายังแสดงในตารางได้ตามปกติ)";
+        warnEl.innerHTML =
+          "⚠ จับคู่ข้อมูลสาขาไม่ได้ — ตัวกรองภาค/สาขาจะไม่มีผล (DM/สาขายังแสดงในตารางได้ตามปกติ)<br>" +
+          `ตัวอย่าง dma_code ในตาราง: <code>${escapeHtml(sampleDma.join(", ") || "—")}</code><br>` +
+          `ตัวอย่าง RTUID ใน Google Sheet: <code>${escapeHtml(sampleRtuId.join(", ") || "(ไม่มีข้อมูลเลย)")}</code>`;
         document.querySelector(".mt-toolbar").insertAdjacentElement("beforebegin", warnEl);
       }
 
