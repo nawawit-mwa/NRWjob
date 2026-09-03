@@ -8,17 +8,21 @@
   /* หน้านี้แยกออกมาต่างหากจาก monitoring.html เดิม (Case A/B/C) — จับ "แนวโน้มค่อยๆ เพิ่มขึ้นระยะกลาง"
      (เทียบ 7 วันล่าสุด กับ baseline เดือนคงที่) คนละกลไกกับ CUSUM/sustained-breach เดิม จึงไม่ปนสี/สถานะ
      ของสองระบบเข้าด้วยกัน */
-  .mt-toolbar { display:flex; gap:20px; flex-wrap:wrap; align-items:flex-start; margin-bottom:16px; }
+  .mt-toolbar { display:flex; flex-direction:column; gap:14px; margin-bottom:16px; }
+  .mt-toolbar-row { display:flex; gap:20px; flex-wrap:wrap; align-items:flex-start; }
   .mt-field { display:flex; flex-direction:column; gap:4px; }
   .mt-field label { font-size:0.76rem; color:var(--ink-soft); font-weight:600; }
   .mt-field select { padding:7px 10px; border:1px solid var(--line); border-radius:6px;
     font-family:var(--font-ui); font-size:0.85rem; min-width:160px; }
-  .mt-meta { font-size:0.78rem; color:var(--ink-soft); margin-left:auto; padding-top:4px; }
+  .mt-meta { font-size:0.78rem; color:var(--ink-soft); padding-top:4px; }
+  /* สาขามีตัวเลือกเยอะกว่าภาคมาก — ให้ box ขยายเต็มพื้นที่ที่เหลือด้านขวาของแถวแทนที่จะจำกัดความกว้างตายตัว */
+  .mt-field-grow { flex:1 1 320px; min-width:260px; }
 
   /* ตัวกรอง ภาค/สาขา/Remark แบบปุ่มเลือก (แทน <select> เดิม) */
   .mt-btn-group { display:flex; flex-wrap:wrap; gap:6px; max-width:420px; }
   .mt-btn-group.scroll { max-height:96px; overflow-y:auto; padding:4px; border:1px solid var(--line);
     border-radius:8px; }
+  .mt-field-grow .mt-btn-group { max-width:none; width:100%; }
   .mt-filter-btn { padding:5px 12px; border:1px solid var(--line); border-radius:999px;
     background:var(--panel); font-family:var(--font-ui); font-size:0.78rem; cursor:pointer;
     color:var(--ink-soft); white-space:nowrap; }
@@ -73,44 +77,51 @@
 <div class="container">
   <div class="section-title">📈 แนวโน้ม MNF / ปริมาณน้ำเข้าเพิ่มขึ้นระยะกลาง</div>
   <p class="mt-popup-sub" style="margin-bottom:18px;">
-    เปรียบเทียบค่าเฉลี่ย 7 วันล่าสุด กับ baseline เดือน <b id="mtBaselineMonthLabel">–</b>
-    (คนละระบบกับการจับสัญญาณเฉียบพลัน Case A/B/C ในหน้า "ติดตาม MNF/RTU")
+    เปรียบเทียบค่าเฉลี่ย 7 วันล่าสุด (<span id="mtCurrentWindowLabel">–</span>) กับ baseline เดือน
+    <b id="mtBaselineMonthLabel">–</b>
+    (ประมวลผลสัปดาห์ละครั้ง : ประมวลผลล่าสุด <span id="mtGeneratedAtLabel">–</span>)
+    <br>(คนละระบบกับการจับสัญญาณเฉียบพลัน Case A/B/C ในหน้า "ติดตาม MNF/RTU")
   </p>
 
   <div class="mt-toolbar">
-    <div class="mt-field">
-      <label>ภาค</label>
-      <div class="mt-btn-group" id="mtFilterGroupBtns">
-        <button type="button" class="mt-filter-btn active" data-value="">ทั้งหมด</button>
-        {% for g in branch_groups %}
-        <button type="button" class="mt-filter-btn" data-value="{{ g.BranchGroupID }}">{{ g.BranchGroupName }}</button>
-        {% endfor %}
+    <div class="mt-toolbar-row">
+      <div class="mt-field">
+        <label>ภาค</label>
+        <div class="mt-btn-group" id="mtFilterGroupBtns">
+          <button type="button" class="mt-filter-btn active" data-value="">ทั้งหมด</button>
+          {% for g in branch_groups %}
+          <button type="button" class="mt-filter-btn" data-value="{{ g.BranchGroupID }}">{{ g.BranchGroupName }}</button>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="mt-field mt-field-grow">
+        <label>สาขา</label>
+        <div class="mt-btn-group scroll" id="mtFilterBranchBtns">
+          <button type="button" class="mt-filter-btn active" data-value="">ทั้งหมด</button>
+          {% for b in branches %}
+          <button type="button" class="mt-filter-btn" data-value="{{ b.BranchID }}" data-group="{{ b.BranchGroupID }}">{{ b.BranchName }}</button>
+          {% endfor %}
+        </div>
       </div>
     </div>
-    <div class="mt-field">
-      <label>สาขา</label>
-      <div class="mt-btn-group scroll" id="mtFilterBranchBtns">
-        <button type="button" class="mt-filter-btn active" data-value="">ทั้งหมด</button>
-        {% for b in branches %}
-        <button type="button" class="mt-filter-btn" data-value="{{ b.BranchID }}" data-group="{{ b.BranchGroupID }}">{{ b.BranchName }}</button>
-        {% endfor %}
+    <div class="mt-toolbar-row">
+      <div class="mt-field">
+        <label>Remark</label>
+        <div class="mt-btn-group" id="mtFilterRemarkBtns">
+          <button type="button" class="mt-filter-btn active" data-value="">ทั้งหมด</button>
+          <button type="button" class="mt-filter-btn" data-value="__none__">ยังไม่มี remark</button>
+          {% for r in reason_categories %}
+          <button type="button" class="mt-filter-btn" data-value="{{ r }}">{{ r }}</button>
+          {% endfor %}
+        </div>
       </div>
-    </div>
-    <div class="mt-field">
-      <label>Remark</label>
-      <div class="mt-btn-group" id="mtFilterRemarkBtns">
-        <button type="button" class="mt-filter-btn active" data-value="">ทั้งหมด</button>
-        <button type="button" class="mt-filter-btn" data-value="__none__">ยังไม่มี remark</button>
-        {% for r in reason_categories %}
-        <button type="button" class="mt-filter-btn" data-value="{{ r }}">{{ r }}</button>
-        {% endfor %}
+      <div class="mt-field mt-checkbox-row">
+        <label><input type="checkbox" id="mtHideZeroBaseline" checked> ซ่อน DM ที่ข้อมูล baseline เป็น 0</label>
+        <label><input type="checkbox" id="mtHideZeroCurrent" checked> ซ่อน DM ที่ข้อมูลปัจจุบันเป็น 0</label>
+        <label><input type="checkbox" id="mtShowOnlyZero"> แสดงเฉพาะ DM ที่ข้อมูลเป็น 0 (baseline หรือปัจจุบัน)</label>
       </div>
+      <div class="mt-meta" id="mtRowCount"></div>
     </div>
-    <div class="mt-field mt-checkbox-row">
-      <label><input type="checkbox" id="mtHideZeroBaseline" checked> ซ่อน DMA ที่ข้อมูล baseline เป็น 0</label>
-      <label><input type="checkbox" id="mtHideZeroCurrent" checked> ซ่อน DMA ที่ข้อมูลปัจจุบันเป็น 0</label>
-    </div>
-    <div class="mt-meta" id="mtRowCount"></div>
   </div>
 
   <div class="panel">
@@ -118,17 +129,21 @@
       <table class="mt-table">
         <thead>
           <tr>
-            <th data-key="dma_code">DMA</th>
+            <th data-key="dma_code">DM</th>
             <th data-key="branch_name">สาขา</th>
+            <th data-key="baseline_avg_mnf" class="mt-num">MNF baseline</th>
+            <th data-key="current_avg_mnf" class="mt-num">MNF ปัจจุบัน</th>
             <th data-key="mnf_delta_pct" class="mt-num">MNF Δ%</th>
             <th data-key="mnf_delta_abs" class="mt-num">MNF Δ (m³/hr)</th>
+            <th data-key="baseline_avg_daily_total" class="mt-num">ปริมาณน้ำเข้า baseline</th>
+            <th data-key="current_avg_daily_total" class="mt-num">ปริมาณน้ำเข้า ปัจจุบัน</th>
             <th data-key="inflow_delta_pct" class="mt-num">ปริมาณน้ำเข้า Δ%</th>
             <th data-key="inflow_delta_abs" class="mt-num">ปริมาณน้ำเข้า Δ (m³/วัน)</th>
-            <th data-key="remark_text">Remark ล่าสุด</th>
+            <th data-key="remark_text">หมายเหตุ</th>
           </tr>
         </thead>
         <tbody id="mtTableBody">
-          <tr><td colspan="7" class="empty-state">กำลังโหลดข้อมูล…</td></tr>
+          <tr><td colspan="11" class="empty-state">กำลังโหลดข้อมูล…</td></tr>
         </tbody>
       </table>
     </div>
@@ -161,6 +176,12 @@
       <div style="font-size:0.85rem; font-weight:700;">บันทึกเหตุผล (remark)</div>
       <form class="mt-remark-form" id="mtRemarkForm">
         <input type="hidden" id="mtRemarkRtuId" value="">
+        {% if user %}
+        <input type="hidden" id="mtRemarkRecordedBy" value="{{ user.Name }}">
+        <span class="mt-popup-sub" style="margin:0; align-self:center;">บันทึกในชื่อ: <b>{{ user.Name }}</b></span>
+        {% else %}
+        <input type="text" id="mtRemarkRecordedBy" placeholder="ชื่อผู้บันทึก" required style="min-width:140px;">
+        {% endif %}
         <select id="mtRemarkReason" required>
           {% for r in reason_categories %}
           <option value="{{ r }}">{{ r }}</option>
@@ -293,6 +314,8 @@
 
   function fmtPct(v) { return v === null || v === undefined || isNaN(v) ? "—" : (v > 0 ? "+" : "") + v.toFixed(1) + "%"; }
   function fmtNum(v, d) { return v === null || v === undefined || isNaN(v) ? "—" : (v > 0 ? "+" : "") + v.toFixed(d); }
+  // ค่าตัวเลขดิบ (baseline/ปัจจุบัน) ไม่ใช่ผลต่าง — ไม่ต้องมี +/- นำหน้าแบบ fmtNum
+  function fmtMag(v, d) { return v === null || v === undefined || isNaN(v) ? "—" : Number(v).toFixed(d); }
 
   function loadAll() {
     Promise.all([
@@ -305,6 +328,14 @@
 
       const baselineMonth = summary.length ? summary[0].baseline_month : "–";
       document.getElementById("mtBaselineMonthLabel").textContent = baselineMonth || "–";
+      // current_window_start/end + generated_at เหมือนกันทุกแถว (คำนวณจาก "วันล่าสุดในข้อมูล" ครั้งเดียว
+      // ตอนรัน compute_weekly_trend.py ไม่ได้แยกต่อ DMA) เอาจากแถวแรกพอ
+      const first = summary[0] || {};
+      document.getElementById("mtCurrentWindowLabel").textContent =
+        (first.current_window_start && first.current_window_end)
+          ? `${first.current_window_start} ถึง ${first.current_window_end}` : "–";
+      document.getElementById("mtGeneratedAtLabel").textContent =
+        first.generated_at ? String(first.generated_at).split(" ")[0] : "–";
 
       rows = summary.filter(r => r.dma_code).map(r => {
         const b = branchMap[r.dma_code] || {};
@@ -323,7 +354,7 @@
       renderTable();
     }).catch(err => {
       document.getElementById("mtTableBody").innerHTML =
-        `<tr><td colspan="7" class="empty-state">โหลดข้อมูลไม่สำเร็จ: ${err}</td></tr>`;
+        `<tr><td colspan="11" class="empty-state">โหลดข้อมูลไม่สำเร็จ: ${err}</td></tr>`;
       console.error(err);
     });
   }
@@ -331,6 +362,7 @@
   function renderTable() {
     const hideZeroBaseline = document.getElementById("mtHideZeroBaseline").checked;
     const hideZeroCurrent = document.getElementById("mtHideZeroCurrent").checked;
+    const showOnlyZero = document.getElementById("mtShowOnlyZero").checked;
     const { group, branch, remark } = activeFilters;
 
     let filtered = rows.filter(r => {
@@ -338,10 +370,18 @@
       if (branch && r.branch_id !== branch) return false;
       if (remark === "__none__" && r.remark_obj) return false;
       if (remark && remark !== "__none__" && (!r.remark_obj || r.remark_obj.ReasonCategory !== remark)) return false;
+
       // baseline/ปัจจุบัน = 0 มักหมายถึงไม่มีข้อมูลจริง (มิเตอร์เสีย/ยังไม่มีข้อมูลครบ) ไม่ใช่ค่าจริงที่วัดได้
-      // เป็น 0 — ซ่อนไว้เป็นค่าเริ่มต้นกันรก ปลดออกได้จาก checkbox ถ้าต้องการเห็นด้วย
-      if (hideZeroBaseline && (isZero(r.baseline_avg_mnf) || isZero(r.baseline_avg_daily_total))) return false;
-      if (hideZeroCurrent && (isZero(r.current_avg_mnf) || isZero(r.current_avg_daily_total))) return false;
+      // เป็น 0 — ซ่อนไว้เป็นค่าเริ่มต้นกันรก, หรือกลับกันจะกรองมาดูเฉพาะแถวที่เป็น 0 ก็ได้ (สอง checkbox นี้
+      // สลับกันใช้ ไม่เปิดพร้อมกัน — ดู syncZeroCheckboxes())
+      const baseZero = isZero(r.baseline_avg_mnf) || isZero(r.baseline_avg_daily_total);
+      const curZero = isZero(r.current_avg_mnf) || isZero(r.current_avg_daily_total);
+      if (showOnlyZero) {
+        if (!baseZero && !curZero) return false;
+      } else {
+        if (hideZeroBaseline && baseZero) return false;
+        if (hideZeroCurrent && curZero) return false;
+      }
       return true;
     });
 
@@ -353,19 +393,23 @@
       return sortDir === "asc" ? av - bv : bv - av;
     });
 
-    document.getElementById("mtRowCount").textContent = `${filtered.length.toLocaleString()} DMA`;
+    document.getElementById("mtRowCount").textContent = `${filtered.length.toLocaleString()} DM`;
 
     const tbody = document.getElementById("mtTableBody");
     if (!filtered.length) {
-      tbody.innerHTML = `<tr><td colspan="7" class="empty-state">ไม่มี DMA ตรงตัวกรอง</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="11" class="empty-state">ไม่มี DM ตรงตัวกรอง</td></tr>`;
       return;
     }
     tbody.innerHTML = filtered.map(r => `
       <tr data-dma="${r.dma_code}">
         <td>${r.dma_code}</td>
         <td>${r.branch_name || "—"}</td>
+        <td class="mt-num">${fmtMag(r.baseline_avg_mnf, 2)}</td>
+        <td class="mt-num">${fmtMag(r.current_avg_mnf, 2)}</td>
         <td class="mt-num"><span class="mt-pill ${COLOR_LABEL[r.mnf_color] || 'mt-pill-gray'}">${fmtPct(r.mnf_delta_pct)}</span></td>
         <td class="mt-num">${fmtNum(r.mnf_delta_abs, 2)}</td>
+        <td class="mt-num">${fmtMag(r.baseline_avg_daily_total, 1)}</td>
+        <td class="mt-num">${fmtMag(r.current_avg_daily_total, 1)}</td>
         <td class="mt-num"><span class="mt-pill ${COLOR_LABEL[r.inflow_color] || 'mt-pill-gray'}">${fmtPct(r.inflow_delta_pct)}</span></td>
         <td class="mt-num">${fmtNum(r.inflow_delta_abs, 1)}</td>
         <td class="mt-remark-cell">${r.remark_text || "—"}</td>
@@ -421,8 +465,21 @@
   setupBtnGroup("mtFilterBranchBtns", (value) => { activeFilters.branch = value; renderTable(); });
   setupBtnGroup("mtFilterRemarkBtns", (value) => { activeFilters.remark = value; renderTable(); });
 
-  document.getElementById("mtHideZeroBaseline").addEventListener("change", renderTable);
-  document.getElementById("mtHideZeroCurrent").addEventListener("change", renderTable);
+  // checkbox ซ่อน 0 (baseline/ปัจจุบัน) กับ checkbox "แสดงเฉพาะ 0" เป็นตรรกะตรงข้ามกัน เปิดพร้อมกันแล้วจะขัดกัน
+  // เอง (ซ่อนแล้วก็แสดงเฉพาะ = ไม่เหลือแถวไหนเลย) — สลับกันใช้แทน: เปิดฝั่งหนึ่งจะปิดอีกฝั่งให้อัตโนมัติ
+  const hideBaseCb = document.getElementById("mtHideZeroBaseline");
+  const hideCurCb = document.getElementById("mtHideZeroCurrent");
+  const onlyZeroCb = document.getElementById("mtShowOnlyZero");
+  function syncZeroCheckboxes(changed) {
+    if (changed === onlyZeroCb && onlyZeroCb.checked) {
+      hideBaseCb.checked = false;
+      hideCurCb.checked = false;
+    } else if ((changed === hideBaseCb || changed === hideCurCb) && changed.checked) {
+      onlyZeroCb.checked = false;
+    }
+    renderTable();
+  }
+  [hideBaseCb, hideCurCb, onlyZeroCb].forEach(cb => cb.addEventListener("change", () => syncZeroCheckboxes(cb)));
 
   // ---- Popup กราฟ + remark ----
   // แถบเทา (min-max เดือน baseline) + เส้นทึบ (ค่าเฉลี่ย 7 วันล่าสุด) ตามรูปแบบ hourlyChart/pressureChart
@@ -500,9 +557,12 @@
       const reason = document.getElementById("mtRemarkReason").value;
       const eventDate = document.getElementById("mtRemarkEventDate").value;
       const detail = document.getElementById("mtRemarkDetail").value;
+      const recordedByEl = document.getElementById("mtRemarkRecordedBy");
+      const recordedBy = recordedByEl ? recordedByEl.value : "";
       const fd = new FormData();
       fd.append("rtu_id", rtuId); fd.append("reason_category", reason);
       fd.append("event_date", eventDate); fd.append("detail", detail);
+      fd.append("recorded_by", recordedBy);
       fetch(SAVE_REMARK_URL, { method: "POST", body: fd })
         .then(r => r.json())
         .then(data => {

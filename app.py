@@ -140,9 +140,11 @@ def mediumterm_trend():
     คนละไฟล์ข้อมูล คนละ threshold ไม่ปนกัน) ตัวเลข MNF/ปริมาณน้ำเข้าทั้งหมดโหลดจาก
     static/data/mediumterm_*.csv ฝั่ง JS เอง (เหมือน monitoring.html เดิมที่โหลด dma_status_summary.csv
     ฝั่ง client) — route นี้แค่ส่ง option ตัวกรองภาค/สาขา + สิทธิ์บันทึก remark ให้ template
-    ดูได้โดยไม่ต้อง login เหมือนหน้า monitoring หลัก (ต้อง login เฉพาะตอนจะบันทึก remark เท่านั้น)"""
+    ดูได้โดยไม่ต้อง login เหมือนหน้า monitoring หลัก — ช่วงนี้ (ตามที่ผู้ใช้ขอ) เปิดให้บันทึก remark ได้
+    โดยไม่ต้อง login ด้วยเช่นกัน (can_add_remark เปิดเสมอ) แต่ยังฝั่ง server ยังแยกอยู่ว่าใครล็อกอินหรือไม่
+    ผ่าน user เพื่อเลือกว่าจะเชื่อชื่อจาก session หรือรับชื่อที่พิมพ์เองจากฟอร์ม (ดู mediumterm_save_remark)"""
     user = get_optional_user()
-    can_add_remark = bool(user)
+    can_add_remark = True
 
     branch_groups = sc.get_all_records("BranchGroups")
     branches = sc.get_all_records("Branches")
@@ -190,21 +192,24 @@ def mediumterm_remarks_for_rtu(rtu_id):
 
 
 @app.route("/mediumterm/save-remark", methods=["POST"])
-@login_required
 def mediumterm_save_remark():
-    """บันทึก remark ใหม่ 1 แถว (append เข้าประวัติ ไม่ overwrite ของเดิม) — ต้อง login เท่านั้น
-    (เอาชื่อผู้บันทึกจาก session เสมอ ไม่รับจาก client กันปลอมชื่อ)"""
-    user = request.current_user
+    """บันทึก remark ใหม่ 1 แถว (append เข้าประวัติ ไม่ overwrite ของเดิม) — ตามที่ผู้ใช้ขอ (2026-09) เปิดให้
+    ทุกคนบันทึกได้โดยไม่ต้อง login ก่อน (เดิมบังคับ @login_required) ถ้า login อยู่ ยังใช้ชื่อจาก session
+    เสมือนเดิม (กันปลอมชื่อคนที่ login จริง) แต่ถ้าไม่ได้ login รับชื่อที่พิมพ์เองจากฟอร์มแทน"""
+    user = get_optional_user()
     rtu_id = request.form.get("rtu_id", "").strip()
     reason_category = request.form.get("reason_category", "").strip()
     detail = request.form.get("detail", "").strip()
     event_date = request.form.get("event_date", "").strip()
+    recorded_by_input = request.form.get("recorded_by", "").strip()
     if not rtu_id or not reason_category:
         return jsonify({"success": False, "error": "ข้อมูลไม่ครบ"}), 400
 
+    recorded_by = (user.get("Name") or user.get("UserID")) if user else (recorded_by_input or "ไม่ระบุชื่อ")
+
     row = trend_remark_service.save_trend_remark(
         rtu_id=rtu_id, reason_category=reason_category, detail=detail,
-        recorded_by=user.get("Name") or user.get("UserID"),
+        recorded_by=recorded_by,
         event_date=event_date or None,
     )
     return jsonify({"success": True, "remark": row})
