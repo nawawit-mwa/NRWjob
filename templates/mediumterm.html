@@ -116,8 +116,8 @@
         </div>
       </div>
       <div class="mt-field mt-checkbox-row">
-        <label><input type="checkbox" id="mtHideNearZeroMnf" checked> ซ่อน DM ที่ MNF ≈ 0 (baseline หรือปัจจุบัน ต่ำกว่า 5)</label>
-        <label><input type="checkbox" id="mtShowOnlyNearZeroMnf"> แสดงเฉพาะ DM ที่ MNF ≈ 0 (baseline หรือปัจจุบัน ต่ำกว่า 5)</label>
+        <label><input type="checkbox" id="mtHideNearZeroMnf" checked> ซ่อน DM ที่ MNF ผิดปกติ (baseline หรือปัจจุบัน ต่ำกว่า 5 หรือเกิน 490)</label>
+        <label><input type="checkbox" id="mtShowOnlyNearZeroMnf"> แสดงเฉพาะ DM ที่ MNF ผิดปกติ (baseline หรือปัจจุบัน ต่ำกว่า 5 หรือเกิน 490)</label>
       </div>
       <div class="mt-meta" id="mtRowCount"></div>
     </div>
@@ -231,10 +231,14 @@
   // ชื่อหมวดเหตุผล — เก็บแยกจาก checkbox ซ่อนข้อมูล 0 เพราะอ่านค่าจาก checkbox ตรงๆ ตอน render แทน
   let activeFilters = { group: "", branch: "", remark: "" };
 
-  // MNF ใกล้ 0 (มักหมายถึงมิเตอร์เสีย/ไม่มีข้อมูลจริง มากกว่า flow จริงที่เป็น 0 พอดี) — ใช้เกณฑ์ "ต่ำกว่า 5"
-  // (m³/hr) แทนเช็คเท่ากับ 0 เป๊ะๆ ตามที่ขอปรับ เดิมเช็คทั้ง MNF และปริมาณน้ำเข้ารวมกัน ตอนนี้ดู MNF อย่างเดียว
-  const MNF_NEAR_ZERO_THRESHOLD = 5;
-  function isNearZeroMnf(v) { return typeof v === "number" && v < MNF_NEAR_ZERO_THRESHOLD; }
+  // MNF ผิดปกติ = ต่ำกว่า 5 (มักหมายถึงมิเตอร์เสีย/ไม่มีข้อมูลจริง มากกว่า flow จริงที่ต่ำขนาดนั้น) หรือเกิน
+  // 490 (ค่าผิดปกติสูงเกินจริง มักมาจากมิเตอร์/สัญญาณ error เช่นกัน ไม่ใช่ MNF จริงที่สูงขนาดนั้น) — ดู MNF
+  // อย่างเดียว ไม่รวมปริมาณน้ำเข้า
+  const MNF_LOW_THRESHOLD = 5;
+  const MNF_HIGH_THRESHOLD = 490;
+  function isNearZeroMnf(v) {
+    return typeof v === "number" && (v < MNF_LOW_THRESHOLD || v > MNF_HIGH_THRESHOLD);
+  }
 
   function chartOpts() {
     return {
@@ -372,9 +376,9 @@
       if (remark === "__none__" && r.remark_obj) return false;
       if (remark && remark !== "__none__" && (!r.remark_obj || r.remark_obj.ReasonCategory !== remark)) return false;
 
-      // MNF baseline หรือปัจจุบัน ต่ำกว่าเกณฑ์ (ใกล้ 0) มักหมายถึงมิเตอร์เสีย/ไม่มีข้อมูลจริง — ซ่อนไว้เป็น
-      // ค่าเริ่มต้นกันรก หรือกลับกันจะกรองมาดูเฉพาะแถวนี้ก็ได้ (สอง checkbox สลับกันใช้ ไม่เปิดพร้อมกัน —
-      // ดู syncZeroCheckboxes())
+      // MNF baseline หรือปัจจุบัน ผิดปกติ (ต่ำกว่า 5 หรือเกิน 490) มักหมายถึงมิเตอร์เสีย/ไม่มีข้อมูลจริง —
+      // ซ่อนไว้เป็นค่าเริ่มต้นกันรก หรือกลับกันจะกรองมาดูเฉพาะแถวนี้ก็ได้ (สอง checkbox สลับกันใช้ ไม่เปิด
+      // พร้อมกัน — ดู syncZeroCheckboxes())
       const nearZero = isNearZeroMnf(r.baseline_avg_mnf) || isNearZeroMnf(r.current_avg_mnf);
       if (showOnlyNearZero) {
         if (!nearZero) return false;
