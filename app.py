@@ -161,22 +161,35 @@ def mediumterm_trend():
 def mediumterm_rtu_branch_map():
     """คืน {RTUID: {BranchID, BranchName, BranchGroupID, BranchGroupName}} ของทุก DMA ในครั้งเดียว —
     ให้ฝั่ง JS ใช้กรองตารางตามภาค/สาขาได้ (ตัวเลข MNF/ปริมาณน้ำเข้าอยู่ใน CSV แยกจาก Google Sheet
-    จึงต้อง join กันฝั่ง client)"""
-    rtus = sc.get_all_records("RTUs")
-    branches = {b["BranchID"]: b for b in sc.get_all_records("Branches")}
-    branch_groups = {g["BranchGroupID"]: g for g in sc.get_all_records("BranchGroups")}
-
-    result = {}
-    for rtu in rtus:
-        branch = branches.get(rtu.get("BranchID"), {})
-        group = branch_groups.get(branch.get("BranchGroupID"), {})
-        result[rtu["RTUID"]] = {
-            "BranchID": rtu.get("BranchID", ""),
-            "BranchName": branch.get("BranchName", ""),
-            "BranchGroupID": branch.get("BranchGroupID", ""),
-            "BranchGroupName": group.get("BranchGroupName", ""),
+    จึงต้อง join กันฝั่ง client โดยจับคู่ dma_code ใน CSV กับ RTUID ใน sheet RTUs — เดียวกับที่ route
+    /rtus/<rtu_id>/info ใช้อยู่แล้วสำหรับหน้า monitoring หลัก) ใช้ .get() แทน [] ทุกจุด + ห่อ try/except
+    กันแถวไหนใน Sheet ไม่มีค่า RTUID (เซลล์ว่าง) แล้วทำให้ทั้ง endpoint 500 ไปเงียบๆ (พังแบบนี้เคยเจอมาแล้ว
+    ตอน TrendRemarks — พอฝั่ง JS จับ error แบบเงียบ กลายเป็นตัวกรองภาค/สาขาไม่ขึ้นค่าเลยแทนที่จะเห็น error
+    ชัดเจน จึงต้องกันตั้งแต่ backend ไม่ให้ error หลุดออกไปตั้งแต่ต้น)"""
+    try:
+        rtus = sc.get_all_records("RTUs")
+        branches = {b.get("BranchID"): b for b in sc.get_all_records("Branches") if b.get("BranchID")}
+        branch_groups = {
+            g.get("BranchGroupID"): g for g in sc.get_all_records("BranchGroups") if g.get("BranchGroupID")
         }
-    return jsonify(result)
+
+        result = {}
+        for rtu in rtus:
+            rtu_id = rtu.get("RTUID")
+            if not rtu_id:
+                continue  # แถวว่าง/ไม่มี RTUID ใน Sheet — ข้ามแทนที่จะ error ทั้ง endpoint
+            branch = branches.get(rtu.get("BranchID"), {})
+            group = branch_groups.get(branch.get("BranchGroupID"), {})
+            result[rtu_id] = {
+                "BranchID": rtu.get("BranchID", ""),
+                "BranchName": branch.get("BranchName", ""),
+                "BranchGroupID": branch.get("BranchGroupID", ""),
+                "BranchGroupName": group.get("BranchGroupName", ""),
+            }
+        return jsonify(result)
+    except Exception as e:
+        print(f"[mediumterm_rtu_branch_map] โหลด branch map ไม่สำเร็จ: {e}")
+        return jsonify({})
 
 
 @app.route("/mediumterm/remarks-latest")

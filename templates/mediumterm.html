@@ -1,5 +1,5 @@
 {% extends "base_sidebar.html" %}
-{% block title %}แนวโน้มระยะกลาง — Smart NRW{% endblock %}
+{% block title %}การเปลี่ยนแปลงน้ำเข้า/MNF เทียบ ก.ย. 68 — Smart NRW{% endblock %}
 
 {% block extra_head %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
@@ -85,7 +85,7 @@
 
 {% block content %}
 <div class="container">
-  <div class="section-title">📈 แนวโน้ม MNF / ปริมาณน้ำเข้าเพิ่มขึ้นระยะกลาง</div>
+  <div class="section-title">📈 การเปลี่ยนแปลงกราฟน้ำเข้าและ MNF ล่าสุด เทียบเดือน ก.ย. 68</div>
   <p class="mt-popup-sub" style="margin-bottom:18px;">
     เปรียบเทียบค่าเฉลี่ย 7 วันล่าสุด (<span id="mtCurrentWindowLabel">–</span>) กับ baseline เดือน
     <b id="mtBaselineMonthLabel">–</b>
@@ -386,6 +386,25 @@
           remark_obj: remark || null,
         };
       });
+
+      // เตือนถ้าจับคู่ dma_code (จาก CSV) กับ RTUID (จาก Google Sheet ผ่าน branch map) ไม่ติดเลย —
+      // อาการที่เจอคือตัวกรองภาค/สาขากดแล้วไม่มีแถวขึ้นเลย (branch_id ว่างหมดทุกแถว) ทั้งที่ "ทั้งหมด" ใช้ได้
+      // ปกติ — เตือนไว้ในคอนโซล + หัวตารางให้เห็นชัดแทนที่จะงงว่าทำไมกรองไม่ขึ้น
+      const matchedCount = rows.filter(r => r.branch_id).length;
+      if (rows.length && matchedCount === 0) {
+        console.warn(
+          "[mediumterm] จับคู่ dma_code กับ branch map ไม่ติดเลยสักแถว — ตัวกรองภาค/สาขาจะไม่ทำงาน " +
+          "(ตรวจว่า dma_code ใน CSV ตรงกับ RTUID ใน Google Sheet tab RTUs หรือไม่)",
+          { sampleDmaCode: rows[0].dma_code, branchMapKeys: Object.keys(branchMap).slice(0, 5) }
+        );
+        const warnEl = document.createElement("div");
+        warnEl.className = "mt-popup-sub";
+        warnEl.style.cssText = "color:var(--danger); margin:-8px 0 12px;";
+        warnEl.textContent =
+          "⚠ จับคู่ข้อมูลสาขาไม่ได้ — ตัวกรองภาค/สาขาจะไม่มีผล (DM/สาขายังแสดงในตารางได้ตามปกติ)";
+        document.querySelector(".mt-toolbar").insertAdjacentElement("beforebegin", warnEl);
+      }
+
       renderTable();
     }).catch(err => {
       document.getElementById("mtTableBody").innerHTML =
