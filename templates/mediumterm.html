@@ -567,9 +567,9 @@
   // ---- Popup กราฟ + remark ----
   // แถบเทา (min-max เดือน baseline) + เส้นทึบ (ค่าเฉลี่ย 7 วันล่าสุด) ตามรูปแบบ hourlyChart/pressureChart
   // ของ monitoring.html เดิม: dataset "max" ใช้ fill:'+1' ไล่สีลงมาถึง dataset "min" ที่ตามมา (สร้างแถบ)
-  // baseline แสดงเป็นแถบสีเทาอ่อน กว้าง +-5% รอบเส้นค่าเฉลี่ยของ baseline (เฉลี่ยจาก min/max ต่อ interval
-  // เพราะข้อมูลดิบมีแค่ min/max ให้ ไม่มีคอลัมน์ค่าเฉลี่ยแยกต่างหาก) — ตามที่ขอปรับจากเส้นปะเส้นเดียว
-  // ให้กลับมาเป็นแถบ แต่คำนวณขอบบน/ล่างจาก +-5% ของเส้นค่าเฉลี่ยแทนค่า min/max จริงจากข้อมูล
+  // baseline แสดงเป็นแถบสีเทาอ่อน กว้าง +-20% รอบเส้นค่าเฉลี่ยของ baseline (เฉลี่ยจาก min/max ต่อ interval
+  // เพราะข้อมูลดิบมีแค่ min/max ให้ ไม่มีคอลัมน์ค่าเฉลี่ยแยกต่างหาก) — คำนวณขอบบน/ล่างจาก +-20% ของเส้น
+  // ค่าเฉลี่ย แทนค่า min/max จริงจากข้อมูล (ปรับจาก +-5% ตามที่ขอ)
   function baselineAvgSeries(minArr, maxArr) {
     return minArr.map((mn, i) => {
       const mx = maxArr[i];
@@ -585,16 +585,16 @@
     const hasData = !!(envelope && envelope[currentKey] && envelope[currentKey].length);
     if (!hasData) return null;
     const avgSeries = baselineAvgSeries(envelope[minKey], envelope[maxKey]);
-    const bandUpper = avgSeries.map(v => v === null ? null : v * 1.05);
-    const bandLower = avgSeries.map(v => v === null ? null : v * 0.95);
+    const bandUpper = avgSeries.map(v => v === null ? null : v * 1.20);
+    const bandLower = avgSeries.map(v => v === null ? null : v * 0.80);
     return new Chart(document.getElementById(canvasId), {
       type: "line",
       data: {
         labels: intervalLabels,
         datasets: [
-          { label: "baseline (+5%)", data: bandUpper, borderColor: "transparent",
+          { label: "baseline (+20%)", data: bandUpper, borderColor: "transparent",
             backgroundColor: "rgba(179,179,179,.30)", fill: "+1", pointRadius: 0 },
-          { label: "baseline (-5%)", data: bandLower, borderColor: "transparent",
+          { label: "baseline (-20%)", data: bandLower, borderColor: "transparent",
             backgroundColor: "transparent", fill: false, pointRadius: 0 },
           { label: "เฉลี่ย 7 วันล่าสุด", data: envelope[currentKey], borderColor: lineColor,
             backgroundColor: "transparent", borderWidth: 2, pointRadius: 0, tension: 0.2 },
