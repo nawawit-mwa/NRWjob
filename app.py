@@ -181,14 +181,28 @@ def mediumterm_rtu_branch_map():
 
 @app.route("/mediumterm/remarks-latest")
 def mediumterm_remarks_latest():
-    """คืน remark ล่าสุดของทุก DMA ในครั้งเดียว (bulk) — สำหรับโชว์แบบย่อในตารางหลัก"""
-    return jsonify(trend_remark_service.get_latest_remarks_map())
+    """คืน remark ล่าสุดของทุก DMA ในครั้งเดียว (bulk) — สำหรับโชว์แบบย่อในตารางหลัก
+    ห่อ try/except ไว้เพราะถ้า tab "TrendRemarks" ยังไม่ถูกสร้าง (ยังไม่ได้รัน schema_setup.py รอบล่าสุด)
+    sheets_client จะ raise ValueError ข้อความชัดเจน — ถ้าปล่อยให้หลุดออกไป Flask จะตอบเป็นหน้า error HTML
+    กลับไป ทำให้ฝั่ง JS ที่ทำ fetch(...).then(r => r.json()) พังด้วย "Unexpected token '<'" (parse HTML เป็น
+    JSON ไม่ได้) แล้วทั้งหน้าโหลดไม่ขึ้นเลยทั้งที่ CSV หลัก/branch map ใช้ได้ปกติ — ตอบ {} ไปแทนดีกว่า
+    (หน้าเว็บยังใช้งานได้ แค่ remark ยังไม่ขึ้น จนกว่าจะรัน schema_setup ให้ครบ)"""
+    try:
+        return jsonify(trend_remark_service.get_latest_remarks_map())
+    except Exception as e:
+        print(f"[mediumterm_remarks_latest] โหลด remark ไม่สำเร็จ: {e}")
+        return jsonify({})
 
 
 @app.route("/mediumterm/remarks/<rtu_id>")
 def mediumterm_remarks_for_rtu(rtu_id):
-    """คืนประวัติ remark ทั้งหมดของ DMA นี้ เรียงใหม่สุดก่อน (สำหรับ popup กราฟ)"""
-    return jsonify(trend_remark_service.get_remarks_for_rtu(rtu_id))
+    """คืนประวัติ remark ทั้งหมดของ DMA นี้ เรียงใหม่สุดก่อน (สำหรับ popup กราฟ) — ห่อ try/except ด้วยเหตุผล
+    เดียวกับ mediumterm_remarks_latest() ด้านบน"""
+    try:
+        return jsonify(trend_remark_service.get_remarks_for_rtu(rtu_id))
+    except Exception as e:
+        print(f"[mediumterm_remarks_for_rtu] โหลดประวัติ remark ของ {rtu_id} ไม่สำเร็จ: {e}")
+        return jsonify([])
 
 
 @app.route("/mediumterm/save-remark", methods=["POST"])
@@ -207,11 +221,17 @@ def mediumterm_save_remark():
 
     recorded_by = (user.get("Name") or user.get("UserID")) if user else (recorded_by_input or "ไม่ระบุชื่อ")
 
-    row = trend_remark_service.save_trend_remark(
-        rtu_id=rtu_id, reason_category=reason_category, detail=detail,
-        recorded_by=recorded_by,
-        event_date=event_date or None,
-    )
+    # save จริงห้ามเงียบเฉยๆ เหมือน 2 endpoint ข้างบน (ผู้ใช้ต้องรู้ว่าบันทึกไม่สำเร็จ) แต่ยัง catch ไว้กันหน้า
+    # error HTML หลุดไปให้ JS parse พัง — ส่ง error message ที่อ่านออกกลับไปแทน
+    try:
+        row = trend_remark_service.save_trend_remark(
+            rtu_id=rtu_id, reason_category=reason_category, detail=detail,
+            recorded_by=recorded_by,
+            event_date=event_date or None,
+        )
+    except Exception as e:
+        print(f"[mediumterm_save_remark] บันทึก remark ไม่สำเร็จ: {e}")
+        return jsonify({"success": False, "error": f"บันทึกไม่สำเร็จ: {e}"}), 500
     return jsonify({"success": True, "remark": row})
 
 

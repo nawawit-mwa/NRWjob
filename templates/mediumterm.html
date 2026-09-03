@@ -341,12 +341,23 @@
   // ค่าตัวเลขดิบ (baseline/ปัจจุบัน) ไม่ใช่ผลต่าง — ไม่ต้องมี +/- นำหน้าแบบ fmtNum
   function fmtMag(v, d) { return v === null || v === undefined || isNaN(v) ? "—" : Number(v).toFixed(d); }
 
+  // อ่าน JSON แบบกันพัง — ถ้า endpoint error (เช่น Google Sheet tab ยังไม่ถูกสร้าง) เซิร์ฟเวอร์บางเวอร์ชัน
+  // อาจตอบเป็นหน้า error HTML แทน JSON กลับมา ซึ่งจะทำให้ r.json() throw "Unexpected token '<'" (parse HTML
+  // เป็น JSON ไม่ได้) แล้วทั้งหน้าพังไปด้วยทั้งที่จริงๆ มีแค่ endpoint เสริม (branch map/remark) ที่พัง —
+  // ฝั่ง JS นี้เลย fallback เป็นค่าว่างแทนถ้า parse ไม่ได้ เพื่อให้ตารางหลัก (MNF/ปริมาณน้ำเข้า) ยังโหลดขึ้น
+  function fetchJsonSafe(url, fallback) {
+    return fetch(url)
+      .then(r => r.text())
+      .then(text => { try { return JSON.parse(text); } catch (e) { return fallback; } })
+      .catch(() => fallback);
+  }
+
   function loadAll() {
     Promise.all([
       parseCsv(SUMMARY_CSV_URL),
       parseCsv(ENVELOPE_CSV_URL),
-      fetch(BRANCH_MAP_URL).then(r => r.json()),
-      fetch(REMARKS_LATEST_URL).then(r => r.json()),
+      fetchJsonSafe(BRANCH_MAP_URL, {}),
+      fetchJsonSafe(REMARKS_LATEST_URL, {}),
     ]).then(([summary, envelopeRows, branchMap, remarksLatest]) => {
       envelopeByDma = envelopeFromCsv(envelopeRows);
 
