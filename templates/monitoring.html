@@ -1133,11 +1133,20 @@ function setBranch(branchId){
   renderPriority();
 }
 
+// รายชื่อสาขาที่แสดงในแถบ ขึ้นกับภาคที่กำลังกรองอยู่ (activeRegion) — ถ้ากรองภาคแล้ว จะเหลือเฉพาะสาขาที่
+// มี DM อยู่ในภาคนั้นจริงๆ เท่านั้น (คำนวณจากข้อมูล DM จริง ไม่ใช่ BranchGroupID จาก Sheet เพราะ REGION_GROUPS
+// ของภาคเป็นการ hardcode prefix รหัส DM เอาไว้ต่างหาก ไม่ได้ผูกกับโครงสร้างสาขาใน Sheet โดยตรง)
+function branchesInScope(){
+  const byId = {};
+  const source = data.length ? data.filter(matchesRegion) : Object.values(rtuBranchMap).map(b => ({branchId: b.BranchID, branchName: b.BranchName}));
+  source.forEach(d => { if(d.branchId) byId[d.branchId] = d.branchName || d.branchId; });
+  return byId;
+}
+
 function renderBranchBar(){
   const el = document.getElementById('branchBar');
   if(!el) return;
-  const byId = {};
-  Object.values(rtuBranchMap).forEach(b => { if(b.BranchID) byId[b.BranchID] = b.BranchName || b.BranchID; });
+  const byId = branchesInScope();
   const sorted = Object.entries(byId).sort((a,b) => a[1].localeCompare(b[1], 'th'));
   if(!sorted.length){ el.innerHTML = ''; return; }   // ยังไม่มีข้อมูลสาขา (โหลดไม่สำเร็จ/ยังไม่เสร็จ) — ซ่อนแถบไว้ก่อน
   el.innerHTML = [`<div class="branch-pill ${activeBranch===''?'active':''}" onclick="setBranch('')">ทั้งหมด</div>`]
@@ -1149,7 +1158,11 @@ function setRegion(region){
   if(!(region in REGION_GROUPS)) return;
   activeRegion = region;
   prioritySort = {key: 'severity_code', dir: 1};   // กดกรองตามภาคแล้ว เรียงตามความรุนแรงก่อน แล้วตาม RTUน้อยไปมาก
+  // กรองภาคแล้วให้กรองสาขาตามไปด้วย: รีเซ็ตสาขาที่เลือกไว้กลับ "ทั้งหมด" เสมอ (สาขาเดิมอาจไม่อยู่ในภาคใหม่นี้
+  // แล้ว) แล้ว renderBranchBar() จะเหลือให้เลือกเฉพาะสาขาที่มี DM อยู่ในภาคนี้จริงเท่านั้น
+  activeBranch = '';
   renderRegionBar();
+  renderBranchBar();
   renderKpis();
   renderCards();
   renderPriority();
