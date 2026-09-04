@@ -59,14 +59,20 @@
   .mt-popup-sub { font-size:0.82rem; color:var(--ink-soft); margin-bottom:16px; }
 
   /* ลูกศรก่อนหน้า/ถัดไป ใน popup — เลื่อนดู DM ก่อนหน้า/ถัดไปตามลำดับที่ตารางแสดงอยู่ตอนนั้น (หลังกรอง/เรียง)
-     โดยไม่ต้องปิด popup แล้วไปกดแถวใหม่ */
+     โดยไม่ต้องปิด popup แล้วไปกดแถวใหม่ — ย้ายไปไว้ล่างสุดของ popup ตามที่ขอปรับ */
   .mt-popup-nav { display:flex; align-items:center; justify-content:space-between; gap:10px;
-    margin:2px 0 14px; }
+    margin:16px 0 2px; padding-top:14px; border-top:1px solid var(--line); }
   .mt-popup-nav-btn { padding:6px 14px; border:1px solid var(--line); border-radius:8px;
     background:var(--panel); font-family:var(--font-ui); font-size:0.82rem; cursor:pointer;
     color:var(--mwa-navy-deep); font-weight:600; }
   .mt-popup-nav-btn:disabled { opacity:.4; cursor:not-allowed; }
   .mt-popup-pos { font-size:0.78rem; color:var(--ink-soft); white-space:nowrap; }
+  /* สรุป MNF เริ่มต้น (baseline) เทียบ MNF ปัจจุบัน ด้านบน popup — ดูตัวเลขได้ทันทีโดยไม่ต้องมองกราฟ */
+  .mt-popup-mnf-summary { display:flex; gap:20px; flex-wrap:wrap; margin:2px 0 16px; }
+  .mt-popup-mnf-item { background:var(--panel); border:1px solid var(--line); border-radius:10px;
+    padding:8px 14px; }
+  .mt-popup-mnf-item .lbl { font-size:0.72rem; color:var(--ink-soft); font-weight:600; }
+  .mt-popup-mnf-item .val { font-size:1.15rem; font-weight:800; color:var(--mwa-navy-deep); }
   .mt-chart-grid { display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-bottom:18px; }
   .mt-chart-grid canvas { max-height:220px; }
   @media (max-width:640px) { .mt-chart-grid { grid-template-columns:1fr; } }
@@ -165,11 +171,7 @@
     <h3 id="mtPopupTitle">–</h3>
     <div class="mt-popup-sub" id="mtPopupSub">–</div>
 
-    <div class="mt-popup-nav">
-      <button type="button" class="mt-popup-nav-btn" id="mtPopupPrevBtn">‹ ก่อนหน้า</button>
-      <span class="mt-popup-pos" id="mtPopupPosLabel"></span>
-      <button type="button" class="mt-popup-nav-btn" id="mtPopupNextBtn">ถัดไป ›</button>
-    </div>
+    <div class="mt-popup-mnf-summary" id="mtPopupMnfSummary"></div>
 
     <div class="mt-chart-grid">
       <div>
@@ -212,6 +214,12 @@
     {% endif %}
 
     <div class="mt-remark-history" id="mtRemarkHistory"></div>
+
+    <div class="mt-popup-nav">
+      <button type="button" class="mt-popup-nav-btn" id="mtPopupPrevBtn">‹ ก่อนหน้า</button>
+      <span class="mt-popup-pos" id="mtPopupPosLabel"></span>
+      <button type="button" class="mt-popup-nav-btn" id="mtPopupNextBtn">ถัดไป ›</button>
+    </div>
   </div>
 </div>
 {% endblock %}
@@ -629,6 +637,18 @@
       ? ` • ช่วง 7 วันล่าสุด: ${row.current_window_start} ถึง ${row.current_window_end}` : "";
     document.getElementById("mtPopupSub").textContent =
       row ? `${row.branch_name || ""} • MNF ${fmtPct(row.mnf_delta_pct)} • ปริมาณน้ำเข้า ${fmtPct(row.inflow_delta_pct)}${windowTxt}` : "";
+
+    // สรุป AVG MNF เริ่มต้น (baseline) เทียบ MNF ปัจจุบัน ด้านบน popup — ใช้ field เดียวกับคอลัมน์ในตารางหลัก
+    document.getElementById("mtPopupMnfSummary").innerHTML = row ? `
+      <div class="mt-popup-mnf-item">
+        <div class="lbl">AVG MNF เริ่มต้น (baseline)</div>
+        <div class="val">${fmtMag(row.baseline_avg_mnf, 2)} <span style="font-size:0.7rem; font-weight:600;">m³/hr</span></div>
+      </div>
+      <div class="mt-popup-mnf-item">
+        <div class="lbl">AVG MNF ปัจจุบัน</div>
+        <div class="val">${fmtMag(row.current_avg_mnf, 2)} <span style="font-size:0.7rem; font-weight:600;">m³/hr</span></div>
+      </div>
+    ` : "";
 
     const env = envelopeByDma[dmaCode] || {};
     chartF = buildEnvelopeChart("mtChartF", env, "flowCurrent", "flowBaselineMin", "flowBaselineMax", "#38bfc7", chartF, 0.20);
