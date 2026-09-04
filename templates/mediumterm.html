@@ -14,6 +14,8 @@
   .mt-field label { font-size:0.76rem; color:var(--ink-soft); font-weight:600; }
   .mt-field select { padding:7px 10px; border:1px solid var(--line); border-radius:6px;
     font-family:var(--font-ui); font-size:0.85rem; min-width:160px; }
+  .mt-field input[type="text"] { padding:7px 10px; border:1px solid var(--line); border-radius:6px;
+    font-family:var(--font-ui); font-size:0.85rem; min-width:220px; }
   .mt-meta { font-size:0.78rem; color:var(--ink-soft); padding-top:4px; }
   /* สาขามีตัวเลือกเยอะกว่าภาคมาก — ให้ box ขยายเต็มพื้นที่ที่เหลือด้านขวาของแถวแทนที่จะจำกัดความกว้างตายตัว */
   .mt-field-grow { flex:1 1 320px; min-width:260px; }
@@ -101,6 +103,10 @@
 
   <div class="mt-toolbar">
     <div class="mt-toolbar-row">
+      <div class="mt-field">
+        <label>ค้นหา DM</label>
+        <input type="text" id="mtSearchDma" placeholder="พิมพ์รหัส DM เช่น DM-14-11-18-01">
+      </div>
       <div class="mt-field">
         <label>ภาค</label>
         <div class="mt-btn-group" id="mtFilterGroupBtns">
@@ -454,9 +460,13 @@
   function renderTable() {
     const hideNearZero = document.getElementById("mtHideNearZeroMnf").checked;
     const showOnlyNearZero = document.getElementById("mtShowOnlyNearZeroMnf").checked;
+    // ช่องค้นหา DM แบบกรอกเอง — เทียบแบบไม่สนตัวพิมพ์เล็ก/ใหญ่ กับรหัส DM (ไม่ต้องพิมพ์ให้ตรงเป๊ะทั้งหมด
+    // พิมพ์บางส่วนก็กรองได้ เช่น "14-11" จะเจอ DM-14-11-18-01)
+    const searchTerm = document.getElementById("mtSearchDma").value.trim().toLowerCase();
     const { group, branch, remark } = activeFilters;
 
     let filtered = rows.filter(r => {
+      if (searchTerm && !String(r.dma_code || "").toLowerCase().includes(searchTerm)) return false;
       if (group && r.branch_group_id !== group) return false;
       if (branch && r.branch_id !== branch) return false;
       if (remark === "__none__" && r.remark_obj) return false;
@@ -572,6 +582,9 @@
   }
   [hideNearZeroCb, onlyNearZeroCb].forEach(cb => cb.addEventListener("change", () => syncZeroCheckboxes(cb)));
 
+  // ช่องค้นหา DM — กรองตารางทันทีขณะพิมพ์ (ไม่ต้องกดปุ่ม/enter)
+  document.getElementById("mtSearchDma").addEventListener("input", () => renderTable());
+
   // ---- Popup กราฟ + remark ----
   // แถบเทา (min-max เดือน baseline) + เส้นทึบ (ค่าเฉลี่ย 7 วันล่าสุด) ตามรูปแบบ hourlyChart/pressureChart
   // ของ monitoring.html เดิม: dataset "max" ใช้ fill:'+1' ไล่สีลงมาถึง dataset "min" ที่ตามมา (สร้างแถบ)
@@ -586,6 +599,15 @@
       if (mx === null) return mn;
       return (mn + mx) / 2;
     });
+  }
+
+  // ค่าเฉลี่ยของ array (ไม่นับ null) — ใช้สรุปแรงดันน้ำ baseline/ปัจจุบัน เป็นตัวเลขเดียวด้านบน popup
+  // (ข้อมูลดิบมีแค่ราย interval 96 จุด/วัน ไม่มีคอลัมน์ค่าเฉลี่ยรายวันสำเร็จรูปเหมือน MNF ในตารางหลัก)
+  function avgArray(arr) {
+    if (!arr || !arr.length) return null;
+    const valid = arr.filter(v => v !== null && v !== undefined && !isNaN(v));
+    if (!valid.length) return null;
+    return valid.reduce((a, b) => a + b, 0) / valid.length;
   }
 
   function buildEnvelopeChart(canvasId, envelope, currentKey, minKey, maxKey, lineColor, existingChart, bandPct) {
@@ -638,7 +660,17 @@
     document.getElementById("mtPopupSub").textContent =
       row ? `${row.branch_name || ""} • MNF ${fmtPct(row.mnf_delta_pct)} • ปริมาณน้ำเข้า ${fmtPct(row.inflow_delta_pct)}${windowTxt}` : "";
 
-    // สรุป AVG MNF เริ่มต้น (baseline) เทียบ MNF ปัจจุบัน ด้านบน popup — ใช้ field เดียวกับคอลัมน์ในตารางหลัก
+    const env = envelopeByDma[dmaCode] || {};
+
+    // สรุปแรงดันน้ำ baseline เทียบปัจจุบัน — ไม่มีคอลัมน์ค่าเฉลี่ยรายวันสำเร็จรูปเหมือน MNF จึงคำนวณเฉลี่ย
+    // จากข้อมูลราย interval ที่โหลดมาแล้ว (baseline เฉลี่ยจาก min/max ต่อ interval ก่อน แล้วค่อยเฉลี่ยรวมทั้งวัน)
+    // ซ่อนไว้ถ้า DM นี้ไม่มีข้อมูลแรงดัน (pressureCurrent ว่าง — บาง DM ไม่มีเซนเซอร์แรงดัน)
+    const hasPressure = !!(env.pressureCurrent && env.pressureCurrent.length);
+    const pressureBaselineAvg = hasPressure
+      ? avgArray(baselineAvgSeries(env.pressureBaselineMin, env.pressureBaselineMax)) : null;
+    const pressureCurrentAvg = hasPressure ? avgArray(env.pressureCurrent) : null;
+
+    // สรุป AVG MNF เริ่มต้น (baseline) เทียบ MNF ปัจจุบัน + แรงดันน้ำ ด้านบน popup
     document.getElementById("mtPopupMnfSummary").innerHTML = row ? `
       <div class="mt-popup-mnf-item">
         <div class="lbl">AVG MNF เริ่มต้น (baseline)</div>
@@ -648,9 +680,17 @@
         <div class="lbl">AVG MNF ปัจจุบัน</div>
         <div class="val">${fmtMag(row.current_avg_mnf, 2)} <span style="font-size:0.7rem; font-weight:600;">m³/hr</span></div>
       </div>
+      ${hasPressure ? `
+      <div class="mt-popup-mnf-item">
+        <div class="lbl">AVG แรงดันน้ำ เริ่มต้น (baseline)</div>
+        <div class="val">${fmtMag(pressureBaselineAvg, 2)} <span style="font-size:0.7rem; font-weight:600;">bar</span></div>
+      </div>
+      <div class="mt-popup-mnf-item">
+        <div class="lbl">AVG แรงดันน้ำ ปัจจุบัน</div>
+        <div class="val">${fmtMag(pressureCurrentAvg, 2)} <span style="font-size:0.7rem; font-weight:600;">bar</span></div>
+      </div>` : ""}
     ` : "";
 
-    const env = envelopeByDma[dmaCode] || {};
     chartF = buildEnvelopeChart("mtChartF", env, "flowCurrent", "flowBaselineMin", "flowBaselineMax", "#38bfc7", chartF, 0.20);
     chartP = buildEnvelopeChart("mtChartP", env, "pressureCurrent", "pressureBaselineMin", "pressureBaselineMax", "#e8a33d", chartP, 0.10);
 

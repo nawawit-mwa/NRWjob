@@ -195,12 +195,22 @@ def mediumterm_rtu_branch_map():
             branch = branches.get(branch_id, {})
             group_id = str(branch.get("BranchGroupID")) if branch.get("BranchGroupID") else ""
             group = branch_groups.get(group_id, {})
-            result[rtu_id] = {
+            entry = {
                 "BranchID": branch_id,
                 "BranchName": branch.get("BranchName", ""),
                 "BranchGroupID": group_id,
                 "BranchGroupName": group.get("BranchGroupName", ""),
             }
+            result[rtu_id] = entry
+            # เผื่อ dma_code จาก CSV บางแถวตรงกับคอลัมน์ RTUName แทน RTUID (ข้อมูลกรอกไม่ตรงคอลัมน์ใน Sheet
+            # เป็นบางแถว — เจอเคสจริงเช่น DM-14-11-18-01 หาไม่เจอตอนจับคู่ด้วย RTUID อย่างเดียว) จึงใส่คีย์
+            # สำรองจาก RTUName ไว้ด้วย ถ้ามีค่าและไม่ซ้ำกับ RTUID — ให้ JS จับคู่ได้ไม่ว่า dma_code จะตรงกับ
+            # คอลัมน์ไหนก็ตาม (RTUID ที่แท้จริงมาก่อนเสมอ ไม่ให้ RTUName ทับของจริง)
+            rtu_name_raw = rtu.get("RTUName")
+            if rtu_name_raw:
+                rtu_name = str(rtu_name_raw)
+                if rtu_name != rtu_id and rtu_name not in result:
+                    result[rtu_name] = entry
         # ถ้าจับคู่ไม่ได้เลยสักแถว แนบข้อมูลวินิจฉัยไปในคีย์สำรอง "_debug" ด้วย (RTUID จริงจะไม่ชนคีย์นี้
         # แน่นอน เพราะรูปแบบ DM-xx-xx-xx-xx) — ให้ฝั่งเว็บโชว์ตรงๆ ได้เลยโดยไม่ต้องเข้าไปดู log บนเซิร์ฟเวอร์
         # (ผู้ใช้เข้าถึง log ฝั่ง Render ไม่ได้สะดวก)
