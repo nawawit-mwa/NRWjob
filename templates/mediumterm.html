@@ -567,9 +567,9 @@
   // ---- Popup กราฟ + remark ----
   // แถบเทา (min-max เดือน baseline) + เส้นทึบ (ค่าเฉลี่ย 7 วันล่าสุด) ตามรูปแบบ hourlyChart/pressureChart
   // ของ monitoring.html เดิม: dataset "max" ใช้ fill:'+1' ไล่สีลงมาถึง dataset "min" ที่ตามมา (สร้างแถบ)
-  // baseline แสดงเป็นแถบสีเทาอ่อน กว้าง +-20% รอบเส้นค่าเฉลี่ยของ baseline (เฉลี่ยจาก min/max ต่อ interval
-  // เพราะข้อมูลดิบมีแค่ min/max ให้ ไม่มีคอลัมน์ค่าเฉลี่ยแยกต่างหาก) — คำนวณขอบบน/ล่างจาก +-20% ของเส้น
-  // ค่าเฉลี่ย แทนค่า min/max จริงจากข้อมูล (ปรับจาก +-5% ตามที่ขอ)
+  // baseline แสดงเป็นแถบสีเทาอ่อน รอบเส้นค่าเฉลี่ยของ baseline (เฉลี่ยจาก min/max ต่อ interval เพราะ
+  // ข้อมูลดิบมีแค่ min/max ให้ ไม่มีคอลัมน์ค่าเฉลี่ยแยกต่างหาก) — ความกว้างแถบ (bandPct) แยกกันได้ต่อกราฟ:
+  // กราฟน้ำเข้า +-20%, กราฟแรงดันน้ำ +-10% (ตามที่ขอปรับ)
   function baselineAvgSeries(minArr, maxArr) {
     return minArr.map((mn, i) => {
       const mx = maxArr[i];
@@ -580,21 +580,23 @@
     });
   }
 
-  function buildEnvelopeChart(canvasId, envelope, currentKey, minKey, maxKey, lineColor, existingChart) {
+  function buildEnvelopeChart(canvasId, envelope, currentKey, minKey, maxKey, lineColor, existingChart, bandPct) {
     if (existingChart) existingChart.destroy();
     const hasData = !!(envelope && envelope[currentKey] && envelope[currentKey].length);
     if (!hasData) return null;
+    const pct = (typeof bandPct === "number") ? bandPct : 0.20;
     const avgSeries = baselineAvgSeries(envelope[minKey], envelope[maxKey]);
-    const bandUpper = avgSeries.map(v => v === null ? null : v * 1.20);
-    const bandLower = avgSeries.map(v => v === null ? null : v * 0.80);
+    const bandUpper = avgSeries.map(v => v === null ? null : v * (1 + pct));
+    const bandLower = avgSeries.map(v => v === null ? null : v * (1 - pct));
+    const pctLabel = Math.round(pct * 100);
     return new Chart(document.getElementById(canvasId), {
       type: "line",
       data: {
         labels: intervalLabels,
         datasets: [
-          { label: "baseline (+20%)", data: bandUpper, borderColor: "transparent",
+          { label: `baseline (+${pctLabel}%)`, data: bandUpper, borderColor: "transparent",
             backgroundColor: "rgba(179,179,179,.30)", fill: "+1", pointRadius: 0 },
-          { label: "baseline (-20%)", data: bandLower, borderColor: "transparent",
+          { label: `baseline (-${pctLabel}%)`, data: bandLower, borderColor: "transparent",
             backgroundColor: "transparent", fill: false, pointRadius: 0 },
           { label: "เฉลี่ย 7 วันล่าสุด", data: envelope[currentKey], borderColor: lineColor,
             backgroundColor: "transparent", borderWidth: 2, pointRadius: 0, tension: 0.2 },
@@ -629,8 +631,8 @@
       row ? `${row.branch_name || ""} • MNF ${fmtPct(row.mnf_delta_pct)} • ปริมาณน้ำเข้า ${fmtPct(row.inflow_delta_pct)}${windowTxt}` : "";
 
     const env = envelopeByDma[dmaCode] || {};
-    chartF = buildEnvelopeChart("mtChartF", env, "flowCurrent", "flowBaselineMin", "flowBaselineMax", "#38bfc7", chartF);
-    chartP = buildEnvelopeChart("mtChartP", env, "pressureCurrent", "pressureBaselineMin", "pressureBaselineMax", "#e8a33d", chartP);
+    chartF = buildEnvelopeChart("mtChartF", env, "flowCurrent", "flowBaselineMin", "flowBaselineMax", "#38bfc7", chartF, 0.20);
+    chartP = buildEnvelopeChart("mtChartP", env, "pressureCurrent", "pressureBaselineMin", "pressureBaselineMax", "#e8a33d", chartP, 0.10);
 
     const rtuIdInput = document.getElementById("mtRemarkRtuId");
     if (rtuIdInput) rtuIdInput.value = dmaCode;
