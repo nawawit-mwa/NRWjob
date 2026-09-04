@@ -138,6 +138,17 @@
   .region-pill:hover{border-color:var(--teal);color:var(--text);}
   .region-pill.active{background:var(--teal);border-color:var(--teal);color:#08131a;}
 
+  /* ตัวกรองสาขา — ปุ่มเรียงตามแนวกว้าง (แถวเดียวกัน wrap ได้) แบบเดียวกับ region-bar ทุกประการ ต่างกันแค่
+     ข้อมูลมาจาก RTU-branch map (โหลดจาก /mediumterm/rtu-branch-map) แทนที่จะ hardcode prefix เหมือนภาค */
+  .branch-bar{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 16px;}
+  .branch-pill{
+    background:var(--panel);border:1px solid var(--border);border-radius:999px;padding:7px 16px;
+    font-size:12.5px;font-weight:600;color:var(--text-dim);cursor:pointer;user-select:none;
+    transition:border-color .15s,color .15s,background .15s;
+  }
+  .branch-pill:hover{border-color:var(--teal);color:var(--text);}
+  .branch-pill.active{background:var(--teal);border-color:var(--teal);color:#08131a;}
+
   /* priority table */
   table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow:hidden;font-size:13px;}
   thead th{text-align:left;font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.05em;font-weight:600;padding:10px 14px;background:var(--panel-2);border-bottom:1px solid var(--border);}
@@ -283,6 +294,7 @@
   <div class="help-hint">💡 พิมพ์ค้นหา RTU ด้านบน หรือคลิกการ์ดสถานะเพื่อกรอง (คลิกซ้ำเพื่อล้าง) · คลิกหัวตารางเพื่อเรียงลำดับ (คลิกซ้ำเพื่อสลับทิศทางมาก↔น้อย) · ผู้ใช้งานสามารถกำหนดรายการ RTU ที่มีหมายเหตุ ได้ตาม <a href="https://docs.google.com/spreadsheets/d/1s18pk_eUVLAIdkAX3I3KLOF1VDmAZEin2xcqygbHzRs/edit?gid=0#gid=0" target="_blank" rel="noopener noreferrer">LINK นี้</a></div>
 
   <div class="region-bar" id="regionBar"></div>
+  <div class="branch-bar" id="branchBar"></div>
 
   <div class="kpis" id="kpis"></div>
   <div id="statusFilterNote" style="display:none;font-size:12.5px;color:var(--teal);margin:-10px 0 16px;"></div>
@@ -961,6 +973,7 @@ const PRESSURE_NOTE_EMPTY = 'ไม่มีข้อมูลแรงดัน
 
 function renderAll(){
   renderRegionBar();
+  renderBranchBar();
   renderKpis();
   renderPriority();
   renderCards();
@@ -1013,6 +1026,7 @@ async function refreshFromCsv(isFirstLoad){
         },
       };
     });
+    applyBranchMapToData();   // เผื่อ branch map โหลดเสร็จมาก่อน CSV รอบนี้แล้ว (ปกติจะโหลดคู่ขนานกันตอนเปิดหน้า)
 
     document.getElementById('sourceLabel').textContent = AUTO_REFRESH_ENABLED
       ? `CSV (คำนวณโดย Python) — รีเฟรชทุก ${REFRESH_MINUTES} นาที`
@@ -1039,6 +1053,7 @@ async function refreshFromCsv(isFirstLoad){
 }
 
 refreshFromCsv(true);
+loadBranchMap();   // โหลดคู่ขนานกับ CSV — ไม่ block การแสดงผลหลัก แค่ตัวกรองสาขาจะยังไม่มีผลจนกว่าจะโหลดเสร็จ
 if(AUTO_REFRESH_ENABLED){
   setInterval(()=>refreshFromCsv(false), REFRESH_MINUTES*60*1000);
 }
@@ -1062,6 +1077,72 @@ function matchesRegion(d){
   const prefixes = REGION_GROUPS[activeRegion];
   if(!prefixes || !prefixes.length) return true;   // "ทั้งหมด" = ไม่กรอง
   return prefixes.some(p => d.code.startsWith(p));
+}
+
+// ตัวกรองสาขา — ต่างจากภาค (REGION_GROUPS hardcode prefix ในโค้ด) ตรงที่ข้อมูลสาขามาจาก Google Sheet จริง
+// (RTUs -> BranchID -> Branches) โหลดจาก /mediumterm/rtu-branch-map ครั้งเดียวตอนเปิดหน้า — endpoint เดียว
+// กับที่หน้า mediumterm ใช้ (คืนค่าเป็นกลาง ไม่ได้ผูกกับ feature mediumterm จริงๆ) ใช้ RTUID จับคู่กับ d.code
+let rtuBranchMap = {};      // {RTUID: {BranchID, BranchName, BranchGroupID, BranchGroupName}}
+let activeBranch = '';      // '' = ทั้งหมด (ไม่กรอง)
+
+function matchesBranch(d){
+  if(!activeBranch) return true;
+  return d.branchId === activeBranch;
+}
+
+// ขอบเขตข้อมูลตามภาค+สาขา (ใช้ทั้งใน KPI และ matchesFilters) แยกจาก status/incident/search ที่กรองซ้อนอีกชั้น
+function matchesScope(d){
+  return matchesRegion(d) && matchesBranch(d);
+}
+
+function branchNameById(branchId){
+  const found = Object.values(rtuBranchMap).find(b => b.BranchID === branchId);
+  return (found && found.BranchName) || branchId;
+}
+
+// เติม branchId/branchName ให้ทุกแถวใน data จาก rtuBranchMap ที่โหลดมาแล้ว — เรียกทั้งตอนโหลด CSV ใหม่
+// (เผื่อ branch map โหลดเสร็จก่อน) และตอน branch map โหลดเสร็จ (เผื่อ data มีอยู่ก่อนแล้ว)
+function applyBranchMapToData(){
+  data.forEach(d => {
+    const b = rtuBranchMap[d.code] || {};
+    d.branchId = b.BranchID || '';
+    d.branchName = b.BranchName || '';
+  });
+}
+
+async function loadBranchMap(){
+  try{
+    const res = await fetch('/mediumterm/rtu-branch-map');
+    const json = await res.json();
+    delete json._debug;   // คีย์สำรองสำหรับวินิจฉัย ไม่ใช่ RTU จริง — ดู app.py
+    rtuBranchMap = json || {};
+  }catch(e){
+    console.warn('โหลดข้อมูลสาขาไม่สำเร็จ — ตัวกรองสาขาจะไม่มีผล:', e.message);
+    rtuBranchMap = {};
+  }
+  renderBranchBar();
+  applyBranchMapToData();
+  renderAll();
+}
+
+function setBranch(branchId){
+  activeBranch = branchId;
+  renderBranchBar();
+  renderKpis();
+  renderCards();
+  renderPriority();
+}
+
+function renderBranchBar(){
+  const el = document.getElementById('branchBar');
+  if(!el) return;
+  const byId = {};
+  Object.values(rtuBranchMap).forEach(b => { if(b.BranchID) byId[b.BranchID] = b.BranchName || b.BranchID; });
+  const sorted = Object.entries(byId).sort((a,b) => a[1].localeCompare(b[1], 'th'));
+  if(!sorted.length){ el.innerHTML = ''; return; }   // ยังไม่มีข้อมูลสาขา (โหลดไม่สำเร็จ/ยังไม่เสร็จ) — ซ่อนแถบไว้ก่อน
+  el.innerHTML = [`<div class="branch-pill ${activeBranch===''?'active':''}" onclick="setBranch('')">ทั้งหมด</div>`]
+    .concat(sorted.map(([id,name]) => `<div class="branch-pill ${activeBranch===id?'active':''}" onclick="setBranch('${id}')">${name}</div>`))
+    .join('');
 }
 
 function setRegion(region){
@@ -1100,7 +1181,7 @@ function clearSearchQuery(){
 }
 
 function matchesFilters(d){
-  if(!matchesRegion(d)) return false;
+  if(!matchesScope(d)) return false;
   if(activeStatusFilter && dStatus(d)!==activeStatusFilter) return false;
   if(activeIncidentFilter && !linkedIncidentMap[d.code]) return false;
   if(searchQuery && !(d.code.toLowerCase().includes(searchQuery) || (d.name||'').toLowerCase().includes(searchQuery))) return false;
@@ -1117,6 +1198,7 @@ function toggleIncidentFilter(){
 function emptyFilterMessage(){
   const parts = [];
   if(activeRegion !== 'ทั้งหมด') parts.push(`เขต "${activeRegion}"`);
+  if(activeBranch) parts.push(`สาขา "${branchNameById(activeBranch)}"`);
   if(activeStatusFilter) parts.push(`สถานะ "${STATUS_LABEL[activeStatusFilter]}"`);
   if(activeIncidentFilter) parts.push(`"เปิดเป็นเหตุการณ์แล้ว"`);
   if(searchQuery) parts.push(`คำค้นหา "${searchQuery}"`);
@@ -1124,7 +1206,7 @@ function emptyFilterMessage(){
 }
 
 function renderKpis(){
-  const regionData = data.filter(matchesRegion);
+  const regionData = data.filter(matchesScope);
   const remarkCount = regionData.filter(d=>d.a.hasRemark).length;
   const alertCount = regionData.filter(d=>!d.a.hasRemark && d.a.status==='alert').length;
   const watchCount = regionData.filter(d=>!d.a.hasRemark && d.a.status==='watch').length;
