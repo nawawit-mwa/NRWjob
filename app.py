@@ -174,13 +174,17 @@ def mediumterm_rtu_branch_map():
     "'<' not supported between instances of 'int' and 'str'" ตอนเรียงคีย์ — แก้โดยบังคับ str() ทุกคีย์/
     ค่าที่ใช้จับคู่ เหมือนกับที่ sc.find_one()/find_many() ทำอยู่แล้ว (str(...) == str(...)) ด้วยเหตุผลเดียวกัน"""
     try:
-        rtus = sc.get_all_records("RTUs")
+        # force_refresh=True เฉพาะ endpoint นี้: ผู้ใช้เพิ่งแก้ RTUID/BranchID ใน Sheet เองสดๆ บ่อยครั้ง
+        # (เจอแล้วว่าเพิ่มข้อมูลไปแล้วแต่ยังไม่ขึ้น เพราะติด cache 5 นาที) endpoint นี้ก็ยิง API ครั้งเดียว
+        # ต่อการเปิดหน้าอยู่แล้ว ไม่ได้ยิงถี่จนเสี่ยงโควตา จึงยอมสละ cache เพื่อให้เห็นผลทันทีดีกว่า
+        rtus = sc.get_all_records("RTUs", force_refresh=True)
         branches = {
-            str(b.get("BranchID")): b for b in sc.get_all_records("Branches") if b.get("BranchID")
+            str(b.get("BranchID")).strip(): b
+            for b in sc.get_all_records("Branches", force_refresh=True) if b.get("BranchID")
         }
         branch_groups = {
-            str(g.get("BranchGroupID")): g
-            for g in sc.get_all_records("BranchGroups") if g.get("BranchGroupID")
+            str(g.get("BranchGroupID")).strip(): g
+            for g in sc.get_all_records("BranchGroups", force_refresh=True) if g.get("BranchGroupID")
         }
 
         result = {}
@@ -190,10 +194,12 @@ def mediumterm_rtu_branch_map():
             if not rtu_id_raw:
                 skipped_no_rtuid += 1
                 continue  # แถวว่าง/ไม่มี RTUID ใน Sheet — ข้ามแทนที่จะ error ทั้ง endpoint
-            rtu_id = str(rtu_id_raw)
-            branch_id = str(rtu.get("BranchID")) if rtu.get("BranchID") else ""
+            # .strip() กันเคสกรอกข้อมูลมีช่องว่างเกินมาโดยไม่รู้ตัว (เว้นวรรคหน้า/หลัง) ทำให้หน้าตาเหมือนกัน
+            # ทุกอย่างแต่เทียบไม่ตรงกันเป๊ะๆ แบบไม่มีทางสังเกตเห็นด้วยตา — เจอปัญหานี้จริงกับ DM-14-11-18-01
+            rtu_id = str(rtu_id_raw).strip()
+            branch_id = str(rtu.get("BranchID")).strip() if rtu.get("BranchID") else ""
             branch = branches.get(branch_id, {})
-            group_id = str(branch.get("BranchGroupID")) if branch.get("BranchGroupID") else ""
+            group_id = str(branch.get("BranchGroupID")).strip() if branch.get("BranchGroupID") else ""
             group = branch_groups.get(group_id, {})
             entry = {
                 "BranchID": branch_id,
@@ -208,7 +214,7 @@ def mediumterm_rtu_branch_map():
             # คอลัมน์ไหนก็ตาม (RTUID ที่แท้จริงมาก่อนเสมอ ไม่ให้ RTUName ทับของจริง)
             rtu_name_raw = rtu.get("RTUName")
             if rtu_name_raw:
-                rtu_name = str(rtu_name_raw)
+                rtu_name = str(rtu_name_raw).strip()
                 if rtu_name != rtu_id and rtu_name not in result:
                     result[rtu_name] = entry
         # ถ้าจับคู่ไม่ได้เลยสักแถว แนบข้อมูลวินิจฉัยไปในคีย์สำรอง "_debug" ด้วย (RTUID จริงจะไม่ชนคีย์นี้
