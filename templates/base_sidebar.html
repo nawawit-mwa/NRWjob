@@ -72,6 +72,13 @@
           <a href="{{ url_for('mediumterm_trend') }}"
              class="side-nav-item {{ 'active' if active_page == 'mediumterm' }}">ติดตาม MNF เทียบ ก.ย. 68</a>
         </div>
+        <!-- กลุ่มนี้แสดงตอนยังไม่ล็อกอิน เพราะปิด login ของ /pbc ไว้ชั่วคราว
+             TODO: ลบทั้งบล็อกนี้ออกเมื่อเปิด login_required ของ /pbc คืน -->
+        <div class="side-nav-group">
+          <div class="side-nav-label">ติดตามพื้นที่ PBC</div>
+          <a href="/pbc"
+             class="side-nav-item {{ 'active' if active_page == 'pbc' }}">ติดตามผลตามสัญญา</a>
+        </div>
       </nav>
       <div class="side-nav-footer">
         <button type="button" id="loginOpenBtn" class="side-login-btn">เข้าสู่ระบบ</button>
