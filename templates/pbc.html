@@ -1,0 +1,932 @@
+<!DOCTYPE html>
+<!--
+  pbc.html — หน้า "ติดตามพื้นที่ PBC"
+
+  ไฟล์นี้เป็นหน้าเต็มแบบยืนเดี่ยว ใช้งานได้ทันทีหลัง register blueprint
+  ถ้าต้องการให้มีแถบเมนูซ้ายเหมือนหน้าอื่น ดูวิธีแปลงใน INTEGRATION_PBC.md หัวข้อ
+  "ทำให้หน้ามีแถบเมนูซ้าย" (เขียนคำสั่ง Jinja ไว้ที่นั่นแทน เพราะ Jinja อ่านคำสั่ง
+  ที่อยู่ในคอมเมนต์ HTML ด้วย ถ้าเขียนไว้ตรงนี้หน้าจะพัง)
+-->
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ติดตามพื้นที่ PBC</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+:root{
+  --bg:#0f1721; --panel:#16202c; --panel2:#1b2733; --line:#25323f;
+  --text:#e6edf3; --muted:#8fa3b8; --dim:#63788e;
+  --teal:#38bfc7; --amber:#e8a33d; --red:#e05c6b; --green:#4cb782;
+  --band:rgba(139,160,190,.16);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);
+  font-family:"Sarabun","Segoe UI",system-ui,sans-serif;font-size:14px;line-height:1.55}
+a{color:var(--teal)}
+.wrap{max-width:1400px;margin:0 auto;padding:20px 18px 60px}
+
+/* ---------- หัวหน้า ---------- */
+.topbar{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;
+  justify-content:space-between;margin-bottom:18px}
+.topbar h1{margin:0;font-size:22px;font-weight:600}
+.topbar .sub{color:var(--muted);font-size:13px;margin-top:2px}
+select,input,textarea,button{font-family:inherit;font-size:13px}
+select,input,textarea{background:var(--panel2);color:var(--text);
+  border:1px solid var(--line);border-radius:6px;padding:7px 9px}
+button{background:var(--panel2);color:var(--text);border:1px solid var(--line);
+  border-radius:6px;padding:7px 13px;cursor:pointer}
+button:hover{border-color:var(--teal)}
+button.primary{background:var(--teal);border-color:var(--teal);color:#06222a;font-weight:600}
+button.primary:hover{filter:brightness(1.1)}
+button:disabled{opacity:.45;cursor:not-allowed}
+
+/* ---------- การ์ดสรุป ---------- */
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
+  gap:12px;margin-bottom:18px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.card .label{color:var(--muted);font-size:12px;margin-bottom:6px}
+.card .value{font-size:26px;font-weight:600;letter-spacing:-.5px}
+.card .note{color:var(--dim);font-size:12px;margin-top:4px}
+.card.warn{border-color:rgba(232,163,61,.5)}
+.card.bad{border-color:rgba(224,92,107,.5)}
+.card.good{border-color:rgba(76,183,130,.5)}
+
+/* ---------- แผง ---------- */
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+  padding:16px;margin-bottom:16px}
+.panel h2{margin:0 0 4px;font-size:16px;font-weight:600}
+.panel .hint{color:var(--muted);font-size:12px;margin-bottom:12px}
+.chart-box{position:relative;height:340px}
+.chart-box.short{height:300px}
+
+/* ---------- แท็บ ---------- */
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:14px}
+.tab{padding:8px 14px;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent}
+.tab.active{color:var(--text);border-bottom-color:var(--teal)}
+.tabpane{display:none}
+.tabpane.active{display:block}
+
+/* ---------- ตาราง ---------- */
+table{width:100%;border-collapse:collapse}
+th,td{padding:8px 10px;text-align:right;border-bottom:1px solid var(--line);
+  white-space:nowrap}
+th{color:var(--muted);font-weight:500;font-size:12px;position:sticky;top:0;
+  background:var(--panel);z-index:1}
+th:first-child,td:first-child{text-align:left}
+tbody tr{cursor:pointer}
+tbody tr:hover{background:var(--panel2)}
+.tablewrap{max-height:520px;overflow:auto;border:1px solid var(--line);border-radius:8px}
+.badge{display:inline-block;padding:1px 7px;border-radius:20px;font-size:11px;
+  border:1px solid var(--line);color:var(--muted)}
+.badge.rtu{border-color:rgba(232,163,61,.55);color:var(--amber)}
+.badge.ovr{border-color:rgba(56,191,199,.55);color:var(--teal)}
+.num-bad{color:var(--red)}
+.num-warn{color:var(--amber)}
+.num-good{color:var(--green)}
+.dim{color:var(--dim)}
+
+/* ---------- popup ---------- */
+.modal{position:fixed;inset:0;background:rgba(6,11,17,.78);display:none;
+  z-index:50;overflow:auto;padding:26px 14px}
+.modal.open{display:block}
+.modal-inner{max-width:1050px;margin:0 auto;background:var(--panel);
+  border:1px solid var(--line);border-radius:12px;padding:18px}
+.modal-head{display:flex;justify-content:space-between;align-items:flex-start;
+  gap:12px;margin-bottom:12px}
+.modal-head h3{margin:0;font-size:18px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:860px){.grid2{grid-template-columns:1fr}}
+.formrow{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px}
+.formrow label{color:var(--muted);font-size:12px;min-width:96px}
+.formrow input,.formrow select,.formrow textarea{flex:1;min-width:130px}
+.msg{padding:9px 12px;border-radius:7px;font-size:13px;margin:10px 0;display:none}
+.msg.show{display:block}
+.msg.ok{background:rgba(76,183,130,.14);border:1px solid rgba(76,183,130,.4)}
+.msg.err{background:rgba(224,92,107,.14);border:1px solid rgba(224,92,107,.4)}
+.msg.info{background:rgba(56,191,199,.12);border:1px solid rgba(56,191,199,.35)}
+.msg ul{margin:6px 0 0;padding-left:18px}
+.dropzone{border:1.5px dashed var(--line);border-radius:10px;padding:26px;
+  text-align:center;color:var(--muted);cursor:pointer}
+.dropzone:hover,.dropzone.drag{border-color:var(--teal);color:var(--text)}
+.editnum{width:110px;text-align:right}
+.loading{color:var(--muted);padding:26px;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="topbar">
+    <div>
+      <h1>ติดตามพื้นที่ PBC</h1>
+      <div class="sub" id="contractSub">กำลังโหลด...</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <select id="contractSelect"></select>
+      <button id="btnReload">โหลดใหม่</button>
+    </div>
+  </div>
+
+  <div class="cards" id="cards"></div>
+
+  <div class="panel">
+    <h2>เส้นทางสู่เป้าหมายตามสัญญา</h2>
+    <div class="hint" id="trajectoryHint">
+      จุดใหญ่คือเดือนวัดผลตามสัญญา ส่วนเส้นบางคือเป้าระหว่างทางที่ลากเชิงเส้น
+      ใช้ดูว่าตามแผนอยู่หรือไม่ ไม่ผูกพันตามสัญญา
+    </div>
+    <div class="chart-box"><canvas id="trajectoryChart"></canvas></div>
+  </div>
+
+  <div class="panel">
+    <div class="tabs">
+      <div class="tab active" data-pane="paneTable">สถานะราย DMA</div>
+      <div class="tab" data-pane="paneTargets">เป้าหมายย่อยราย DMA</div>
+      <div class="tab" data-pane="paneUpload">อัปโหลดรายงาน WB220</div>
+    </div>
+
+    <!-- ------------------ สถานะราย DMA ------------------ -->
+    <div class="tabpane active" id="paneTable">
+      <div class="hint" id="tableHint"></div>
+      <div class="chart-box short" style="margin-bottom:16px">
+        <canvas id="dmaBarChart"></canvas>
+      </div>
+      <div class="tablewrap">
+        <table id="dmaTable">
+          <thead><tr>
+            <th>พื้นที่</th><th>น้ำเข้า</th><th>น้ำจำหน่าย</th><th>น้ำสูญเสีย</th>
+            <th>อัตรา %</th><th>MNF ปัจจุบัน</th><th>พื้นค่า MNF</th>
+            <th>แรงดันกลางคืน (ม.)</th><th>สถานะ</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ------------------ เป้าหมายย่อย ------------------ -->
+    <div class="tabpane" id="paneTargets">
+      <div class="hint" id="targetHint"></div>
+      <div class="msg info show" id="targetSummary"></div>
+      <div class="formrow" style="margin-bottom:12px">
+        <button id="btnRecalc">คำนวณเกลี่ยใหม่</button>
+        <button id="btnResetTargets">ล้างค่าที่แก้เอง</button>
+        <button class="primary" id="btnSaveTargets">บันทึกเป้าหมาย</button>
+      </div>
+      <div class="msg" id="targetMsg"></div>
+      <div class="tablewrap">
+        <table id="targetTable">
+          <thead><tr>
+            <th>พื้นที่</th><th>สูญเสียปัจจุบัน<br>(ลบ.ม./เดือน)</th>
+            <th>ศักยภาพลด</th><th>ต้องลด</th>
+            <th>เป้าสูญเสีย<br>(แก้ได้)</th><th>MNF ปัจจุบัน</th><th>เป้า MNF</th>
+            <th>ที่มาน้ำหนัก</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ------------------ อัปโหลด ------------------ -->
+    <div class="tabpane" id="paneUpload">
+      <div class="hint">
+        อัปโหลดไฟล์รายงาน AN/WB220 (.xls) ที่ export จากระบบ WLMA เดือนละหนึ่งไฟล์
+        ระบบจะอ่านปริมาณน้ำเข้า น้ำออกบิล น้ำอื่นๆ และแรงดันเฉลี่ยให้เอง
+        ค่าเดิมทุกครั้งที่อัปโหลดจะถูกเก็บไว้ในประวัติ ไม่ถูกลบทิ้ง
+      </div>
+      <div class="dropzone" id="dropzone">
+        เลือกไฟล์ หรือลากไฟล์ .xls มาวางที่นี่
+        <input type="file" id="fileInput" accept=".xls" style="display:none">
+      </div>
+      <div class="formrow" style="margin-top:12px">
+        <span class="dim" id="fileName">ยังไม่ได้เลือกไฟล์</span>
+        <button class="primary" id="btnUpload" disabled>อัปโหลด</button>
+      </div>
+      <div class="msg" id="uploadMsg"></div>
+      <div id="uploadPreview"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ------------------ popup ราย DMA ------------------ -->
+<div class="modal" id="dmaModal">
+  <div class="modal-inner">
+    <div class="modal-head">
+      <div>
+        <h3 id="mTitle">-</h3>
+        <div class="dim" id="mSub"></div>
+      </div>
+      <button id="mClose">ปิด</button>
+    </div>
+    <div class="grid2">
+      <div>
+        <div class="hint">อัตราการไหล (ลบ.ม./ชม.) — แถบเทาคือช่วง min-max
+          เส้นทึบคือค่าเฉลี่ย 7 วันล่าสุด</div>
+        <div class="chart-box short"><canvas id="mFlowChart"></canvas></div>
+      </div>
+      <div>
+        <div class="hint">แรงดัน (ม.)</div>
+        <div class="chart-box short"><canvas id="mPressureChart"></canvas></div>
+      </div>
+    </div>
+
+    <h2 style="font-size:15px;margin:18px 0 6px">ข้อมูลรายเดือนจาก WB220</h2>
+    <div class="hint">คลิกตัวเลขน้ำเข้าหรือน้ำอื่นๆ เพื่อปรับค่าให้ตรงกับที่ตกลงกับผู้รับจ้าง</div>
+    <div class="tablewrap" style="max-height:230px">
+      <table id="mHistory">
+        <thead><tr>
+          <th>เดือน</th><th>น้ำเข้า</th><th>น้ำจำหน่าย</th><th>น้ำอื่นๆ</th>
+          <th>สูญเสีย</th><th>อัตรา %</th><th>แรงดันกลางคืน</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="msg" id="mMsg"></div>
+
+    <h2 style="font-size:15px;margin:18px 0 6px">บันทึกการดำเนินงาน</h2>
+    <div class="formrow">
+      <label>วันที่เหตุการณ์</label>
+      <input type="date" id="mRemarkDate">
+      <label style="min-width:60px">หมวด</label>
+      <select id="mRemarkCat">
+        {% for c in remark_categories %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="formrow">
+      <label>รายละเอียด</label>
+      <textarea id="mRemarkText" rows="2" placeholder="เช่น ซ่อมท่อแตก ถ.ราชพฤกษ์ 1 จุด"></textarea>
+    </div>
+    <div class="formrow"><button class="primary" id="mRemarkSave">บันทึก</button></div>
+    <div class="tablewrap" style="max-height:190px">
+      <table id="mRemarkList">
+        <thead><tr><th>วันที่</th><th>หมวด</th><th>รายละเอียด</th><th>ผู้บันทึก</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------------------------------------------------------------- ค่าตั้งต้น
+var CONTRACTS = {{ contracts|tojson }};
+var SELECTED = {{ selected_id|tojson }};
+var OVERRIDABLE = {{ overridable_fields|tojson }};
+var API = "/pbc/api";
+
+var C = { teal:"#38bfc7", amber:"#e8a33d", red:"#e05c6b", green:"#4cb782",
+          muted:"#8fa3b8", band:"rgba(139,160,190,.16)", line:"#25323f" };
+
+var DATA = null;          // ผลจาก /api/overview
+var TARGET_ROWS = [];     // แถวเป้าหมายที่กำลังแก้อยู่
+var MANUAL = {};          // {dma_code: target_loss_m3} ที่ผู้ใช้ล็อกเอง
+var CHARTS = {};
+var PENDING_FILE = null;
+var MODAL_DMA = null;
+
+// ---------------------------------------------------------------- ตัวช่วย
+function $(id){ return document.getElementById(id); }
+function esc(s){
+  return String(s==null?"":s).replace(/[&<>"']/g, function(c){
+    return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
+  });
+}
+function num(v, digits){
+  if(v===null || v===undefined || v==="" || isNaN(v)) return "-";
+  return Number(v).toLocaleString("th-TH", {
+    minimumFractionDigits: digits||0, maximumFractionDigits: digits||0});
+}
+function showMsg(el, text, kind){
+  el.className = "msg show " + (kind||"info");
+  el.innerHTML = text;
+}
+function hideMsg(el){ el.className = "msg"; }
+
+function intervalLabel(i){
+  var h = Math.floor(i/4), m = (i%4)*15;
+  return (h<10?"0":"")+h+":"+(m<10?"0":"")+m;
+}
+
+// ---------------------------------------------------------------- โหลดข้อมูล
+function initContracts(){
+  var sel = $("contractSelect");
+  sel.innerHTML = "";
+  CONTRACTS.forEach(function(c){
+    var o = document.createElement("option");
+    o.value = c.contract_id;
+    o.textContent = c.contract_no + " — " + c.area_name;
+    sel.appendChild(o);
+  });
+  if(SELECTED) sel.value = SELECTED;
+  sel.addEventListener("change", function(){ SELECTED = sel.value; load(); });
+}
+
+function load(){
+  $("contractSub").textContent = "กำลังโหลด...";
+  fetch(API + "/overview?contract_id=" + encodeURIComponent(SELECTED||""))
+    .then(function(r){ return r.json(); })
+    .then(function(j){
+      if(!j.ok){ $("contractSub").textContent = j.error || "โหลดข้อมูลไม่สำเร็จ"; return; }
+      DATA = j.data;
+      MANUAL = {};
+      render();
+    })
+    .catch(function(e){ $("contractSub").textContent = "เชื่อมต่อไม่สำเร็จ: " + e; });
+}
+
+// ---------------------------------------------------------------- แสดงผล
+function render(){
+  var c = DATA.contract;
+  $("contractSub").textContent =
+    c.contract_no + " · " + c.branch_name + " · เริ่ม " + c.start_month +
+    " · " + DATA.n_dma + " พื้นที่เฝ้าระวัง";
+  renderCards();
+  renderTrajectory();
+  renderDmaTable();
+  renderBarChart();
+  renderTargets();
+}
+
+function renderCards(){
+  var c = DATA.contract, latest = DATA.latest, nt = DATA.next_target;
+  var out = DATA.outlook, fc = DATA.forecast;
+  var cards = [];
+
+  cards.push({label:"อัตราน้ำสูญเสียฐาน (X)",
+    value: c.baseline_rate_x==null ? "-" : num(c.baseline_rate_x,2)+"%",
+    note:"ตามที่ตกลงกับผู้รับจ้าง"});
+
+  if(latest){
+    var cls = (nt && latest.loss_rate <= nt.target_rate) ? "good" : "warn";
+    cards.push({label:"อัตราปัจจุบัน (รอบ 3 เดือน)", cls:cls,
+      value: num(latest.loss_rate,2)+"%",
+      note: "เดือนที่ " + latest.month_no + " · " +
+            latest.window.map(function(m){return m.slice(5);}).join(", ")});
+  } else {
+    cards.push({label:"อัตราปัจจุบัน", value:"-",
+      note:"ยังไม่มีข้อมูลครบ 3 เดือน"});
+  }
+
+  if(nt){
+    var monthsLeft = latest ? (nt.month_no - latest.month_no) : null;
+    cards.push({label:"เป้าจุดวัดผลถัดไป", value: num(nt.target_rate,2)+"%",
+      note:"เดือนที่ " + nt.month_no +
+           (monthsLeft!=null && monthsLeft>0 ? " · อีก "+monthsLeft+" เดือน" :
+            (monthsLeft===0 ? " · ถึงกำหนดแล้ว" : ""))});
+  }
+
+  var bd = DATA.breakdown;
+  if(bd && bd.summary){
+    var need = bd.summary.total_reduction_m3 || 0;
+    cards.push({label:"ต้องลดน้ำสูญเสียอีก", cls: need>0?"bad":"good",
+      value: num(need,0), note:"ลบ.ม./เดือน เพื่อถึงเป้าจุดถัดไป"});
+  }
+
+  if(out){
+    var cls2 = out.on_track ? "good" : "bad";
+    cards.push({label:"คาดการณ์ ณ เดือนที่ " + out.month_no, cls:cls2,
+      value: num(out.forecast_rate,2)+"%",
+      note: (out.on_track ? "ตามแผน" : "สูงกว่าเป้า " + num(out.gap,2) + " จุด") +
+            (out.level==="low" ? " · ความเชื่อมั่นต่ำ" : "")});
+  } else {
+    cards.push({label:"คาดการณ์", value:"-", note: fc ? fc.message : ""});
+  }
+
+  if(DATA.n_dma_no_rtu > 0){
+    cards.push({label:"พื้นที่ไม่มีข้อมูลเครื่องวัด", cls:"warn",
+      value: DATA.n_dma_no_rtu + " / " + DATA.n_dma,
+      note:"ใช้สัดส่วนน้ำสูญเสียแทนในการกระจายเป้า"});
+  }
+
+  $("cards").innerHTML = cards.map(function(k){
+    return '<div class="card ' + (k.cls||"") + '">' +
+      '<div class="label">' + esc(k.label) + '</div>' +
+      '<div class="value">' + esc(k.value) + '</div>' +
+      '<div class="note">' + esc(k.note||"") + '</div></div>';
+  }).join("");
+}
+
+function renderTrajectory(){
+  var targets = DATA.targets || [];
+  var rolling = DATA.rolling || [];
+  var interim = DATA.interim_line || [];
+  var fc = (DATA.forecast && DATA.forecast.points) || [];
+  var x = DATA.contract.baseline_rate_x;
+
+  var maxNo = 1;
+  [targets, rolling, interim, fc].forEach(function(arr){
+    arr.forEach(function(p){ maxNo = Math.max(maxNo, p.month_no); });
+  });
+  var labels = [];
+  for(var i=1;i<=maxNo;i++) labels.push(i);
+  function at(arr, key){
+    var map = {};
+    arr.forEach(function(p){ map[p.month_no] = p[key]; });
+    return labels.map(function(n){ return map[n]===undefined ? null : map[n]; });
+  }
+
+  var lastActual = rolling.length ? rolling[rolling.length-1] : null;
+  var fcLine = at(fc, "rate");
+  if(lastActual){  // ต่อเส้นพยากรณ์จากจุดจริงล่าสุด ไม่ให้ลอย
+    var idx = labels.indexOf(lastActual.month_no);
+    if(idx >= 0) fcLine[idx] = lastActual.loss_rate;
+  }
+
+  var ds = [];
+  if(x != null){
+    ds.push({label:"อัตราฐาน X", data: labels.map(function(){ return x; }),
+      borderColor:"rgba(143,163,184,.55)", borderDash:[3,4], borderWidth:1.2,
+      pointRadius:0, fill:false});
+  }
+  ds.push({label:"เป้าระหว่างทาง (ไม่ผูกพัน)", data: at(interim,"rate"),
+    borderColor:"rgba(232,163,61,.45)", borderDash:[2,3], borderWidth:1.2,
+    pointRadius:0, fill:false});
+  ds.push({label:"เป้าตามสัญญา", data: at(targets,"target_rate"),
+    borderColor:C.amber, borderWidth:2.2, stepped:"after",
+    pointRadius:5, pointBackgroundColor:C.amber, spanGaps:true, fill:false});
+  if(fc.length){
+    ds.push({label:"ช่วงพยากรณ์", data: at(fc,"hi"), borderColor:"transparent",
+      pointRadius:0, fill:"+1", backgroundColor:C.band, spanGaps:true});
+    ds.push({label:"_lo", data: at(fc,"lo"), borderColor:"transparent",
+      pointRadius:0, fill:false, spanGaps:true});
+    ds.push({label:"คาดการณ์", data: fcLine, borderColor:C.teal,
+      borderDash:[5,4], borderWidth:2, pointRadius:0, spanGaps:true, fill:false});
+  }
+  ds.push({label:"อัตราจริง (รอบ 3 เดือน)", data: at(rolling,"loss_rate"),
+    borderColor:C.teal, borderWidth:2.6, pointRadius:4,
+    pointBackgroundColor:C.teal, spanGaps:true, fill:false});
+
+  if(CHARTS.traj) CHARTS.traj.destroy();
+  CHARTS.traj = new Chart($("trajectoryChart"), {
+    type:"line",
+    data:{ labels: labels.map(function(n){ return "เดือนที่ " + n; }), datasets: ds },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      interaction:{ mode:"index", intersect:false },
+      plugins:{
+        legend:{ labels:{ color:C.muted, boxWidth:14,
+          filter:function(item){ return item.text.charAt(0) !== "_"; } } },
+        tooltip:{ filter:function(item){ return item.dataset.label.charAt(0) !== "_"; },
+          callbacks:{ label:function(ctx){
+            if(ctx.parsed.y===null) return null;
+            return ctx.dataset.label + ": " + ctx.parsed.y.toFixed(2) + "%"; } } }
+      },
+      scales:{
+        x:{ ticks:{ color:C.muted, maxRotation:0, autoSkipPadding:18 },
+            grid:{ color:C.line } },
+        y:{ ticks:{ color:C.muted, callback:function(v){ return v + "%"; } },
+            grid:{ color:C.line }, title:{ display:true, color:C.muted,
+              text:"อัตราน้ำสูญเสีย" } }
+      }
+    }
+  });
+
+  var fcInfo = DATA.forecast ? DATA.forecast.message : "";
+  $("trajectoryHint").innerHTML =
+    "จุดใหญ่คือเดือนวัดผลตามสัญญา (เดือนที่ 8, 14, 20, 23, 26) " +
+    "เส้นบางคือเป้าระหว่างทางที่ลากเชิงเส้น ใช้ดูว่าตามแผนอยู่หรือไม่ ไม่ผูกพันตามสัญญา" +
+    (fcInfo ? " · " + esc(fcInfo) : "");
+}
+
+function renderDmaTable(){
+  var rows = DATA.dma_rows || [];
+  var latest = DATA.latest;
+  $("tableHint").textContent = latest
+    ? "ยอดรวมรอบ 3 เดือน: " + latest.window.join(", ") +
+      " (หน่วยปริมาณเป็น ลบ.ม.)"
+    : "ยังไม่มีข้อมูลครบรอบ 3 เดือน — อัปโหลดรายงาน WB220 เพิ่ม";
+
+  var tb = $("dmaTable").querySelector("tbody");
+  tb.innerHTML = rows.map(function(r){
+    var rateCls = r.loss_rate==null ? "" :
+      (r.loss_rate >= 50 ? "num-bad" : (r.loss_rate >= 35 ? "num-warn" : "num-good"));
+    var tags = "";
+    if(!r.has_rtu) tags += '<span class="badge rtu">ไม่มีข้อมูลเครื่องวัด</span> ';
+    if(r.has_override) tags += '<span class="badge ovr">ปรับค่าแล้ว</span> ';
+    if(r.n_meters > 1) tags += '<span class="badge">' + r.n_meters + ' มาตร</span>';
+    return '<tr data-dma="' + esc(r.dma_code) + '">' +
+      '<td>' + esc(r.dma_code) + '</td>' +
+      '<td>' + num(r.inflow_m3) + '</td>' +
+      '<td>' + num(r.sales_m3) + '</td>' +
+      '<td>' + num(r.loss_m3) + '</td>' +
+      '<td class="' + rateCls + '">' + num(r.loss_rate,2) + '</td>' +
+      '<td>' + num(r.mnf_current,1) + '</td>' +
+      '<td class="dim">' + num(r.mnf_floor,1) + '</td>' +
+      '<td>' + num(r.avg_pressure_night,2) + '</td>' +
+      '<td style="text-align:left">' + tags + '</td></tr>';
+  }).join("");
+
+  Array.prototype.forEach.call(tb.querySelectorAll("tr"), function(tr){
+    tr.addEventListener("click", function(){ openModal(tr.getAttribute("data-dma")); });
+  });
+}
+
+function renderBarChart(){
+  var rows = (DATA.dma_rows || []).filter(function(r){ return r.loss_m3 != null; })
+    .slice().sort(function(a,b){ return b.loss_m3 - a.loss_m3; });
+  var targets = {};
+  ((DATA.breakdown && DATA.breakdown.rows) || []).forEach(function(t){
+    targets[t.dma_code] = t.target_loss_m3;
+  });
+  var months = DATA.latest ? DATA.latest.window.length : 1;
+
+  var labels = rows.map(function(r){ return r.dma_code; });
+  var current = rows.map(function(r){ return r.loss_m3 / months; });
+  var target = rows.map(function(r){
+    var t = targets[r.dma_code];
+    return t === undefined ? null : t;
+  });
+
+  if(CHARTS.bar) CHARTS.bar.destroy();
+  CHARTS.bar = new Chart($("dmaBarChart"), {
+    type:"bar",
+    data:{ labels: labels, datasets:[
+      { label:"น้ำสูญเสียปัจจุบัน (ลบ.ม./เดือน)", data: current,
+        backgroundColor:"rgba(224,92,107,.65)", borderColor:C.red, borderWidth:1 },
+      { label:"เป้าหมาย", data: target, type:"line", showLine:false,
+        pointStyle:"line", pointRadius:9, borderWidth:2.5,
+        pointBorderColor:C.green, borderColor:C.green, rotation:90 }
+    ]},
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ labels:{ color:C.muted, boxWidth:14, usePointStyle:true } },
+        tooltip:{ callbacks:{ label:function(ctx){
+          return ctx.dataset.label + ": " +
+                 (ctx.parsed.y==null ? "-" : Math.round(ctx.parsed.y).toLocaleString());
+        } } } },
+      scales:{
+        x:{ ticks:{ color:C.muted, maxRotation:60, minRotation:45, font:{size:10} },
+            grid:{ display:false } },
+        y:{ ticks:{ color:C.muted }, grid:{ color:C.line } }
+      }
+    }
+  });
+}
+
+// ---------------------------------------------------------------- เป้าหมายย่อย
+function renderTargets(){
+  var bd = DATA.breakdown;
+  var tb = $("targetTable").querySelector("tbody");
+  if(!bd || !bd.rows || !bd.rows.length){
+    $("targetHint").textContent =
+      "ยังคำนวณเป้าหมายย่อยไม่ได้ — ต้องมีข้อมูลครบอย่างน้อย 3 เดือนก่อน";
+    $("targetSummary").className = "msg";
+    tb.innerHTML = "";
+    return;
+  }
+  TARGET_ROWS = bd.rows.slice();
+  $("targetHint").innerHTML =
+    "กระจายเป้าตามศักยภาพที่แต่ละพื้นที่ลดได้จริง " +
+    "(ศักยภาพ = MNF ปัจจุบัน − พื้นค่า MNF × " + bd.hours_per_day + " ชม. × " +
+    bd.days + " วัน) พื้นที่ที่ไม่มีข้อมูลเครื่องวัดใช้สัดส่วนน้ำสูญเสียแทน · " +
+    "แก้ช่อง \"เป้าสูญเสีย\" ได้ ระบบจะเกลี่ยส่วนที่เหลือให้พื้นที่อื่นอัตโนมัติ";
+  drawTargetRows();
+}
+
+function drawTargetRows(){
+  var bd = DATA.breakdown;
+  var tb = $("targetTable").querySelector("tbody");
+  tb.innerHTML = TARGET_ROWS.map(function(r){
+    var srcLabel = r.weight_source === "mnf"
+      ? '<span class="badge">MNF</span>'
+      : '<span class="badge rtu">สัดส่วนน้ำสูญเสีย</span>';
+    return '<tr>' +
+      '<td>' + esc(r.dma_code) + (r.is_manual ? ' <span class="badge ovr">แก้เอง</span>' : '') + '</td>' +
+      '<td>' + num(r.loss_m3) + '</td>' +
+      '<td class="dim">' + (r.potential_m3==null ? "-" : num(r.potential_m3)) + '</td>' +
+      '<td class="num-warn">' + num(r.reduction_m3) + '</td>' +
+      '<td><input class="editnum" type="number" min="0" step="1" ' +
+        'data-dma="' + esc(r.dma_code) + '" value="' +
+        (r.target_loss_m3==null ? "" : Math.round(r.target_loss_m3)) + '"></td>' +
+      '<td>' + num(r.mnf_current,1) + '</td>' +
+      '<td class="num-good">' + num(r.target_mnf,1) + '</td>' +
+      '<td style="text-align:left">' + srcLabel + '</td></tr>';
+  }).join("");
+
+  Array.prototype.forEach.call(tb.querySelectorAll("input"), function(inp){
+    inp.addEventListener("change", function(){
+      var v = parseFloat(inp.value);
+      if(isNaN(v) || v < 0){ delete MANUAL[inp.getAttribute("data-dma")]; }
+      else { MANUAL[inp.getAttribute("data-dma")] = v; }
+      recalcTargets();
+    });
+  });
+
+  var s = bd.summary || {};
+  var unalloc = s.unallocated_m3 || 0;
+  var target = DATA.next_target ? DATA.next_target.target_rate : null;
+  var text = "ต้องลดรวม " + num(s.total_reduction_m3) + " ลบ.ม./เดือน · " +
+    "เป้าน้ำสูญเสียรวมของแผนนี้ " + num(s.sum_target_loss_m3) + " ลบ.ม./เดือน";
+  if(s.resulting_rate != null){
+    text += " · อัตราที่จะได้ " + num(s.resulting_rate,2) + "%" +
+      (target != null ? " (เป้า " + num(target,2) + "%)" : "");
+  }
+  if(unalloc > 1){
+    showMsg($("targetSummary"), text +
+      "<br><b>ยังกระจายไม่ครบอีก " + num(unalloc) + " ลบ.ม.</b> — " +
+      "เป้าที่แก้เองรวมกันแล้วยังไม่ถึงเป้าใหญ่ ต้องลดเป้าของบางพื้นที่ลงอีก", "err");
+  } else if(target != null && s.resulting_rate != null &&
+            s.resulting_rate < target - 0.05){
+    showMsg($("targetSummary"), text +
+      "<br>แผนนี้ตั้งเป้าเข้มกว่าที่สัญญากำหนด เพราะเป้าที่แก้เองบางพื้นที่ต่ำกว่าที่จำเป็น",
+      "info");
+  } else {
+    showMsg($("targetSummary"), text, "info");
+  }
+}
+
+function recalcTargets(){
+  var bd = DATA.breakdown;
+  if(!bd || !bd.rows.length) return;
+  var basis = TARGET_ROWS.map(function(r){
+    return { dma_code:r.dma_code, inflow_m3:r.inflow_m3, sales_m3:r.sales_m3,
+             loss_m3:r.loss_m3, mnf_current:r.mnf_current, mnf_floor:r.mnf_floor };
+  });
+  fetch(API + "/preview-targets", {
+    method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({
+      contract_id: SELECTED, basis: basis, manual: MANUAL,
+      sales_m3: bd.summary.sales_m3, target_rate: DATA.next_target.target_rate
+    })
+  }).then(function(r){ return r.json(); }).then(function(j){
+    if(!j.ok){ showMsg($("targetMsg"), esc(j.error), "err"); return; }
+    TARGET_ROWS = j.rows;
+    DATA.breakdown.summary = j.summary;
+    drawTargetRows();
+    renderBarChart();
+  });
+}
+
+function saveTargets(){
+  if(!TARGET_ROWS.length) return;
+  var payload = TARGET_ROWS.map(function(r){
+    return { dma_code:r.dma_code, target_loss_m3:r.target_loss_m3,
+             target_mnf:r.target_mnf, is_manual: !!MANUAL[r.dma_code] };
+  });
+  fetch(API + "/targets", {
+    method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({ contract_id: SELECTED,
+      measure_month_no: DATA.breakdown.measure_month_no, targets: payload })
+  }).then(function(r){ return r.json(); }).then(function(j){
+    if(j.ok) showMsg($("targetMsg"), "บันทึกเป้าหมาย " + j.n_saved + " พื้นที่แล้ว", "ok");
+    else showMsg($("targetMsg"), esc(j.error), "err");
+  });
+}
+
+// ---------------------------------------------------------------- popup
+function openModal(dma){
+  MODAL_DMA = dma;
+  $("dmaModal").classList.add("open");
+  $("mTitle").textContent = "พื้นที่ " + dma;
+  $("mSub").textContent = "กำลังโหลด...";
+  hideMsg($("mMsg"));
+  $("mRemarkDate").value = new Date().toISOString().slice(0,10);
+  $("mRemarkText").value = "";
+
+  fetch(API + "/dma/" + encodeURIComponent(dma) +
+        "?contract_id=" + encodeURIComponent(SELECTED))
+    .then(function(r){ return r.json(); })
+    .then(function(j){
+      if(!j.ok){ $("mSub").textContent = j.error || "โหลดไม่สำเร็จ"; return; }
+      var meters = (j.meters||[]).map(function(m){ return m.rtu_id; }).join(", ");
+      $("mSub").textContent = "มาตรวัดน้ำหลัก: " + (meters || "ไม่มีในผัง");
+      drawEnvelope(j.envelope);
+      drawHistory(j.history);
+      drawRemarks(j.remarks);
+    });
+}
+
+function drawEnvelope(env){
+  var labels = [], fmin=[], fmax=[], flat=[], pmin=[], pmax=[], plat=[];
+  (env||[]).forEach(function(e){
+    labels.push(intervalLabel(e.interval_idx));
+    fmin.push(e.f_min); fmax.push(e.f_max); flat.push(e.f_latest);
+    pmin.push(e.p_min); pmax.push(e.p_max); plat.push(e.p_latest);
+  });
+  function build(canvasId, key, lo, hi, line, color, unit){
+    if(CHARTS[key]) CHARTS[key].destroy();
+    CHARTS[key] = new Chart($(canvasId), {
+      type:"line",
+      data:{ labels: labels, datasets:[
+        { label:"ต่ำสุด", data: lo, borderColor:"transparent", pointRadius:0, fill:false },
+        { label:"ช่วง min-max", data: hi, borderColor:"transparent",
+          pointRadius:0, fill:"-1", backgroundColor:C.band },
+        { label:"เฉลี่ย 7 วันล่าสุด", data: line, borderColor:color,
+          borderWidth:2, pointRadius:0, fill:false, tension:.25 }
+      ]},
+      options:{ responsive:true, maintainAspectRatio:false,
+        interaction:{ mode:"index", intersect:false },
+        plugins:{ legend:{ labels:{ color:C.muted, boxWidth:12, font:{size:10} } },
+          tooltip:{ callbacks:{ label:function(ctx){
+            return ctx.dataset.label + ": " +
+              (ctx.parsed.y==null?"-":ctx.parsed.y.toFixed(1)) + " " + unit; } } } },
+        scales:{ x:{ ticks:{ color:C.muted, maxTicksLimit:9, font:{size:10} },
+                     grid:{ color:C.line } },
+                 y:{ ticks:{ color:C.muted, font:{size:10} }, grid:{ color:C.line } } } }
+    });
+  }
+  build("mFlowChart", "flow", fmin, fmax, flat, C.teal, "ลบ.ม./ชม.");
+  build("mPressureChart", "pressure", pmin, pmax, plat, C.amber, "ม.");
+}
+
+function drawHistory(history){
+  var tb = $("mHistory").querySelector("tbody");
+  tb.innerHTML = (history||[]).slice().reverse().map(function(h){
+    function cell(field, value, digits){
+      var o = h.overrides && h.overrides[field];
+      var title = o ? ("WLMA: " + num(o.raw) + " → ปรับเป็น " + num(o.value) +
+                       " โดย " + o.by + " (" + o.reason + ")") : "";
+      return '<td class="editable' + (o ? " num-warn" : "") + '" ' +
+        'data-month="' + esc(h.month) + '" data-field="' + field + '" ' +
+        'data-value="' + (value==null?"":value) + '" title="' + esc(title) + '" ' +
+        'style="cursor:pointer">' + num(value, digits) + (o ? " *" : "") + '</td>';
+    }
+    return '<tr><td>' + esc(h.label) + '</td>' +
+      cell("inflow_m3", h.inflow_m3) +
+      '<td>' + num(h.sales_m3) + '</td>' +
+      cell("other_m3", h.overrides && h.overrides.other_m3
+        ? h.overrides.other_m3.value : null) +
+      '<td>' + num(h.loss_m3) + '</td>' +
+      '<td>' + num(h.loss_rate,2) + '</td>' +
+      '<td>' + num(h.avg_pressure_night,2) + '</td></tr>';
+  }).join("");
+
+  Array.prototype.forEach.call(tb.querySelectorAll(".editable"), function(td){
+    td.addEventListener("click", function(){ promptOverride(td); });
+  });
+}
+
+function promptOverride(td){
+  var field = td.getAttribute("data-field");
+  var month = td.getAttribute("data-month");
+  var label = OVERRIDABLE[field] || field;
+  var current = td.getAttribute("data-value");
+  var value = window.prompt(
+    "ปรับ" + label + " ของ " + MODAL_DMA + " เดือน " + month +
+    "\nค่าปัจจุบัน: " + (current || "-") + "\n\nกรอกค่าใหม่ (ลบ.ม.):", current);
+  if(value === null) return;
+  var reason = window.prompt(
+    "ระบุเหตุผลของการปรับ (อย่างน้อย 5 ตัวอักษร)\n" +
+    "ตัวเลขนี้ใช้ประเมินผลตามสัญญา จึงต้องมีบันทึกไว้:", "");
+  if(reason === null) return;
+
+  fetch(API + "/override", {
+    method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({ contract_id: SELECTED, dma_code: MODAL_DMA,
+      month: month, field: field, value: value, reason: reason })
+  }).then(function(r){ return r.json(); }).then(function(j){
+    if(!j.ok){ showMsg($("mMsg"), esc(j.error), "err"); return; }
+    showMsg($("mMsg"), "ปรับค่าเรียบร้อย กำลังโหลดข้อมูลใหม่", "ok");
+    openModal(MODAL_DMA);
+    load();
+  });
+}
+
+function drawRemarks(remarks){
+  var tb = $("mRemarkList").querySelector("tbody");
+  tb.innerHTML = (remarks||[]).map(function(r){
+    return '<tr><td>' + esc(r.event_date) + '</td><td>' + esc(r.category) +
+      '</td><td style="text-align:left;white-space:normal">' + esc(r.text) +
+      '</td><td>' + esc(r.recorded_by) + '</td></tr>';
+  }).join("") || '<tr><td colspan="4" class="dim">ยังไม่มีบันทึก</td></tr>';
+}
+
+function saveRemark(){
+  var text = $("mRemarkText").value.trim();
+  if(!text){ showMsg($("mMsg"), "ยังไม่ได้กรอกรายละเอียด", "err"); return; }
+  fetch(API + "/remark", {
+    method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({ contract_id: SELECTED, dma_code: MODAL_DMA,
+      event_date: $("mRemarkDate").value, category: $("mRemarkCat").value,
+      text: text })
+  }).then(function(r){ return r.json(); }).then(function(j){
+    if(!j.ok){ showMsg($("mMsg"), esc(j.error), "err"); return; }
+    showMsg($("mMsg"), "บันทึกแล้ว", "ok");
+    $("mRemarkText").value = "";
+    openModal(MODAL_DMA);
+  });
+}
+
+// ---------------------------------------------------------------- อัปโหลด
+function doUpload(confirm){
+  if(!PENDING_FILE) return;
+  var fd = new FormData();
+  fd.append("file", PENDING_FILE);
+  fd.append("contract_id", SELECTED);
+  if(confirm) fd.append("confirm", "1");
+  $("btnUpload").disabled = true;
+  showMsg($("uploadMsg"), "กำลังอ่านไฟล์...", "info");
+
+  fetch(API + "/upload", { method:"POST", body: fd })
+    .then(function(r){ return r.json().then(function(j){ return {status:r.status, j:j}; }); })
+    .then(function(res){
+      var j = res.j;
+      $("btnUpload").disabled = false;
+      if(j.needs_confirm){
+        var html = esc(j.message) +
+          '<br><br><button class="primary" id="btnConfirmUpload">ยืนยันใช้ค่าจากไฟล์ใหม่</button>';
+        showMsg($("uploadMsg"), html, "err");
+        renderPreview(j.preview);
+        $("btnConfirmUpload").addEventListener("click", function(){ doUpload(true); });
+        return;
+      }
+      if(!j.ok){ showMsg($("uploadMsg"), esc(j.error), "err"); return; }
+      var msg = "บันทึกข้อมูลเดือน " + esc(j.month_label) + " จำนวน " +
+                j.n_saved + " พื้นที่เรียบร้อย";
+      if(j.warnings && j.warnings.length){
+        msg += "<ul>" + j.warnings.map(function(w){
+          return "<li>" + esc(w) + "</li>"; }).join("") + "</ul>";
+      }
+      showMsg($("uploadMsg"), msg, "ok");
+      $("uploadPreview").innerHTML = "";
+      PENDING_FILE = null;
+      $("fileName").textContent = "ยังไม่ได้เลือกไฟล์";
+      $("btnUpload").disabled = true;
+      load();
+    })
+    .catch(function(e){
+      $("btnUpload").disabled = false;
+      showMsg($("uploadMsg"), "อัปโหลดไม่สำเร็จ: " + esc(e), "err");
+    });
+}
+
+function renderPreview(preview){
+  if(!preview || !preview.length){ $("uploadPreview").innerHTML = ""; return; }
+  $("uploadPreview").innerHTML =
+    '<div class="tablewrap" style="max-height:260px;margin-top:10px"><table>' +
+    '<thead><tr><th>พื้นที่</th><th>น้ำเข้าเดิม</th><th>น้ำเข้าใหม่</th>' +
+    '<th>น้ำจำหน่ายเดิม</th><th>น้ำจำหน่ายใหม่</th></tr></thead><tbody>' +
+    preview.map(function(p){
+      var changed = Math.abs(p.old_inflow - p.new_inflow) > 0.5;
+      return '<tr><td>' + esc(p.dma_code) + '</td>' +
+        '<td>' + num(p.old_inflow) + '</td>' +
+        '<td class="' + (changed?"num-warn":"") + '">' + num(p.new_inflow) + '</td>' +
+        '<td>' + num(p.old_sales) + '</td><td>' + num(p.new_sales) + '</td></tr>';
+    }).join("") + '</tbody></table></div>';
+}
+
+// ---------------------------------------------------------------- เริ่มทำงาน
+function bindEvents(){
+  Array.prototype.forEach.call(document.querySelectorAll(".tab"), function(t){
+    t.addEventListener("click", function(){
+      Array.prototype.forEach.call(document.querySelectorAll(".tab"), function(x){
+        x.classList.remove("active"); });
+      Array.prototype.forEach.call(document.querySelectorAll(".tabpane"), function(x){
+        x.classList.remove("active"); });
+      t.classList.add("active");
+      $(t.getAttribute("data-pane")).classList.add("active");
+    });
+  });
+
+  $("btnReload").addEventListener("click", load);
+  $("btnRecalc").addEventListener("click", recalcTargets);
+  $("btnResetTargets").addEventListener("click", function(){
+    MANUAL = {}; recalcTargets();
+  });
+  $("btnSaveTargets").addEventListener("click", saveTargets);
+  $("mClose").addEventListener("click", function(){
+    $("dmaModal").classList.remove("open");
+  });
+  $("dmaModal").addEventListener("click", function(e){
+    if(e.target === $("dmaModal")) $("dmaModal").classList.remove("open");
+  });
+  document.addEventListener("keydown", function(e){
+    if(e.key === "Escape") $("dmaModal").classList.remove("open");
+  });
+  $("mRemarkSave").addEventListener("click", saveRemark);
+
+  var dz = $("dropzone"), fi = $("fileInput");
+  dz.addEventListener("click", function(){ fi.click(); });
+  fi.addEventListener("change", function(){
+    if(fi.files.length) setFile(fi.files[0]);
+  });
+  ["dragenter","dragover"].forEach(function(ev){
+    dz.addEventListener(ev, function(e){
+      e.preventDefault(); dz.classList.add("drag"); });
+  });
+  ["dragleave","drop"].forEach(function(ev){
+    dz.addEventListener(ev, function(e){
+      e.preventDefault(); dz.classList.remove("drag"); });
+  });
+  dz.addEventListener("drop", function(e){
+    if(e.dataTransfer.files.length) setFile(e.dataTransfer.files[0]);
+  });
+  $("btnUpload").addEventListener("click", function(){ doUpload(false); });
+}
+
+function setFile(file){
+  PENDING_FILE = file;
+  $("fileName").textContent = file.name;
+  $("btnUpload").disabled = false;
+  hideMsg($("uploadMsg"));
+  $("uploadPreview").innerHTML = "";
+}
+
+initContracts();
+bindEvents();
+if(CONTRACTS.length) load();
+else $("contractSub").textContent =
+  "ยังไม่มีสัญญาในระบบ — รัน pbc_schema_setup.py --create --seed ก่อน";
+</script>
+</body>
+</html>
