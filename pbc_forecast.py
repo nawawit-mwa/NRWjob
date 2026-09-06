@@ -250,22 +250,29 @@ def _weighted_linreg(points):
     return slope, intercept, sd
 
 
-def forecast_rate(series, horizon_months, confidence_k=1.96):
+def forecast_rate(series, horizon_months, confidence_k=1.96,
+                  floor=0.0, ceiling=100.0, band_width_limit=10.0):
     """
     พยากรณ์อัตราน้ำสูญเสียล่วงหน้า
 
     series          : list ของ (month_no, rate_percent) เรียงตามเดือน
     horizon_months  : list ของเลขเดือนที่ต้องการค่าพยากรณ์
+    floor / ceiling : ขอบเขตที่เป็นไปได้จริงของอัตราน้ำสูญเสีย (0-100%)
+    band_width_limit: ถ้าช่วงความเชื่อมั่นกว้างเกินนี้ ถือว่าสรุปอะไรไม่ได้
 
     คืน dict {
         "level": "none" | "low" | "normal",
         "message": ข้อความอธิบายระดับความเชื่อมั่น,
-        "points": [{month_no, rate, lo, hi}, ...],
+        "points": [{month_no, rate, lo, hi, conclusive}, ...],
         "slope_per_month": อัตราการเปลี่ยนแปลงต่อเดือน (จุดเปอร์เซ็นต์),
+        "max_month_no": เดือนไกลสุดที่ยอมพยากรณ์,
     }
 
-    ระดับความเชื่อมั่นแบ่งตามจำนวนจุดข้อมูล เพราะช่วงต้นสัญญามีข้อมูลน้อยมาก
-    การแสดงเส้นพยากรณ์จากจุดเดียวเป็นการให้ความมั่นใจเกินจริง
+    ข้อจำกัด 3 ชั้นที่จำเป็น เพราะการลากเส้นตรงจากข้อมูลไม่กี่จุดไปไกลๆ
+    ให้ค่าที่เป็นไปไม่ได้ทางกายภาพ (เคยได้ -25% ตอนมีข้อมูล 3 จุด)
+      1) ไม่พยากรณ์ไกลเกิน 2 เท่าของจำนวนรอบข้อมูลที่มี
+      2) บีบค่าให้อยู่ในช่วง 0-100% ทั้งเส้นกลางและขอบช่วง
+      3) ถ้าช่วงความเชื่อมั่นกว้างเกินเกณฑ์ ติดธงว่ายังสรุปไม่ได้
     """
     clean = [(int(m), float(v)) for m, v in series if v is not None]
     clean.sort(key=lambda p: p[0])
@@ -277,6 +284,7 @@ def forecast_rate(series, horizon_months, confidence_k=1.96):
             "message": "ข้อมูลยังไม่พอสำหรับพยากรณ์ (มี %d รอบ ต้องการอย่างน้อย 3)" % n,
             "points": [],
             "slope_per_month": None,
+            "max_month_no": None,
         }
 
     slope, intercept, sd = _weighted_linreg(clean)
@@ -290,26 +298,44 @@ def forecast_rate(series, horizon_months, confidence_k=1.96):
         widen = 1.0
 
     last_x = clean[-1][0]
+    # ยิ่งมีข้อมูลน้อย ยิ่งพยากรณ์ไปได้ไม่ไกล
+    max_ahead = max(3, n * 2)
+    max_month = last_x + max_ahead
+
+    def clamp(value):
+        return max(floor, min(ceiling, value))
+
     points = []
+    truncated = False
     for m in sorted(horizon_months):
         if m <= last_x:
+            continue
+        if m > max_month:
+            truncated = True
             continue
         value = slope * m + intercept
         # ช่วงกว้างขึ้นตามระยะที่พยากรณ์ออกไป
         step = max(m - last_x, 1)
         margin = confidence_k * widen * max(sd, 0.15) * sqrt(step)
+        lo, hi = clamp(value - margin), clamp(value + margin)
         points.append({
             "month_no": m,
-            "rate": round(value, 2),
-            "lo": round(value - margin, 2),
-            "hi": round(value + margin, 2),
+            "rate": round(clamp(value), 2),
+            "lo": round(lo, 2),
+            "hi": round(hi, 2),
+            "conclusive": (hi - lo) <= band_width_limit,
         })
+
+    if truncated:
+        message += " · พยากรณ์ได้ถึงเดือนที่ %d เท่านั้น " \
+                   "(ไกลกว่านี้ต้องมีข้อมูลเพิ่ม)" % max_month
 
     return {
         "level": level,
         "message": message,
         "points": points,
         "slope_per_month": round(slope, 3),
+        "max_month_no": max_month,
     }
 
 
@@ -323,9 +349,14 @@ def gap_to_target(forecast, target_rate_pct, month_no):
             return {
                 "month_no": month_no,
                 "forecast_rate": p["rate"],
+                "lo": p.get("lo"),
+                "hi": p.get("hi"),
                 "target_rate": target_rate_pct,
                 "gap": round(p["rate"] - target_rate_pct, 2),
                 "on_track": p["rate"] <= target_rate_pct,
+                # ถ้าช่วงความเชื่อมั่นกว้างจนคร่อมเส้นเป้า จะบอกว่าผ่านหรือไม่ผ่านไม่ได้
+                "conclusive": p.get("conclusive", True)
+                and not (p.get("lo") <= target_rate_pct <= p.get("hi")),
                 "level": forecast.get("level"),
             }
     return None

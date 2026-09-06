@@ -422,13 +422,23 @@ function renderCards(){
   }
 
   if(out){
-    var cls2 = out.on_track ? "good" : "bad";
-    cards.push({label:"คาดการณ์ ณ เดือนที่ " + out.month_no, cls:cls2,
-      value: num(out.forecast_rate,2)+"%",
-      note: (out.on_track ? "ตามแผน" : "สูงกว่าเป้า " + num(out.gap,2) + " จุด") +
-            (out.level==="low" ? " · ความเชื่อมั่นต่ำ" : "")});
+    // ถ้าช่วงความเชื่อมั่นกว้างจนคร่อมเส้นเป้า จะสรุปว่าผ่านหรือไม่ผ่านไม่ได้
+    // ต้องแสดงเป็นกลาง ไม่ใช่เขียว/แดง ซึ่งจะทำให้เข้าใจผิดว่ามั่นใจแล้ว
+    if(!out.conclusive){
+      cards.push({label:"คาดการณ์ ณ เดือนที่ " + out.month_no, cls:"warn",
+        value:"ยังสรุปไม่ได้",
+        note:"แนวโน้มชี้ที่ " + num(out.forecast_rate,2) + "% แต่ช่วงกว้าง " +
+             num(out.lo,1) + "–" + num(out.hi,1) + "% ต้องมีข้อมูลอีกหลายรอบ"});
+    } else {
+      var cls2 = out.on_track ? "good" : "bad";
+      cards.push({label:"คาดการณ์ ณ เดือนที่ " + out.month_no, cls:cls2,
+        value: num(out.forecast_rate,2)+"%",
+        note: (out.on_track ? "ตามแผน" : "สูงกว่าเป้า " + num(out.gap,2) + " จุด") +
+              (out.level==="low" ? " · ความเชื่อมั่นต่ำ" : "")});
+    }
   } else {
-    cards.push({label:"คาดการณ์", value:"-", note: fc ? fc.message : ""});
+    cards.push({label:"คาดการณ์", value:"-",
+      note: fc ? fc.message : "ยังไม่มีข้อมูลพอ"});
   }
 
   if(DATA.n_dma_no_rtu > 0){
@@ -513,7 +523,7 @@ function renderTrajectory(){
       scales:{
         x:{ ticks:{ color:C.muted, maxRotation:0, autoSkipPadding:18 },
             grid:{ color:C.line } },
-        y:{ ticks:{ color:C.muted, callback:function(v){ return v + "%"; } },
+        y:{ min:0, ticks:{ color:C.muted, callback:function(v){ return v + "%"; } },
             grid:{ color:C.line }, title:{ display:true, color:C.muted,
               text:"อัตราน้ำสูญเสีย" } }
       }
