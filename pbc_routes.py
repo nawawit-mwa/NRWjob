@@ -37,15 +37,19 @@ def _passthrough(fn):
 
 
 def create_pbc_blueprint(login_required=None, current_user_fn=None,
-                         branch_scope_fn=None, url_prefix="/pbc"):
+                         branch_scope_fn=None, user_fn=None, url_prefix="/pbc"):
     """
     login_required   : decorator ของแอปเดิม
     current_user_fn  : ฟังก์ชันคืนชื่อผู้ใช้ปัจจุบัน (ใช้บันทึกว่าใครแก้อะไร)
     branch_scope_fn  : ฟังก์ชันคืน list รหัสสาขาที่ผู้ใช้เห็นได้ (None = ทุกสาขา)
+    user_fn          : ฟังก์ชันคืน object ผู้ใช้สำหรับ base_sidebar.html
+                       (ต้องมี .Name และ .Role) ถ้าแอปใส่ผ่าน context_processor
+                       อยู่แล้วไม่ต้องส่งมา
     """
     guard = login_required or _passthrough
     who = current_user_fn or (lambda: "unknown")
     scope = branch_scope_fn or (lambda: None)
+    user_obj = user_fn or (lambda: None)
 
     bp = Blueprint("pbc", __name__, url_prefix=url_prefix)
 
@@ -222,6 +226,9 @@ def create_pbc_blueprint(login_required=None, current_user_fn=None,
             selected_id=contract["contract_id"] if contract else "",
             remark_categories=CFG.REMARK_CATEGORIES,
             overridable_fields=CFG.OVERRIDABLE_FIELDS,
+            # ใช้โดย base_sidebar.html — active_page ทำให้เมนูถูกไฮไลต์
+            active_page="pbc",
+            user=user_obj(),
         )
 
     # -------------------------------------------------------------- JSON

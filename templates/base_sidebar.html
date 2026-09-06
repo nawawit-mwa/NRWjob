@@ -29,6 +29,11 @@
              class="side-nav-item {{ 'active' if active_page == 'dashboard' }}">ติดตามงาน</a>
         </div>
         <div class="side-nav-group">
+          <div class="side-nav-label">ติดตามพื้นที่ PBC</div>
+          <a href="/pbc"
+             class="side-nav-item {{ 'active' if active_page == 'pbc' }}">ติดตามผลตามสัญญา</a>
+        </div>
+        <div class="side-nav-group">
           <div class="side-nav-label">การบัญชาการ</div>
           <a href="{{ url_for('new_incident') }}"
              class="side-nav-item {{ 'active' if active_page == 'new_incident' }}">แจ้งเหตุการณ์ใหม่</a>
