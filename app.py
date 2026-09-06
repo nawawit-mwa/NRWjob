@@ -850,3 +850,11 @@ if __name__ == "__main__":
     # รันแบบนี้ตอนพัฒนาในเครื่องเท่านั้น (python app.py)
     # ตอน deploy จริงบน Render จะใช้ gunicorn เรียก app:app โดยตรง ไม่ผ่านส่วนนี้เลย
     app.run(debug=True, host="127.0.0.1", port=5000)
+    
+from pbc_routes import create_pbc_blueprint
+
+app.register_blueprint(create_pbc_blueprint(
+    login_required=login_required,                    # decorator ของแอปเดิม
+    current_user_fn=lambda: session.get("username", ""),
+    branch_scope_fn=lambda: None,                     # None = เห็นทุกสาขา
+))
