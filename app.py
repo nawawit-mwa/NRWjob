@@ -854,7 +854,7 @@ if __name__ == "__main__":
 from pbc_routes import create_pbc_blueprint
 
 app.register_blueprint(create_pbc_blueprint(
-    login_required=login_required,                    # decorator ของแอปเดิม
+    #login_required=login_required,                    # decorator ของแอปเดิม
     current_user_fn=lambda: session.get("username", ""),
     branch_scope_fn=lambda: None,                     # None = เห็นทุกสาขา
 ))
