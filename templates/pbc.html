@@ -4,109 +4,145 @@
 {% block extra_head %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <style>
-/* ทุก selector ถูก scope ไว้ใต้ .pbc-page เพื่อไม่ให้ไปทับสไตล์ของ style.css เดิม
-   โดยเฉพาะ button / input / table ที่หน้าอื่นในระบบใช้ร่วมกัน */
+/* สไตล์ของหน้า PBC — ใช้ชุดสีเดียวกับระบบแม่ (style.css) ทั้งหมด
+   อ้างตัวแปรจาก :root ของ style.css โดยตรง ไม่ได้ตั้งค่าสีใหม่เอง
+   ถ้าธีมหลักเปลี่ยนสี หน้านี้จะเปลี่ยนตามอัตโนมัติ
+
+   ข้อกำหนด 2 ข้อที่ยึดในไฟล์นี้
+   1) ทุก selector scope ใต้ .pbc-page — ไม่ไปทับสไตล์ที่หน้าอื่นใช้ร่วมกัน
+   2) ชื่อคลาสที่ชนกับ style.css (topbar / panel / badge) เปลี่ยนเป็น pbc-*
+      เพราะแม้จะ scope แล้ว คุณสมบัติที่ไม่ได้ประกาศทับจะรั่วเข้ามา
+      เช่น พื้นหลังไล่เฉดของ .topbar เดิม */
+
 .pbc-page{
-  --pbc-bg:#0f1721; --pbc-panel:#16202c; --pbc-panel2:#1b2733; --pbc-line:#25323f;
-  --pbc-text:#e6edf3; --pbc-muted:#8fa3b8; --pbc-dim:#63788e;
-  --pbc-teal:#38bfc7; --pbc-amber:#e8a33d; --pbc-red:#e05c6b; --pbc-green:#4cb782;
-  --pbc-band:rgba(139,160,190,.16);
-  background:var(--pbc-bg); color:var(--pbc-text);
-  font-family:"Sarabun","Segoe UI",system-ui,sans-serif; font-size:14px; line-height:1.55;
-  min-height:100%;
+  --pbc-band:rgba(0,156,255,.14);
+  --pbc-panel-alt:#f8fbfe;
+  color:var(--ink);
+  font-family:var(--font-ui);
+  font-size:14px;
+  line-height:1.6;
 }
 .pbc-page *{box-sizing:border-box}
-.pbc-page a{color:var(--pbc-teal)}
-.pbc-page .wrap{max-width:1400px;margin:0 auto;padding:20px 18px 60px}
+.pbc-page a{color:var(--mwa-navy)}
+.pbc-page .wrap{max-width:1400px;margin:0 auto;padding:22px 26px 60px}
 
-.pbc-page .topbar{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;
+/* ---------- หัวหน้า ---------- */
+.pbc-page .pbc-topbar{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;
   justify-content:space-between;margin-bottom:18px}
-.pbc-page .topbar h1{margin:0;font-size:22px;font-weight:600;color:var(--pbc-text)}
-.pbc-page .topbar .sub{color:var(--pbc-muted);font-size:13px;margin-top:2px}
+.pbc-page .pbc-topbar h1{margin:0;font-size:1.35rem;font-weight:700;
+  color:var(--mwa-navy-deep)}
+.pbc-page .pbc-topbar .sub{color:var(--ink-soft);font-size:.85rem;margin-top:2px}
+
 .pbc-page select,.pbc-page input,.pbc-page textarea,.pbc-page button{
-  font-family:inherit;font-size:13px}
-.pbc-page select,.pbc-page input,.pbc-page textarea{background:var(--pbc-panel2);
-  color:var(--pbc-text);border:1px solid var(--pbc-line);border-radius:6px;padding:7px 9px}
-.pbc-page button{background:var(--pbc-panel2);color:var(--pbc-text);
-  border:1px solid var(--pbc-line);border-radius:6px;padding:7px 13px;cursor:pointer;
-  width:auto;box-shadow:none}
-.pbc-page button:hover{border-color:var(--pbc-teal)}
-.pbc-page button.primary{background:var(--pbc-teal);border-color:var(--pbc-teal);
-  color:#06222a;font-weight:600}
-.pbc-page button.primary:hover{filter:brightness(1.1)}
+  font-family:inherit;font-size:.85rem}
+.pbc-page select,.pbc-page input,.pbc-page textarea{background:#fff;color:var(--ink);
+  border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+.pbc-page select:focus,.pbc-page input:focus,.pbc-page textarea:focus{
+  outline:none;border-color:var(--mwa-sky)}
+.pbc-page button{background:#fff;color:var(--mwa-navy);
+  border:1px solid var(--line);border-radius:8px;padding:8px 14px;cursor:pointer;
+  width:auto;font-weight:600;box-shadow:none}
+.pbc-page button:hover{border-color:var(--mwa-sky);background:#f2f9ff}
+.pbc-page button.primary{background:var(--mwa-sky);border-color:var(--mwa-sky);color:#fff}
+.pbc-page button.primary:hover{background:var(--mwa-navy);border-color:var(--mwa-navy)}
 .pbc-page button:disabled{opacity:.45;cursor:not-allowed}
 
+/* ---------- การ์ดสรุป ---------- */
 .pbc-page .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
   gap:12px;margin-bottom:18px}
-.pbc-page .card{background:var(--pbc-panel);border:1px solid var(--pbc-line);
-  border-radius:10px;padding:14px 16px}
-.pbc-page .card .label{color:var(--pbc-muted);font-size:12px;margin-bottom:6px}
-.pbc-page .card .value{font-size:26px;font-weight:600;letter-spacing:-.5px}
-.pbc-page .card .note{color:var(--pbc-dim);font-size:12px;margin-top:4px}
-.pbc-page .card.warn{border-color:rgba(232,163,61,.5)}
-.pbc-page .card.bad{border-color:rgba(224,92,107,.5)}
-.pbc-page .card.good{border-color:rgba(76,183,130,.5)}
+.pbc-page .card{background:var(--panel);border:1px solid var(--line);
+  border-radius:var(--radius);padding:14px 16px;border-top:3px solid var(--mwa-sky)}
+.pbc-page .card .label{color:var(--ink-soft);font-size:.78rem;margin-bottom:6px}
+.pbc-page .card .value{font-size:1.65rem;font-weight:700;letter-spacing:-.5px;
+  color:var(--mwa-navy-deep)}
+.pbc-page .card .note{color:var(--ink-soft);font-size:.76rem;margin-top:4px}
+.pbc-page .card.warn{border-top-color:var(--amber)}
+.pbc-page .card.warn .value{color:var(--amber)}
+.pbc-page .card.bad{border-top-color:var(--danger)}
+.pbc-page .card.bad .value{color:var(--danger)}
+.pbc-page .card.good{border-top-color:var(--mwa-green)}
+.pbc-page .card.good .value{color:var(--mwa-green)}
 
-.pbc-page .panel{background:var(--pbc-panel);border:1px solid var(--pbc-line);
-  border-radius:10px;padding:16px;margin-bottom:16px}
-.pbc-page .panel h2{margin:0 0 4px;font-size:16px;font-weight:600;color:var(--pbc-text)}
-.pbc-page .panel .hint{color:var(--pbc-muted);font-size:12px;margin-bottom:12px}
+/* ---------- แผง ---------- */
+.pbc-page .pbc-panel{background:var(--panel);border:1px solid var(--line);
+  border-radius:var(--radius);padding:18px;margin-bottom:16px}
+.pbc-page .pbc-panel h2{margin:0 0 4px;font-size:1rem;font-weight:700;
+  color:var(--mwa-navy-deep)}
+.pbc-page .pbc-panel .hint{color:var(--ink-soft);font-size:.78rem;margin-bottom:12px}
 .pbc-page .chart-box{position:relative;height:340px}
 .pbc-page .chart-box.short{height:300px}
 
-.pbc-page .tabs{display:flex;gap:4px;border-bottom:1px solid var(--pbc-line);
+/* ---------- แท็บ ---------- */
+.pbc-page .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);
   margin-bottom:14px}
-.pbc-page .tab{padding:8px 14px;cursor:pointer;color:var(--pbc-muted);
-  border-bottom:2px solid transparent}
-.pbc-page .tab.active{color:var(--pbc-text);border-bottom-color:var(--pbc-teal)}
+.pbc-page .tab{padding:9px 16px;cursor:pointer;color:var(--ink-soft);
+  border-bottom:2px solid transparent;font-weight:600;font-size:.86rem}
+.pbc-page .tab:hover{color:var(--mwa-navy)}
+.pbc-page .tab.active{color:var(--mwa-navy-deep);border-bottom-color:var(--mwa-sky)}
 .pbc-page .tabpane{display:none}
 .pbc-page .tabpane.active{display:block}
 
-.pbc-page table{width:100%;border-collapse:collapse;background:transparent}
-.pbc-page th,.pbc-page td{padding:8px 10px;text-align:right;
-  border-bottom:1px solid var(--pbc-line);white-space:nowrap;color:var(--pbc-text)}
-.pbc-page th{color:var(--pbc-muted);font-weight:500;font-size:12px;position:sticky;
-  top:0;background:var(--pbc-panel);z-index:1}
+/* ---------- ตาราง ---------- */
+.pbc-page table{width:100%;border-collapse:collapse;font-size:.84rem;background:#fff}
+.pbc-page th,.pbc-page td{padding:9px 12px;text-align:right;
+  border-bottom:1px solid var(--line);white-space:nowrap;color:var(--ink);
+  text-transform:none;letter-spacing:normal}
+.pbc-page th{background:#e4f2fc;color:var(--mwa-navy-deep);font-weight:700;
+  font-size:.74rem;position:sticky;top:0;z-index:1}
 .pbc-page th:first-child,.pbc-page td:first-child{text-align:left}
 .pbc-page tbody tr{cursor:pointer}
-.pbc-page tbody tr:hover{background:var(--pbc-panel2)}
-.pbc-page .tablewrap{max-height:520px;overflow:auto;border:1px solid var(--pbc-line);
-  border-radius:8px}
-.pbc-page .badge{display:inline-block;padding:1px 7px;border-radius:20px;font-size:11px;
-  border:1px solid var(--pbc-line);color:var(--pbc-muted)}
-.pbc-page .badge.rtu{border-color:rgba(232,163,61,.55);color:var(--pbc-amber)}
-.pbc-page .badge.ovr{border-color:rgba(56,191,199,.55);color:var(--pbc-teal)}
-.pbc-page .num-bad{color:var(--pbc-red)}
-.pbc-page .num-warn{color:var(--pbc-amber)}
-.pbc-page .num-good{color:var(--pbc-green)}
-.pbc-page .dim{color:var(--pbc-dim)}
+.pbc-page tbody tr:hover td{background:#f2f9ff}
+.pbc-page tbody tr:last-child td{border-bottom:1px solid var(--line)}
+.pbc-page .tablewrap{max-height:520px;overflow:auto;border:1px solid var(--line);
+  border-radius:8px;background:#fff}
 
-.pbc-page .modal{position:fixed;inset:0;background:rgba(6,11,17,.78);display:none;
+.pbc-page .pbc-badge{display:inline-block;padding:2px 9px;border-radius:999px;
+  font-size:.72rem;font-weight:600;background:#eef4fa;color:var(--ink-soft)}
+.pbc-page .pbc-badge.rtu{background:#f7ecd6;color:var(--amber)}
+.pbc-page .pbc-badge.ovr{background:#dcecfc;color:var(--mwa-navy-deep)}
+.pbc-page .num-bad{color:var(--danger);font-weight:600}
+.pbc-page .num-warn{color:var(--amber);font-weight:600}
+.pbc-page .num-good{color:var(--mwa-green);font-weight:600}
+.pbc-page .dim{color:var(--ink-soft)}
+
+/* ---------- popup ---------- */
+.pbc-page .modal{position:fixed;inset:0;background:rgba(20,36,51,.55);display:none;
   z-index:900;overflow:auto;padding:26px 14px}
 .pbc-page .modal.open{display:block}
-.pbc-page .modal-inner{max-width:1050px;margin:0 auto;background:var(--pbc-panel);
-  border:1px solid var(--pbc-line);border-radius:12px;padding:18px}
+.pbc-page .modal-inner{max-width:1050px;margin:0 auto;background:var(--panel);
+  border:1px solid var(--line);border-radius:var(--radius);padding:20px;
+  box-shadow:0 18px 48px rgba(8,90,182,.18)}
 .pbc-page .modal-head{display:flex;justify-content:space-between;align-items:flex-start;
   gap:12px;margin-bottom:12px}
-.pbc-page .modal-head h3{margin:0;font-size:18px;color:var(--pbc-text)}
+.pbc-page .modal-head h3{margin:0;font-size:1.1rem;color:var(--mwa-navy-deep)}
+.pbc-page .modal-inner h2{font-size:.95rem;color:var(--mwa-navy-deep)}
+.pbc-page .modal-inner .hint{color:var(--ink-soft);font-size:.78rem;margin-bottom:8px}
 .pbc-page .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 @media(max-width:860px){.pbc-page .grid2{grid-template-columns:1fr}}
-.pbc-page .formrow{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px}
-.pbc-page .formrow label{color:var(--pbc-muted);font-size:12px;min-width:96px}
+
+/* ---------- ฟอร์มและข้อความ ---------- */
+.pbc-page .formrow{display:flex;gap:8px;flex-wrap:wrap;align-items:center;
+  margin-bottom:8px}
+.pbc-page .formrow label{color:var(--ink-soft);font-size:.78rem;min-width:96px}
 .pbc-page .formrow input,.pbc-page .formrow select,.pbc-page .formrow textarea{
   flex:1;min-width:130px}
-.pbc-page .msg{padding:9px 12px;border-radius:7px;font-size:13px;margin:10px 0;display:none}
+.pbc-page .msg{padding:10px 13px;border-radius:8px;font-size:.84rem;margin:10px 0;
+  display:none}
 .pbc-page .msg.show{display:block}
-.pbc-page .msg.ok{background:rgba(76,183,130,.14);border:1px solid rgba(76,183,130,.4)}
-.pbc-page .msg.err{background:rgba(224,92,107,.14);border:1px solid rgba(224,92,107,.4)}
-.pbc-page .msg.info{background:rgba(56,191,199,.12);border:1px solid rgba(56,191,199,.35)}
+.pbc-page .msg.ok{background:#e0f4de;border:1px solid rgba(7,156,0,.35);
+  color:#0a5b06}
+.pbc-page .msg.err{background:#fbe9e4;border:1px solid rgba(166,64,42,.35);
+  color:var(--danger)}
+.pbc-page .msg.info{background:#dcecfc;border:1px solid rgba(8,90,182,.28);
+  color:var(--mwa-navy-deep)}
 .pbc-page .msg ul{margin:6px 0 0;padding-left:18px}
-.pbc-page .dropzone{border:1.5px dashed var(--pbc-line);border-radius:10px;padding:26px;
-  text-align:center;color:var(--pbc-muted);cursor:pointer}
-.pbc-page .dropzone:hover,.pbc-page .dropzone.drag{border-color:var(--pbc-teal);
-  color:var(--pbc-text)}
+.pbc-page .dropzone{border:1.5px dashed var(--line);border-radius:var(--radius);
+  padding:28px;text-align:center;color:var(--ink-soft);cursor:pointer;
+  background:var(--pbc-panel-alt)}
+.pbc-page .dropzone:hover,.pbc-page .dropzone.drag{border-color:var(--mwa-sky);
+  color:var(--mwa-navy);background:#f2f9ff}
 .pbc-page .editnum{width:110px;text-align:right}
-.pbc-page .loading{color:var(--pbc-muted);padding:26px;text-align:center}
+.pbc-page .loading{color:var(--ink-soft);padding:26px;text-align:center}
 </style>
 {% endblock %}
 
@@ -114,7 +150,7 @@
 <div class="pbc-page">
 <div class="wrap">
 
-  <div class="topbar">
+  <div class="pbc-topbar">
     <div>
       <h1>ติดตามพื้นที่ PBC</h1>
       <div class="sub" id="contractSub">กำลังโหลด...</div>
@@ -127,7 +163,7 @@
 
   <div class="cards" id="cards"></div>
 
-  <div class="panel">
+  <div class="pbc-panel">
     <h2>เส้นทางสู่เป้าหมายตามสัญญา</h2>
     <div class="hint" id="trajectoryHint">
       จุดใหญ่คือเดือนวัดผลตามสัญญา ส่วนเส้นบางคือเป้าระหว่างทางที่ลากเชิงเส้น
@@ -136,7 +172,7 @@
     <div class="chart-box"><canvas id="trajectoryChart"></canvas></div>
   </div>
 
-  <div class="panel">
+  <div class="pbc-panel">
     <div class="tabs">
       <div class="tab active" data-pane="paneTable">สถานะราย DMA</div>
       <div class="tab" data-pane="paneTargets">เป้าหมายย่อยราย DMA</div>
@@ -276,8 +312,9 @@ var SELECTED = {{ selected_id|tojson }};
 var OVERRIDABLE = {{ overridable_fields|tojson }};
 var API = "/pbc/api";
 
-var C = { teal:"#38bfc7", amber:"#e8a33d", red:"#e05c6b", green:"#4cb782",
-          muted:"#8fa3b8", band:"rgba(139,160,190,.16)", line:"#25323f" };
+// ชุดสีของกราฟ อิงสีจริงของระบบแม่ (style.css) — ฟ้าสด/น้ำเงิน/เหลืองอำพัน/แดง/เขียว
+var C = { teal:"#009cff", amber:"#b5790f", red:"#a6402a", green:"#079c00",
+          muted:"#5c7488", band:"rgba(0,156,255,.14)", line:"#d9e6f2" };
 
 var DATA = null;          // ผลจาก /api/overview
 var TARGET_ROWS = [];     // แถวเป้าหมายที่กำลังแก้อยู่
@@ -437,11 +474,11 @@ function renderTrajectory(){
   var ds = [];
   if(x != null){
     ds.push({label:"อัตราฐาน X", data: labels.map(function(){ return x; }),
-      borderColor:"rgba(143,163,184,.55)", borderDash:[3,4], borderWidth:1.2,
+      borderColor:"rgba(92,116,136,.55)", borderDash:[3,4], borderWidth:1.2,
       pointRadius:0, fill:false});
   }
   ds.push({label:"เป้าระหว่างทาง (ไม่ผูกพัน)", data: at(interim,"rate"),
-    borderColor:"rgba(232,163,61,.45)", borderDash:[2,3], borderWidth:1.2,
+    borderColor:"rgba(181,121,15,.45)", borderDash:[2,3], borderWidth:1.2,
     pointRadius:0, fill:false});
   ds.push({label:"เป้าตามสัญญา", data: at(targets,"target_rate"),
     borderColor:C.amber, borderWidth:2.2, stepped:"after",
@@ -503,9 +540,9 @@ function renderDmaTable(){
     var rateCls = r.loss_rate==null ? "" :
       (r.loss_rate >= 50 ? "num-bad" : (r.loss_rate >= 35 ? "num-warn" : "num-good"));
     var tags = "";
-    if(!r.has_rtu) tags += '<span class="badge rtu">ไม่มีข้อมูลเครื่องวัด</span> ';
-    if(r.has_override) tags += '<span class="badge ovr">ปรับค่าแล้ว</span> ';
-    if(r.n_meters > 1) tags += '<span class="badge">' + r.n_meters + ' มาตร</span>';
+    if(!r.has_rtu) tags += '<span class="pbc-badge rtu">ไม่มีข้อมูลเครื่องวัด</span> ';
+    if(r.has_override) tags += '<span class="pbc-badge ovr">ปรับค่าแล้ว</span> ';
+    if(r.n_meters > 1) tags += '<span class="pbc-badge">' + r.n_meters + ' มาตร</span>';
     return '<tr data-dma="' + esc(r.dma_code) + '">' +
       '<td>' + esc(r.dma_code) + '</td>' +
       '<td>' + num(r.inflow_m3) + '</td>' +
@@ -544,7 +581,7 @@ function renderBarChart(){
     type:"bar",
     data:{ labels: labels, datasets:[
       { label:"น้ำสูญเสียปัจจุบัน (ลบ.ม./เดือน)", data: current,
-        backgroundColor:"rgba(224,92,107,.65)", borderColor:C.red, borderWidth:1 },
+        backgroundColor:"rgba(0,156,255,.55)", borderColor:C.red, borderWidth:1 },
       { label:"เป้าหมาย", data: target, type:"line", showLine:false,
         pointStyle:"line", pointRadius:9, borderWidth:2.5,
         pointBorderColor:C.green, borderColor:C.green, rotation:90 }
@@ -590,10 +627,10 @@ function drawTargetRows(){
   var tb = $("targetTable").querySelector("tbody");
   tb.innerHTML = TARGET_ROWS.map(function(r){
     var srcLabel = r.weight_source === "mnf"
-      ? '<span class="badge">MNF</span>'
-      : '<span class="badge rtu">สัดส่วนน้ำสูญเสีย</span>';
+      ? '<span class="pbc-badge">MNF</span>'
+      : '<span class="pbc-badge rtu">สัดส่วนน้ำสูญเสีย</span>';
     return '<tr>' +
-      '<td>' + esc(r.dma_code) + (r.is_manual ? ' <span class="badge ovr">แก้เอง</span>' : '') + '</td>' +
+      '<td>' + esc(r.dma_code) + (r.is_manual ? ' <span class="pbc-badge ovr">แก้เอง</span>' : '') + '</td>' +
       '<td>' + num(r.loss_m3) + '</td>' +
       '<td class="dim">' + (r.potential_m3==null ? "-" : num(r.potential_m3)) + '</td>' +
       '<td class="num-warn">' + num(r.reduction_m3) + '</td>' +
