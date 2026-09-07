@@ -17,6 +17,7 @@ pbc_routes.py — Blueprint ของหน้า "ติดตามพื้�
 
 import os
 import tempfile
+from datetime import datetime
 from functools import wraps
 
 from flask import (
@@ -284,8 +285,35 @@ def create_pbc_blueprint(login_required=None, current_user_fn=None,
             "n_months": len(work),
         }
 
+        # ความคืบหน้าตามสัญญา นับจากเดือนปฏิทินปัจจุบันเทียบกับเดือนเริ่มสัญญา
+        # จำนวนเดือนทั้งสัญญาใช้จุดวัดผลสุดท้ายเป็นหลัก เพราะเป็นตัวที่ผูกพันจริง
+        # ถ้ายังไม่มีจุดวัดผล ค่อยประมาณจากระยะเวลาสัญญาเป็นวัน
+        progress = None
+        if start:
+            total = max([t["month_no"] for t in targets], default=0)
+            if not total and contract.get("duration_days"):
+                total = int(round(contract["duration_days"] / 30.44))
+            now_month = datetime.now().strftime("%Y-%m")
+            elapsed = SVC.month_no(start, now_month)
+            if total:
+                progress = {
+                    "month_no": max(min(elapsed, total), 0),
+                    "total_months": total,
+                    "pct": round(max(min(elapsed, total), 0) / total * 100, 0),
+                    # นับเฉพาะเดือนที่อยู่ในสัญญาจริง ไม่รวมเดือนก่อนเริ่มสัญญา
+                    # ที่ใส่ไว้เพื่อให้รอบ 3 เดือนแรกคำนวณได้
+                    "months_with_data": sum(
+                        1 for m in months_all if SVC.month_no(start, m) >= 1
+                    ),
+                    "latest_label": (
+                        SVC.month_label_th(months_all[-1]) if months_all else None
+                    ),
+                    "ended": elapsed > total,
+                }
+
         months_available = months_all
         return {
+            "progress": progress,
             "milestones": milestones,
             "pressure": pressure,
             "work_latest": work_latest,

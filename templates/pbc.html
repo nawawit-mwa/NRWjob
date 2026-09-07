@@ -601,10 +601,26 @@ function renderCards(){
       note: fc ? fc.message : "ยังไม่มีข้อมูลพอ"});
   }
 
-  if(DATA.n_dma_no_rtu > 0){
-    cards.push({label:"พื้นที่ไม่มีข้อมูลเครื่องวัด", cls:"warn",
+  // ช่องสุดท้ายปรับตามสถานการณ์
+  //   มีข้อมูลบางพื้นที่  -> บอกว่าพื้นที่ไหนขาด เพราะมีผลกับวิธีกระจายเป้า
+  //   ไม่มีเลยทั้งสัญญา   -> ช่องนั้นไม่บอกอะไรใหม่ เปลี่ยนเป็นความคืบหน้าสัญญาแทน
+  //   มีครบทุกพื้นที่     -> ไม่ต้องแสดง
+  var pg = DATA.progress;
+  if(DATA.n_dma_no_rtu > 0 && DATA.n_dma_no_rtu < DATA.n_dma){
+    cards.push({label:"พื้นที่ไม่มีข้อมูล", cls:"warn",
       value: DATA.n_dma_no_rtu + " / " + DATA.n_dma,
       note:"ใช้สัดส่วนน้ำสูญเสียแทนในการกระจายเป้า"});
+  } else if(pg){
+    var note = "ผ่านไป " + num(pg.pct,0) + "% ของสัญญา";
+    if(pg.months_with_data){
+      note += " · มีข้อมูล " + pg.months_with_data + " เดือน";
+      if(pg.latest_label) note += " ถึง " + pg.latest_label;
+    } else {
+      note += " · ยังไม่มีข้อมูลรายเดือน";
+    }
+    cards.push({label:"ความคืบหน้าสัญญา", cls: pg.ended ? "warn" : "",
+      value:"เดือนที่ " + pg.month_no + " จาก " + pg.total_months,
+      note: pg.ended ? "ครบกำหนดสัญญาแล้ว" : note});
   }
 
   $("cards").innerHTML = cards.map(function(k){
@@ -749,7 +765,7 @@ function renderDmaTable(){
     var rateCls = r.loss_rate==null ? "" :
       (r.loss_rate >= 50 ? "num-bad" : (r.loss_rate >= 35 ? "num-warn" : "num-good"));
     var tags = "";
-    if(!r.has_rtu) tags += '<span class="pbc-badge rtu">ไม่มีข้อมูลเครื่องวัด</span> ';
+    if(!r.has_rtu) tags += '<span class="pbc-badge rtu">ไม่มีข้อมูล</span> ';
     if(r.has_override) tags += '<span class="pbc-badge ovr">ปรับค่าแล้ว</span> ';
     if(r.n_meters > 1) tags += '<span class="pbc-badge">' + r.n_meters + ' มาตร</span>';
     return '<tr data-dma="' + esc(r.dma_code) + '">' +
@@ -826,7 +842,7 @@ function renderTargets(){
   $("targetHint").innerHTML =
     "กระจายเป้าตามศักยภาพที่แต่ละพื้นที่ลดได้จริง " +
     "(ศักยภาพ = MNF ปัจจุบัน − พื้นค่า MNF × " + bd.hours_per_day + " ชม. × " +
-    bd.days + " วัน) พื้นที่ที่ไม่มีข้อมูลเครื่องวัดใช้สัดส่วนน้ำสูญเสียแทน · " +
+    bd.days + " วัน) พื้นที่ที่ไม่มีข้อมูลใช้สัดส่วนน้ำสูญเสียแทน · " +
     "แก้ช่อง \"เป้าสูญเสีย\" ได้ ระบบจะเกลี่ยส่วนที่เหลือให้พื้นที่อื่นอัตโนมัติ";
   drawTargetRows();
 }
