@@ -493,17 +493,47 @@ function renderTrajectory(){
   ds.push({label:"เป้าตามสัญญา", data: at(targets,"target_rate"),
     borderColor:C.amber, borderWidth:2.2, stepped:"after",
     pointRadius:5, pointBackgroundColor:C.amber, spanGaps:true, fill:false});
+  var showBand = fc.some(function(p){ return p.conclusive; });
   if(fc.length){
-    ds.push({label:"ช่วงพยากรณ์", data: at(fc,"hi"), borderColor:"transparent",
-      pointRadius:0, fill:"+1", backgroundColor:C.band, spanGaps:true});
-    ds.push({label:"_lo", data: at(fc,"lo"), borderColor:"transparent",
-      pointRadius:0, fill:false, spanGaps:true});
+    // วาดแถบความเชื่อมั่นเฉพาะตอนที่แคบพอจะสื่อความหมาย
+    // ถ้าช่วงกว้างมาก (ข้อมูลน้อย) แถบจะกินพื้นที่จนกราฟอ่านไม่ออก
+    if(showBand){
+      ds.push({label:"ช่วงพยากรณ์", data: at(fc,"hi"), borderColor:"transparent",
+        pointRadius:0, fill:"+1", backgroundColor:C.band, spanGaps:true});
+      ds.push({label:"_lo", data: at(fc,"lo"), borderColor:"transparent",
+        pointRadius:0, fill:false, spanGaps:true});
+    }
     ds.push({label:"คาดการณ์", data: fcLine, borderColor:C.teal,
       borderDash:[5,4], borderWidth:2, pointRadius:0, spanGaps:true, fill:false});
   }
   ds.push({label:"อัตราจริง (รอบ 3 เดือน)", data: at(rolling,"loss_rate"),
     borderColor:C.teal, borderWidth:2.6, pointRadius:4,
     pointBackgroundColor:C.teal, spanGaps:true, fill:false});
+
+  // ช่วงแกน y คำนวณจากค่าที่ต้องอ่านจริงเท่านั้น
+  // ไม่รวมขอบแถบพยากรณ์ตอนที่ยังสรุปไม่ได้ เพราะจะดึงแกนจนข้อมูลจริงแบนติดกัน
+  var vals = [];
+  function collect(arr, key){
+    arr.forEach(function(p){
+      if(p[key] !== null && p[key] !== undefined) vals.push(p[key]);
+    });
+  }
+  collect(targets, "target_rate");
+  collect(rolling, "loss_rate");
+  collect(interim, "rate");
+  collect(fc, "rate");
+  if(showBand){ collect(fc, "lo"); collect(fc, "hi"); }
+  if(x != null) vals.push(x);
+
+  var yRange = { min: 0, max: 60, step: 10 };
+  if(vals.length){
+    var lo = Math.min.apply(null, vals), hi = Math.max.apply(null, vals);
+    var pad = Math.max((hi - lo) * 0.15, 2);
+    var step = (hi - lo) > 30 ? 10 : ((hi - lo) > 12 ? 5 : 2);
+    yRange.min = Math.max(0, Math.floor((lo - pad) / step) * step);
+    yRange.max = Math.ceil((hi + pad) / step) * step;
+    yRange.step = step;
+  }
 
   if(CHARTS.traj) CHARTS.traj.destroy();
   CHARTS.traj = new Chart($("trajectoryChart"), {
@@ -523,7 +553,8 @@ function renderTrajectory(){
       scales:{
         x:{ ticks:{ color:C.muted, maxRotation:0, autoSkipPadding:18 },
             grid:{ color:C.line } },
-        y:{ min:0, ticks:{ color:C.muted, callback:function(v){ return v + "%"; } },
+        y:{ min:yRange.min, max:yRange.max, ticks:{ color:C.muted, stepSize:yRange.step,
+              callback:function(v){ return v + "%"; } },
             grid:{ color:C.line }, title:{ display:true, color:C.muted,
               text:"อัตราน้ำสูญเสีย" } }
       }
