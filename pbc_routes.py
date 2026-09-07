@@ -358,6 +358,8 @@ def create_pbc_blueprint(login_required=None, current_user_fn=None,
             active_page="pbc",
             user=user_obj(),
             enable_upload=CFG.ENABLE_WB220_UPLOAD,
+            enable_override=CFG.ENABLE_OVERRIDE_UI,
+            enable_remarks=CFG.ENABLE_REMARKS,
         )
 
     @bp.route("/overview")
@@ -622,6 +624,8 @@ def create_pbc_blueprint(login_required=None, current_user_fn=None,
                 "label": SVC.month_label_th(month),
                 "inflow_m3": round(rec["inflow_m3"], 0),
                 "sales_m3": round(rec["sales_m3"], 0),
+                "billed_total_m3": round(rec["billed_total_m3"], 0),
+                "other_m3": round(rec["other_m3"], 0),
                 "loss_m3": round(rec["loss_m3"], 0),
                 "loss_rate": round(rec["loss_rate"], 2)
                 if rec["loss_rate"] is not None else None,
@@ -749,6 +753,12 @@ def create_pbc_blueprint(login_required=None, current_user_fn=None,
     @bp.route("/api/override", methods=["POST"])
     @guard
     def api_override():
+        if not CFG.ENABLE_OVERRIDE_UI:
+            return jsonify({
+                "ok": False,
+                "error": "ปิดการปรับค่าจากหน้าเว็บไว้ "
+                         "ให้แก้ตัวเลขในตาราง MonthlyRaw แทน",
+            }), 403
         data = request.get_json(silent=True) or {}
         contract, _ = _resolve_contract(data.get("contract_id"))
         if not contract:
@@ -846,6 +856,8 @@ def create_pbc_blueprint(login_required=None, current_user_fn=None,
     @bp.route("/api/remark", methods=["POST"])
     @guard
     def api_remark():
+        if not CFG.ENABLE_REMARKS:
+            return jsonify({"ok": False, "error": "ปิดการบันทึกการดำเนินงานไว้"}), 403
         data = request.get_json(silent=True) or {}
         contract, _ = _resolve_contract(data.get("contract_id"))
         if not contract:

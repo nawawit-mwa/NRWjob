@@ -333,8 +333,21 @@
       </div>
     </div>
 
-    <h2 style="font-size:15px;margin:18px 0 6px">ข้อมูลรายเดือนจาก WB220</h2>
-    <div class="hint">คลิกตัวเลขน้ำเข้าหรือน้ำอื่นๆ เพื่อปรับค่าให้ตรงกับที่ตกลงกับผู้รับจ้าง</div>
+    <h2 style="font-size:15px;margin:18px 0 6px">ข้อมูลรายเดือน</h2>
+    <div class="hint">
+      แท่งซ้อนกัน ความสูงรวมคือปริมาณน้ำเข้า · เส้นทึบคืออัตรารายเดือน
+      เส้นหนาคืออัตรารอบ 3 เดือนซึ่งเป็นตัวที่ใช้วัดผลตามสัญญา
+    </div>
+    <div class="chart-box short" style="margin-bottom:14px">
+      <canvas id="mVolumeChart"></canvas>
+    </div>
+    <div class="hint">
+      แรงดันน้ำ (เมตร) · เส้นประคือแรงดันเฉลี่ยฐานตามสัญญา
+      ซึ่งข้อ 2.1.2(7) กำหนดว่าแรงดันต้องไม่ต่ำกว่าเส้นนี้
+    </div>
+    <div class="chart-box short" style="margin-bottom:14px">
+      <canvas id="mPressureMonthChart"></canvas>
+    </div>
     <div class="tablewrap" style="max-height:230px">
       <table id="mHistory">
         <thead><tr>
@@ -346,6 +359,7 @@
     </div>
     <div class="msg" id="mMsg"></div>
 
+    {% if enable_remarks %}
     <h2 style="font-size:15px;margin:18px 0 6px">บันทึกการดำเนินงาน</h2>
     <div class="formrow">
       <label>วันที่เหตุการณ์</label>
@@ -366,6 +380,7 @@
         <tbody></tbody>
       </table>
     </div>
+    {% endif %}
   </div>
 </div>
 </div>
@@ -1022,8 +1037,8 @@ function openModal(dma){
   $("mTitle").textContent = "พื้นที่ " + dma;
   $("mSub").textContent = "กำลังโหลด...";
   hideMsg($("mMsg"));
-  $("mRemarkDate").value = new Date().toISOString().slice(0,10);
-  $("mRemarkText").value = "";
+  if($("mRemarkDate")) $("mRemarkDate").value = new Date().toISOString().slice(0,10);
+  if($("mRemarkText")) $("mRemarkText").value = "";
 
   fetch(API + "/dma/" + encodeURIComponent(dma) +
         "?contract_id=" + encodeURIComponent(SELECTED))
@@ -1033,6 +1048,7 @@ function openModal(dma){
       var meters = (j.meters||[]).map(function(m){ return m.rtu_id; }).join(", ");
       $("mSub").textContent = "มาตรวัดน้ำหลัก: " + (meters || "ไม่มีในผัง");
       drawEnvelope(j.envelope);
+      drawMonthlyCharts(j.history);
       drawHistory(j.history);
       drawRemarks(j.remarks);
     });
@@ -1071,61 +1087,161 @@ function drawEnvelope(env){
   build("mPressureChart", "pressure", pmin, pmax, plat, C.amber, "ม.");
 }
 
+function drawMonthlyCharts(history){
+  var h = (history || []).slice();      // เรียงจากเก่าไปใหม่ตามที่ API ส่งมา
+  if(!h.length){
+    ["volMonth","presMonth"].forEach(function(k){
+      if(CHARTS[k]){ CHARTS[k].destroy(); delete CHARTS[k]; }
+    });
+    return;
+  }
+  var labels = h.map(function(x){ return x.label; });
+
+  // อัตรารอบ 3 เดือน คำนวณแบบเดียวกับที่ใช้วัดผลตามสัญญา
+  // รวมปริมาณ 3 เดือนก่อน แล้วจึงหารครั้งเดียว ไม่ใช่เฉลี่ยอัตรารายเดือน
+  var rolling = h.map(function(_, i){
+    if(i < 2) return null;
+    var inflow = 0, loss = 0;
+    for(var k = i - 2; k <= i; k++){
+      inflow += h[k].inflow_m3 || 0;
+      loss += h[k].loss_m3 || 0;
+    }
+    return inflow ? +(loss / inflow * 100).toFixed(2) : null;
+  });
+
+  var rateVals = [];
+  h.forEach(function(x){ if(x.loss_rate != null) rateVals.push(x.loss_rate); });
+  rolling.forEach(function(v){ if(v != null) rateVals.push(v); });
+  var rLo = Math.min.apply(null, rateVals), rHi = Math.max.apply(null, rateVals);
+  var rPad = Math.max((rHi - rLo) * 0.2, 1);
+
+  if(CHARTS.volMonth) CHARTS.volMonth.destroy();
+  CHARTS.volMonth = new Chart($("mVolumeChart"), {
+    data:{ labels: labels, datasets:[
+      { type:"bar", label:"น้ำจำหน่าย", yAxisID:"y",
+        data: h.map(function(x){ return x.sales_m3; }),
+        backgroundColor:"rgba(0,156,255,.55)", stack:"v" },
+      { type:"bar", label:"น้ำสูญเสีย", yAxisID:"y",
+        data: h.map(function(x){ return x.loss_m3; }),
+        backgroundColor:"rgba(166,64,42,.6)", stack:"v" },
+      { type:"line", label:"อัตรารายเดือน", yAxisID:"y1",
+        data: h.map(function(x){ return x.loss_rate; }),
+        borderColor:C.muted, borderWidth:1.4, borderDash:[4,3],
+        pointRadius:0, fill:false, spanGaps:true },
+      { type:"line", label:"อัตรารอบ 3 เดือน", yAxisID:"y1", data: rolling,
+        borderColor:C.amber, borderWidth:2.4, pointRadius:2.5,
+        pointBackgroundColor:C.amber, fill:false, spanGaps:true }
+    ]},
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      interaction:{ mode:"index", intersect:false },
+      plugins:{ legend:{ labels:{ color:C.muted, boxWidth:12, font:{size:10} } },
+        tooltip:{ callbacks:{ label:function(ctx){
+          if(ctx.parsed.y === null) return null;
+          var unit = ctx.dataset.yAxisID === "y1" ? "%" : " ลบ.ม.";
+          var v = ctx.dataset.yAxisID === "y1"
+            ? ctx.parsed.y.toFixed(2) : Math.round(ctx.parsed.y).toLocaleString();
+          return ctx.dataset.label + ": " + v + unit; } } } },
+      scales:{
+        x:{ stacked:true, ticks:{ color:C.muted, font:{size:10},
+              maxRotation:0, autoSkipPadding:10 }, grid:{ display:false } },
+        y:{ stacked:true, position:"left", ticks:{ color:C.muted, font:{size:10},
+              callback:function(v){ return (v/1000).toFixed(0) + "k"; } },
+            grid:{ color:C.line },
+            title:{ display:true, color:C.muted, text:"ปริมาณ (ลบ.ม.)" } },
+        // แกนอัตราไม่เริ่มที่ศูนย์ ไม่งั้นเส้นจะแบนจนดูไม่ออกว่าลดลง
+        y1:{ position:"right", min:Math.max(0, rLo - rPad), max: rHi + rPad,
+             ticks:{ color:C.amber, font:{size:10},
+                     callback:function(v){ return v.toFixed(0) + "%"; } },
+             grid:{ drawOnChartArea:false },
+             title:{ display:true, color:C.amber, text:"อัตราน้ำสูญเสีย" } }
+      }
+    }
+  });
+
+  // ---------- แรงดัน ----------
+  var base = DATA && DATA.contract ? DATA.contract.baseline_pressure_m : null;
+  var pv = [];
+  h.forEach(function(x){
+    if(x.avg_pressure_24h != null) pv.push(x.avg_pressure_24h);
+    if(x.avg_pressure_night != null) pv.push(x.avg_pressure_night);
+  });
+  if(base != null) pv.push(base);
+  pv.push(10);                                  // เส้นเกณฑ์ 10 เมตรของ กปน.
+  var pLo = Math.min.apply(null, pv), pHi = Math.max.apply(null, pv);
+  var pPad = Math.max((pHi - pLo) * 0.15, 0.5);
+
+  var pds = [];
+  if(base != null){
+    pds.push({label:"แรงดันเฉลี่ยฐาน", data: labels.map(function(){ return base; }),
+      borderColor:C.red, borderDash:[5,4], borderWidth:1.6, pointRadius:0, fill:false});
+  }
+  pds.push({label:"เกณฑ์ 10 เมตร", data: labels.map(function(){ return 10; }),
+    borderColor:"rgba(92,116,136,.45)", borderDash:[2,4], borderWidth:1,
+    pointRadius:0, fill:false});
+  pds.push({label:"เฉลี่ย 24 ชม.",
+    data: h.map(function(x){ return x.avg_pressure_24h; }),
+    borderColor:C.teal, borderWidth:2.4, fill:false, spanGaps:true,
+    // เดือนที่ต่ำกว่าฐานทำจุดสีแดง เพราะเป็นเงื่อนไขที่ผิดสัญญาได้
+    pointRadius: h.map(function(x){
+      return (base != null && x.avg_pressure_24h != null &&
+              x.avg_pressure_24h < base) ? 5 : 2.5; }),
+    pointBackgroundColor: h.map(function(x){
+      return (base != null && x.avg_pressure_24h != null &&
+              x.avg_pressure_24h < base) ? C.red : C.teal; })});
+  pds.push({label:"เฉลี่ยกลางคืน",
+    data: h.map(function(x){ return x.avg_pressure_night; }),
+    borderColor:C.amber, borderWidth:1.6, borderDash:[3,3],
+    pointRadius:0, fill:false, spanGaps:true});
+
+  if(CHARTS.presMonth) CHARTS.presMonth.destroy();
+  CHARTS.presMonth = new Chart($("mPressureMonthChart"), {
+    type:"line",
+    data:{ labels: labels, datasets: pds },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      interaction:{ mode:"index", intersect:false },
+      plugins:{ legend:{ labels:{ color:C.muted, boxWidth:12, font:{size:10} } },
+        tooltip:{ callbacks:{ label:function(ctx){
+          if(ctx.parsed.y === null) return null;
+          return ctx.dataset.label + ": " + ctx.parsed.y.toFixed(2) + " ม."; } } } },
+      scales:{
+        x:{ ticks:{ color:C.muted, font:{size:10}, maxRotation:0,
+              autoSkipPadding:10 }, grid:{ color:C.line } },
+        y:{ min:Math.max(0, pLo - pPad), max: pHi + pPad,
+            ticks:{ color:C.muted, font:{size:10} }, grid:{ color:C.line },
+            title:{ display:true, color:C.muted, text:"แรงดัน (เมตร)" } }
+      }
+    }
+  });
+}
+
 function drawHistory(history){
   var tb = $("mHistory").querySelector("tbody");
   tb.innerHTML = (history||[]).slice().reverse().map(function(h){
-    function cell(field, value, digits){
+    // ถ้ามีค่าที่เคยปรับไว้ จะยังแสดงพร้อมเครื่องหมายกำกับ
+    // แต่แก้จากหน้าจอไม่ได้แล้ว ให้ไปแก้ในตาราง MonthlyRaw แทน
+    function cell(field, value){
       var o = h.overrides && h.overrides[field];
-      var title = o ? ("WLMA: " + num(o.raw) + " → ปรับเป็น " + num(o.value) +
+      var title = o ? ("ค่าเดิม " + num(o.raw) + " → ปรับเป็น " + num(o.value) +
                        " โดย " + o.by + " (" + o.reason + ")") : "";
-      return '<td class="editable' + (o ? " num-warn" : "") + '" ' +
-        'data-month="' + esc(h.month) + '" data-field="' + field + '" ' +
-        'data-value="' + (value==null?"":value) + '" title="' + esc(title) + '" ' +
-        'style="cursor:pointer">' + num(value, digits) + (o ? " *" : "") + '</td>';
+      return '<td' + (o ? ' class="num-warn" title="' + esc(title) + '"' : '') +
+        '>' + num(value) + (o ? " *" : "") + '</td>';
     }
     return '<tr><td>' + esc(h.label) + '</td>' +
       cell("inflow_m3", h.inflow_m3) +
       '<td>' + num(h.sales_m3) + '</td>' +
-      cell("other_m3", h.overrides && h.overrides.other_m3
-        ? h.overrides.other_m3.value : null) +
+      cell("other_m3", h.other_m3) +
       '<td>' + num(h.loss_m3) + '</td>' +
       '<td>' + num(h.loss_rate,2) + '</td>' +
       '<td>' + num(h.avg_pressure_night,2) + '</td></tr>';
   }).join("");
-
-  Array.prototype.forEach.call(tb.querySelectorAll(".editable"), function(td){
-    td.addEventListener("click", function(){ promptOverride(td); });
-  });
-}
-
-function promptOverride(td){
-  var field = td.getAttribute("data-field");
-  var month = td.getAttribute("data-month");
-  var label = OVERRIDABLE[field] || field;
-  var current = td.getAttribute("data-value");
-  var value = window.prompt(
-    "ปรับ" + label + " ของ " + MODAL_DMA + " เดือน " + month +
-    "\nค่าปัจจุบัน: " + (current || "-") + "\n\nกรอกค่าใหม่ (ลบ.ม.):", current);
-  if(value === null) return;
-  var reason = window.prompt(
-    "ระบุเหตุผลของการปรับ (อย่างน้อย 5 ตัวอักษร)\n" +
-    "ตัวเลขนี้ใช้ประเมินผลตามสัญญา จึงต้องมีบันทึกไว้:", "");
-  if(reason === null) return;
-
-  fetch(API + "/override", {
-    method:"POST", headers:{"Content-Type":"application/json"},
-    body: JSON.stringify({ contract_id: SELECTED, dma_code: MODAL_DMA,
-      month: month, field: field, value: value, reason: reason })
-  }).then(function(r){ return r.json(); }).then(function(j){
-    if(!j.ok){ showMsg($("mMsg"), esc(j.error), "err"); return; }
-    showMsg($("mMsg"), "ปรับค่าเรียบร้อย กำลังโหลดข้อมูลใหม่", "ok");
-    openModal(MODAL_DMA);
-    load();
-  });
 }
 
 function drawRemarks(remarks){
-  var tb = $("mRemarkList").querySelector("tbody");
+  var box = $("mRemarkList");
+  if(!box) return;                       // ส่วนบันทึกการดำเนินงานถูกปิดไว้
+  var tb = box.querySelector("tbody");
   tb.innerHTML = (remarks||[]).map(function(r){
     return '<tr><td>' + esc(r.event_date) + '</td><td>' + esc(r.category) +
       '</td><td style="text-align:left;white-space:normal">' + esc(r.text) +
@@ -1265,7 +1381,7 @@ function bindEvents(){
   document.addEventListener("keydown", function(e){
     if(e.key === "Escape") $("dmaModal").classList.remove("open");
   });
-  $("mRemarkSave").addEventListener("click", saveRemark);
+  if($("mRemarkSave")) $("mRemarkSave").addEventListener("click", saveRemark);
   $("btnSaveWork").addEventListener("click", saveWork);
   bindUploadEvents();
 }
