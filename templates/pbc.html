@@ -233,18 +233,28 @@
       <div class="hint" id="targetHint"></div>
       <div class="msg info show" id="targetSummary"></div>
       <div class="formrow" style="margin-bottom:12px">
+        <label style="min-width:auto">ปริมาณน้ำสูญเสียรวมที่ต้องการลด</label>
+        <input type="number" id="totalReduction" min="0" step="1"
+               style="max-width:150px;flex:0 0 auto">
+        <span class="dim">ลบ.ม./เดือน</span>
+        <button id="btnUseTarget">ใช้ค่าตามเป้าสัญญา</button>
         <button id="btnRecalc">คำนวณเกลี่ยใหม่</button>
         <button id="btnResetTargets">ล้างค่าที่แก้เอง</button>
         <button class="primary" id="btnSaveTargets">บันทึกเป้าหมาย</button>
+      </div>
+      <div class="hint" id="targetUnitHint">
+        ทุกช่องปริมาณเป็น ลบ.ม. ต่อเดือน
       </div>
       <div class="msg" id="targetMsg"></div>
       <div class="tablewrap">
         <table id="targetTable">
           <thead><tr>
-            <th>พื้นที่</th><th>สูญเสียปัจจุบัน<br>(ลบ.ม./เดือน)</th>
-            <th>ศักยภาพลด</th><th>ต้องลด</th>
-            <th>เป้าสูญเสีย<br>(แก้ได้)</th><th>MNF ปัจจุบัน</th><th>เป้า MNF</th>
-            <th>ที่มาน้ำหนัก</th>
+            <th>DMA</th>
+            <th>ปริมาณน้ำสูญเสียปัจจุบัน</th>
+            <th>เป้าปริมาณน้ำสูญเสีย<br>(แก้ได้)</th>
+            <th>ต้องลด</th>
+            <th>คิดเป็น NF<br>(ลบ.ม./ชม.)</th>
+            <th>MNF ปัจจุบัน</th>
           </tr></thead>
           <tbody></tbody>
         </table>
@@ -407,6 +417,24 @@ function monthLabelForNo(n){
   return TH_MONTHS[mon] + " " + String((year + 543) % 100);
 }
 
+// "2025-07-04" -> "4 ก.ค. 68"
+function thaiDate(iso){
+  var p = String(iso || "").split("-");
+  if(p.length !== 3) return iso || "-";
+  var y = parseInt(p[0],10), m = parseInt(p[1],10), d = parseInt(p[2],10);
+  if(isNaN(y) || isNaN(m) || isNaN(d)) return iso;
+  return d + " " + TH_MONTHS[m] + " " + String((y+543)%100);
+}
+
+// "2026-07" -> "ก.ค. 69"
+function thaiMonth(ym){
+  var p = String(ym || "").split("-");
+  if(p.length < 2) return ym || "-";
+  var y = parseInt(p[0],10), m = parseInt(p[1],10);
+  if(isNaN(y) || isNaN(m)) return ym;
+  return TH_MONTHS[m] + " " + String((y+543)%100);
+}
+
 function intervalLabel(i){
   var h = Math.floor(i/4), m = (i%4)*15;
   return (h<10?"0":"")+h+":"+(m<10?"0":"")+m;
@@ -462,8 +490,9 @@ function renderContractInfo(){
     ["สัญญาเลขที่", c.contract_no || "-"],
     ["ผู้รับจ้าง", c.contractor_name || "-"],
     ["ระยะเวลาสัญญา", c.duration_days ? num(c.duration_days) + " วัน" : "-"],
-    ["วันที่เริ่มงาน", c.start_date || (c.start_month || "-")],
-    ["วันที่สิ้นสุดสัญญา", c.end_date || "-"],
+    ["วันที่เริ่มงาน", c.start_date ? thaiDate(c.start_date)
+                       : (c.start_month ? thaiMonth(c.start_month) : "-")],
+    ["วันที่สิ้นสุดสัญญา", c.end_date ? thaiDate(c.end_date) : "-"],
     ["Base Line (%)", c.baseline_rate_x == null ? "-" : num(c.baseline_rate_x, 3)],
     ["จำนวนพื้นที่เฝ้าระวัง", DATA.n_dma + " DMA"],
   ];
@@ -560,7 +589,7 @@ function renderCards(){
     cards.push({label:"อัตราปัจจุบัน (รอบ 3 เดือน)", cls:cls,
       value: num(latest.loss_rate,2)+"%",
       note: "เดือนที่ " + latest.month_no + " · " +
-            latest.window.map(function(m){return m.slice(5);}).join(", ")});
+            latest.window.map(thaiMonth).join(", ")});
   } else {
     cards.push({label:"อัตราปัจจุบัน", value:"-",
       note:"ยังไม่มีข้อมูลครบ 3 เดือน"});
@@ -588,7 +617,7 @@ function renderCards(){
       cards.push({label:"คาดการณ์ ณ เดือนที่ " + out.month_no, cls:"warn",
         value:"ยังสรุปไม่ได้",
         note:"แนวโน้มชี้ที่ " + num(out.forecast_rate,2) + "% แต่ช่วงกว้าง " +
-             num(out.lo,1) + "–" + num(out.hi,1) + "% ต้องมีข้อมูลอีกหลายรอบ"});
+             num(out.lo,1) + "–" + num(out.hi,1) + "%"});
     } else {
       var cls2 = out.on_track ? "good" : "bad";
       cards.push({label:"คาดการณ์ ณ เดือนที่ " + out.month_no, cls:cls2,
@@ -663,12 +692,13 @@ function renderTrajectory(){
       borderColor:"rgba(92,116,136,.55)", borderDash:[3,4], borderWidth:1.2,
       pointRadius:0, fill:false});
   }
-  ds.push({label:"เป้าระหว่างทาง (ไม่ผูกพัน)", data: at(interim,"rate"),
+  ds.push({label:"_เป้าระหว่างทาง", data: at(interim,"rate"),
     borderColor:"rgba(181,121,15,.45)", borderDash:[2,3], borderWidth:1.2,
     pointRadius:0, fill:false});
   ds.push({label:"เป้าตามสัญญา", data: at(targets,"target_rate"),
     borderColor:C.amber, borderWidth:2.2, stepped:"after",
-    pointRadius:5, pointBackgroundColor:C.amber, spanGaps:true, fill:false});
+    pointRadius:3, pointHoverRadius:5, pointBackgroundColor:C.amber,
+    spanGaps:true, fill:false});
   var showBand = fc.some(function(p){ return p.conclusive; });
   if(fc.length){
     // วาดแถบความเชื่อมั่นเฉพาะตอนที่แคบพอจะสื่อความหมาย
@@ -687,7 +717,7 @@ function renderTrajectory(){
     }
   }
   ds.push({label:"อัตราจริง (รอบ 3 เดือน)", data: at(rolling,"loss_rate"),
-    borderColor:C.teal, borderWidth:2.6, pointRadius:4,
+    borderColor:C.teal, borderWidth:2.6, pointRadius:2.5, pointHoverRadius:5,
     pointBackgroundColor:C.teal, spanGaps:true, fill:false});
 
   // ช่วงแกน y คำนวณจากค่าที่ต้องอ่านจริงเท่านั้น
@@ -756,7 +786,7 @@ function renderDmaTable(){
   var rows = DATA.dma_rows || [];
   var latest = DATA.latest;
   $("tableHint").textContent = latest
-    ? "ยอดรวมรอบ 3 เดือน: " + latest.window.join(", ") +
+    ? "ยอดรวมรอบ 3 เดือน: " + latest.window.map(thaiMonth).join(", ") +
       " (หน่วยปริมาณเป็น ลบ.ม.)"
     : "ยังไม่มีข้อมูลครบรอบ 3 เดือน — ต้องมีข้อมูลอย่างน้อย 3 เดือนติดกัน";
 
@@ -805,9 +835,9 @@ function renderBarChart(){
   CHARTS.bar = new Chart($("dmaBarChart"), {
     type:"bar",
     data:{ labels: labels, datasets:[
-      { label:"น้ำสูญเสียปัจจุบัน (ลบ.ม./เดือน)", data: current,
+      { label:"ปริมาณน้ำสูญเสียปัจจุบัน (ลบ.ม./เดือน)", data: current,
         backgroundColor:"rgba(0,156,255,.55)", borderColor:C.red, borderWidth:1 },
-      { label:"เป้าหมาย", data: target, type:"line", showLine:false,
+      { label:"เป้าปริมาณน้ำสูญเสีย", data: target, type:"line", showLine:false,
         pointStyle:"line", pointRadius:9, borderWidth:2.5,
         pointBorderColor:C.green, borderColor:C.green, rotation:90 }
     ]},
@@ -839,32 +869,34 @@ function renderTargets(){
     return;
   }
   TARGET_ROWS = bd.rows.slice();
+  if(!$("totalReduction").value && bd.summary){
+    $("totalReduction").value = Math.round(bd.summary.total_reduction_m3 || 0);
+  }
   $("targetHint").innerHTML =
     "กระจายเป้าตามศักยภาพที่แต่ละพื้นที่ลดได้จริง " +
     "(ศักยภาพ = MNF ปัจจุบัน − พื้นค่า MNF × " + bd.hours_per_day + " ชม. × " +
-    bd.days + " วัน) พื้นที่ที่ไม่มีข้อมูลใช้สัดส่วนน้ำสูญเสียแทน · " +
-    "แก้ช่อง \"เป้าสูญเสีย\" ได้ ระบบจะเกลี่ยส่วนที่เหลือให้พื้นที่อื่นอัตโนมัติ";
+    bd.days + " วัน) DMA ที่ไม่มีข้อมูลใช้สัดส่วนน้ำสูญเสียแทน · " +
+    "แก้ช่อง \"เป้าปริมาณน้ำสูญเสีย\" ได้ ระบบจะเกลี่ยส่วนที่เหลือให้ DMA อื่นอัตโนมัติ";
   drawTargetRows();
 }
 
 function drawTargetRows(){
   var bd = DATA.breakdown;
   var tb = $("targetTable").querySelector("tbody");
+  var denom = (bd.hours_per_day || 24) * (bd.days || 30);
   tb.innerHTML = TARGET_ROWS.map(function(r){
-    var srcLabel = r.weight_source === "mnf"
-      ? '<span class="pbc-badge">MNF</span>'
-      : '<span class="pbc-badge rtu">สัดส่วนน้ำสูญเสีย</span>';
+    // แปลงปริมาณที่ต้องลดต่อเดือน กลับเป็นอัตราการไหลที่ต้องลดลง
+    var nf = denom ? r.reduction_m3 / denom : null;
     return '<tr>' +
-      '<td>' + esc(r.dma_code) + (r.is_manual ? ' <span class="pbc-badge ovr">แก้เอง</span>' : '') + '</td>' +
+      '<td>' + esc(r.dma_code) +
+        (r.is_manual ? ' <span class="pbc-badge ovr">แก้เอง</span>' : '') + '</td>' +
       '<td>' + num(r.loss_m3) + '</td>' +
-      '<td class="dim">' + (r.potential_m3==null ? "-" : num(r.potential_m3)) + '</td>' +
-      '<td class="num-warn">' + num(r.reduction_m3) + '</td>' +
       '<td><input class="editnum" type="number" min="0" step="1" ' +
         'data-dma="' + esc(r.dma_code) + '" value="' +
         (r.target_loss_m3==null ? "" : Math.round(r.target_loss_m3)) + '"></td>' +
-      '<td>' + num(r.mnf_current,1) + '</td>' +
-      '<td class="num-good">' + num(r.target_mnf,1) + '</td>' +
-      '<td style="text-align:left">' + srcLabel + '</td></tr>';
+      '<td class="num-warn">' + num(r.reduction_m3) + '</td>' +
+      '<td class="num-warn">' + num(nf,1) + '</td>' +
+      '<td>' + num(r.mnf_current,1) + '</td></tr>';
   }).join("");
 
   Array.prototype.forEach.call(tb.querySelectorAll("input"), function(inp){
@@ -879,8 +911,8 @@ function drawTargetRows(){
   var s = bd.summary || {};
   var unalloc = s.unallocated_m3 || 0;
   var target = DATA.next_target ? DATA.next_target.target_rate : null;
-  var text = "ต้องลดรวม " + num(s.total_reduction_m3) + " ลบ.ม./เดือน · " +
-    "เป้าน้ำสูญเสียรวมของแผนนี้ " + num(s.sum_target_loss_m3) + " ลบ.ม./เดือน";
+  var text = "ต้องลดรวม " + num(s.total_reduction_m3) + " · " +
+    "เป้าปริมาณน้ำสูญเสียรวมของแผนนี้ " + num(s.sum_target_loss_m3);
   if(s.resulting_rate != null){
     text += " · อัตราที่จะได้ " + num(s.resulting_rate,2) + "%" +
       (target != null ? " (เป้า " + num(target,2) + "%)" : "");
@@ -888,7 +920,7 @@ function drawTargetRows(){
   if(unalloc > 1){
     showMsg($("targetSummary"), text +
       "<br><b>ยังกระจายไม่ครบอีก " + num(unalloc) + " ลบ.ม.</b> — " +
-      "เป้าที่แก้เองรวมกันแล้วยังไม่ถึงเป้าใหญ่ ต้องลดเป้าของบางพื้นที่ลงอีก", "err");
+      "เป้าที่แก้เองรวมกันแล้วยังไม่ถึงเป้าใหญ่ ต้องลดเป้าของบาง DMA ลงอีก", "err");
   } else if(target != null && s.resulting_rate != null &&
             s.resulting_rate < target - 0.05){
     showMsg($("targetSummary"), text +
@@ -906,15 +938,22 @@ function recalcTargets(){
     return { dma_code:r.dma_code, inflow_m3:r.inflow_m3, sales_m3:r.sales_m3,
              loss_m3:r.loss_m3, mnf_current:r.mnf_current, mnf_floor:r.mnf_floor };
   });
+  var payload = {
+    contract_id: SELECTED, basis: basis, manual: MANUAL,
+    sales_m3: bd.summary.sales_m3, target_rate: DATA.next_target.target_rate
+  };
+  var manualTotal = parseFloat($("totalReduction").value);
+  if(!isNaN(manualTotal) && manualTotal >= 0){
+    payload.total_reduction_m3 = manualTotal;
+  }
   fetch(API + "/preview-targets", {
     method:"POST", headers:{"Content-Type":"application/json"},
-    body: JSON.stringify({
-      contract_id: SELECTED, basis: basis, manual: MANUAL,
-      sales_m3: bd.summary.sales_m3, target_rate: DATA.next_target.target_rate
-    })
+    body: JSON.stringify(payload)
   }).then(function(r){ return r.json(); }).then(function(j){
     if(!j.ok){ showMsg($("targetMsg"), esc(j.error), "err"); return; }
     TARGET_ROWS = j.rows;
+    // เก็บกลับเข้า DATA ด้วย เพราะกราฟแท่งอ่านเป้าจากตรงนี้
+    DATA.breakdown.rows = j.rows;
     DATA.breakdown.summary = j.summary;
     drawTargetRows();
     renderBarChart();
@@ -932,8 +971,11 @@ function saveTargets(){
     body: JSON.stringify({ contract_id: SELECTED,
       measure_month_no: DATA.breakdown.measure_month_no, targets: payload })
   }).then(function(r){ return r.json(); }).then(function(j){
-    if(j.ok) showMsg($("targetMsg"), "บันทึกเป้าหมาย " + j.n_saved + " พื้นที่แล้ว", "ok");
-    else showMsg($("targetMsg"), esc(j.error), "err");
+    if(!j.ok){ showMsg($("targetMsg"), esc(j.error), "err"); return; }
+    showMsg($("targetMsg"), "บันทึกเป้าหมาย " + j.n_saved + " DMA แล้ว", "ok");
+    // กราฟแท่งใช้เป้าที่เพิ่งบันทึก ต้องวาดใหม่ให้ตรงกัน
+    DATA.breakdown.rows = TARGET_ROWS;
+    renderBarChart();
   });
 }
 
@@ -1144,8 +1186,21 @@ function bindEvents(){
 
   $("btnReload").addEventListener("click", load);
   $("btnRecalc").addEventListener("click", recalcTargets);
+  $("btnUseTarget").addEventListener("click", function(){
+    // กลับไปใช้ปริมาณที่คำนวณจากเป้าตามสัญญา
+    var bd = DATA && DATA.breakdown;
+    if(bd && bd.summary){
+      $("totalReduction").value = Math.round(bd.summary.total_reduction_m3 || 0);
+      recalcTargets();
+    }
+  });
   $("btnResetTargets").addEventListener("click", function(){
-    MANUAL = {}; recalcTargets();
+    MANUAL = {};
+    if(DATA && DATA.breakdown && DATA.breakdown.summary){
+      $("totalReduction").value =
+        Math.round(DATA.breakdown.summary.total_reduction_m3 || 0);
+    }
+    recalcTargets();
   });
   $("btnSaveTargets").addEventListener("click", saveTargets);
   $("mClose").addEventListener("click", function(){

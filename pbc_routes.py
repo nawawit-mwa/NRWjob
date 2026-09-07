@@ -801,8 +801,11 @@ def create_pbc_blueprint(login_required=None, current_user_fn=None,
         if rate is None:
             return jsonify({"ok": False, "error": "ไม่มีอัตราเป้าหมาย"}), 400
         hours = contract["mnf_hours_per_day"] or CFG.DEFAULT_MNF_HOURS_PER_DAY
+        # ถ้าผู้ใช้กำหนดปริมาณรวมที่จะลดมาเอง ให้ใช้ค่านั้นแทนที่จะคิดจากอัตราเป้า
+        total_reduction = SVC.to_float(data.get("total_reduction_m3"))
         rows, summary = FC.build_dma_targets(
-            basis, sales, rate / 100.0, hours, CFG.DAYS_PER_MONTH, manual=manual
+            basis, sales, rate / 100.0, hours, CFG.DAYS_PER_MONTH,
+            manual=manual, total_reduction=total_reduction,
         )
         for r in rows:
             for key in ("loss_m3", "target_loss_m3", "reduction_m3", "potential_m3"):

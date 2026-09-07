@@ -185,17 +185,24 @@ def target_mnf_for(row, hours_per_day, days):
 
 
 def build_dma_targets(dmas, sales_m3, target_rate, hours_per_day,
-                      days, manual=None):
+                      days, manual=None, total_reduction=None):
     """
     ฟังก์ชันรวม: จากสถานะปัจจุบันราย DMA + อัตราเป้าหมาย
     คืนเป้าปริมาณและเป้า MNF ของแต่ละ DMA พร้อมสรุปภาพรวม
 
     dmas ต้องมีคีย์: dma_code, inflow_m3, sales_m3, loss_m3,
                      mnf_current, mnf_floor
+
+    total_reduction : ถ้าระบุมา จะใช้ปริมาณนี้เป็นตัวตั้งในการกระจายแทน
+                      การคำนวณจากอัตราเป้าหมาย ใช้เมื่อผู้ใช้ต้องการกำหนด
+                      ปริมาณที่จะลดเองโดยไม่อิงเป้าตามสัญญา
     """
     total_loss = sum(max(d.get("loss_m3") or 0.0, 0.0) for d in dmas)
     total_target_loss = area_target_loss(sales_m3, target_rate)
-    total_reduction = max(total_loss - total_target_loss, 0.0)
+    if total_reduction is None:
+        total_reduction = max(total_loss - total_target_loss, 0.0)
+    else:
+        total_reduction = max(float(total_reduction), 0.0)
 
     weighted = build_weights(dmas, hours_per_day, days)
     allocated = allocate_reduction(weighted, total_reduction, manual=manual)
