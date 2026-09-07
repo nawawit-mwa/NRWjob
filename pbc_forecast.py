@@ -403,3 +403,88 @@ def interim_target_line(start_rate, milestones, last_month_no):
             frac = (month - prev[0]) / span if span else 0.0
             line.append((month, prev[1] + (nxt[1] - prev[1]) * frac))
     return [(m, round(v, 3)) for m, v in line]
+
+
+# ------------------------------------------------------------------ ภาพรวมหลายสัญญา
+
+def plan_rate_at(baseline_x, milestones, month_no):
+    """
+    อัตราน้ำสูญเสียตามแผนของสัญญา ณ เดือนที่ month_no
+
+    แผนตามสัญญาเป็นขั้นบันได: คงที่ที่อัตราฐานจนถึงจุดวัดผลแรก
+    แล้วลดลงเป็นขั้นทุกจุดวัดผล คงค่านั้นไว้จนถึงจุดถัดไป
+    (รูปแบบเดียวกับเส้นแผนสีแดงในรายงานนำเสนอผลงาน)
+
+    milestones : list ของ (month_no, target_rate) เรียงตามเดือน
+    """
+    rate = baseline_x
+    for m_no, target in sorted(milestones):
+        if month_no >= m_no:
+            rate = target
+        else:
+            break
+    return rate
+
+
+def pool_rate(sales_m3, loss_m3):
+    """อัตราน้ำสูญเสียจากผลรวมปริมาณ — รวมก่อนหารเสมอ ไม่ใช่เฉลี่ยอัตรา"""
+    inflow = sales_m3 + loss_m3
+    return (loss_m3 / inflow * 100.0) if inflow else None
+
+
+def aggregate_across_contracts(points):
+    """
+    รวมหลายสัญญาเป็นตัวเลขเดียวต่อเดือนปฏิทิน
+
+    points : list ของ dict ต่อสัญญาต่อเดือน มีคีย์
+             month, inflow_m3, sales_m3, loss_m3, plan_rate, baseline_rate
+
+    คืน list เรียงตามเดือน แต่ละรายการมี
+        month, inflow_m3, sales_m3, loss_m3, actual_rate,
+        plan_rate, baseline_rate, n_contracts
+
+    วิธีรวมเป้าหมาย: แปลงอัตราเป้าของแต่ละสัญญาเป็นปริมาณน้ำสูญเสียเป้าหมาย
+    ด้วยสูตร  L = S x R / (1 - R)  แล้วจึงรวมปริมาณ
+    เพราะการเฉลี่ยอัตราข้ามสัญญาที่ขนาดต่างกันมากให้ค่าที่ไม่มีความหมาย
+    """
+    bucket = {}
+    for p in points:
+        b = bucket.setdefault(p["month"], {
+            "month": p["month"], "inflow_m3": 0.0, "sales_m3": 0.0,
+            "loss_m3": 0.0, "plan_loss_m3": 0.0, "base_loss_m3": 0.0,
+            "n_contracts": 0,
+        })
+        b["inflow_m3"] += p["inflow_m3"]
+        b["sales_m3"] += p["sales_m3"]
+        b["loss_m3"] += p["loss_m3"]
+        b["n_contracts"] += 1
+        if p.get("plan_rate") is not None:
+            b["plan_loss_m3"] += area_target_loss(
+                p["sales_m3"], p["plan_rate"] / 100.0)
+        if p.get("baseline_rate") is not None:
+            b["base_loss_m3"] += area_target_loss(
+                p["sales_m3"], p["baseline_rate"] / 100.0)
+
+    out = []
+    for month in sorted(bucket):
+        b = bucket[month]
+        out.append({
+            "month": month,
+            "n_contracts": b["n_contracts"],
+            "inflow_m3": round(b["inflow_m3"], 2),
+            "sales_m3": round(b["sales_m3"], 2),
+            "loss_m3": round(b["loss_m3"], 2),
+            "actual_rate": (
+                round(pool_rate(b["sales_m3"], b["loss_m3"]), 2)
+                if b["inflow_m3"] else None
+            ),
+            "plan_rate": (
+                round(pool_rate(b["sales_m3"], b["plan_loss_m3"]), 2)
+                if b["plan_loss_m3"] else None
+            ),
+            "baseline_rate": (
+                round(pool_rate(b["sales_m3"], b["base_loss_m3"]), 2)
+                if b["base_loss_m3"] else None
+            ),
+        })
+    return out

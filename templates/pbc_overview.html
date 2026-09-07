@@ -1,0 +1,450 @@
+{% extends "base_sidebar.html" %}
+{% block title %}ภาพรวมทุกสัญญา PBC{% endblock %}
+
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+/* สไตล์ของหน้า PBC — ใช้ชุดสีเดียวกับระบบแม่ (style.css) ทั้งหมด
+   อ้างตัวแปรจาก :root ของ style.css โดยตรง ไม่ได้ตั้งค่าสีใหม่เอง
+   ถ้าธีมหลักเปลี่ยนสี หน้านี้จะเปลี่ยนตามอัตโนมัติ
+
+   ข้อกำหนด 2 ข้อที่ยึดในไฟล์นี้
+   1) ทุก selector scope ใต้ .pbc-page — ไม่ไปทับสไตล์ที่หน้าอื่นใช้ร่วมกัน
+   2) ชื่อคลาสที่ชนกับ style.css (topbar / panel / badge) เปลี่ยนเป็น pbc-*
+      เพราะแม้จะ scope แล้ว คุณสมบัติที่ไม่ได้ประกาศทับจะรั่วเข้ามา
+      เช่น พื้นหลังไล่เฉดของ .topbar เดิม */
+
+.pbc-page{
+  --pbc-band:rgba(0,156,255,.14);
+  --pbc-panel-alt:#f8fbfe;
+  color:var(--ink);
+  font-family:var(--font-ui);
+  font-size:14px;
+  line-height:1.6;
+}
+.pbc-page *{box-sizing:border-box}
+.pbc-page a{color:var(--mwa-navy)}
+.pbc-page .wrap{max-width:1400px;margin:0 auto;padding:22px 26px 60px}
+
+/* ---------- หัวหน้า ---------- */
+.pbc-page .pbc-topbar{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;
+  justify-content:space-between;margin-bottom:18px}
+.pbc-page .pbc-topbar h1{margin:0;font-size:1.35rem;font-weight:700;
+  color:var(--mwa-navy-deep)}
+.pbc-page .pbc-topbar .sub{color:var(--ink-soft);font-size:.85rem;margin-top:2px}
+
+.pbc-page select,.pbc-page input,.pbc-page textarea,.pbc-page button{
+  font-family:inherit;font-size:.85rem}
+.pbc-page select,.pbc-page input,.pbc-page textarea{background:#fff;color:var(--ink);
+  border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+.pbc-page select:focus,.pbc-page input:focus,.pbc-page textarea:focus{
+  outline:none;border-color:var(--mwa-sky)}
+.pbc-page button{background:#fff;color:var(--mwa-navy);
+  border:1px solid var(--line);border-radius:8px;padding:8px 14px;cursor:pointer;
+  width:auto;font-weight:600;box-shadow:none}
+.pbc-page button:hover{border-color:var(--mwa-sky);background:#f2f9ff}
+.pbc-page button.primary{background:var(--mwa-sky);border-color:var(--mwa-sky);color:#fff}
+.pbc-page button.primary:hover{background:var(--mwa-navy);border-color:var(--mwa-navy)}
+.pbc-page button:disabled{opacity:.45;cursor:not-allowed}
+
+/* ---------- การ์ดสรุป ---------- */
+.pbc-page .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
+  gap:12px;margin-bottom:18px}
+.pbc-page .card{background:var(--panel);border:1px solid var(--line);
+  border-radius:var(--radius);padding:14px 16px;border-top:3px solid var(--mwa-sky)}
+.pbc-page .card .label{color:var(--ink-soft);font-size:.78rem;margin-bottom:6px}
+.pbc-page .card .value{font-size:1.65rem;font-weight:700;letter-spacing:-.5px;
+  color:var(--mwa-navy-deep)}
+.pbc-page .card .note{color:var(--ink-soft);font-size:.76rem;margin-top:4px}
+.pbc-page .card.warn{border-top-color:var(--amber)}
+.pbc-page .card.warn .value{color:var(--amber)}
+.pbc-page .card.bad{border-top-color:var(--danger)}
+.pbc-page .card.bad .value{color:var(--danger)}
+.pbc-page .card.good{border-top-color:var(--mwa-green)}
+.pbc-page .card.good .value{color:var(--mwa-green)}
+
+/* ---------- แผง ---------- */
+.pbc-page .pbc-panel{background:var(--panel);border:1px solid var(--line);
+  border-radius:var(--radius);padding:18px;margin-bottom:16px}
+.pbc-page .pbc-panel h2{margin:0 0 4px;font-size:1rem;font-weight:700;
+  color:var(--mwa-navy-deep)}
+.pbc-page .pbc-panel .hint{color:var(--ink-soft);font-size:.78rem;margin-bottom:12px}
+.pbc-page .chart-box{position:relative;height:340px}
+.pbc-page .chart-box.short{height:300px}
+
+/* ---------- แท็บ ---------- */
+.pbc-page .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);
+  margin-bottom:14px}
+.pbc-page .tab{padding:9px 16px;cursor:pointer;color:var(--ink-soft);
+  border-bottom:2px solid transparent;font-weight:600;font-size:.86rem}
+.pbc-page .tab:hover{color:var(--mwa-navy)}
+.pbc-page .tab.active{color:var(--mwa-navy-deep);border-bottom-color:var(--mwa-sky)}
+.pbc-page .tabpane{display:none}
+.pbc-page .tabpane.active{display:block}
+
+/* ---------- ตาราง ---------- */
+.pbc-page table{width:100%;border-collapse:collapse;font-size:.84rem;background:#fff}
+.pbc-page th,.pbc-page td{padding:9px 12px;text-align:right;
+  border-bottom:1px solid var(--line);white-space:nowrap;color:var(--ink);
+  text-transform:none;letter-spacing:normal}
+.pbc-page th{background:#e4f2fc;color:var(--mwa-navy-deep);font-weight:700;
+  font-size:.74rem;position:sticky;top:0;z-index:1}
+.pbc-page th:first-child,.pbc-page td:first-child{text-align:left}
+.pbc-page tbody tr{cursor:pointer}
+.pbc-page tbody tr:hover td{background:#f2f9ff}
+.pbc-page tbody tr:last-child td{border-bottom:1px solid var(--line)}
+.pbc-page .tablewrap{max-height:520px;overflow:auto;border:1px solid var(--line);
+  border-radius:8px;background:#fff}
+
+.pbc-page .pbc-badge{display:inline-block;padding:2px 9px;border-radius:999px;
+  font-size:.72rem;font-weight:600;background:#eef4fa;color:var(--ink-soft)}
+.pbc-page .pbc-badge.rtu{background:#f7ecd6;color:var(--amber)}
+.pbc-page .pbc-badge.ovr{background:#dcecfc;color:var(--mwa-navy-deep)}
+.pbc-page .num-bad{color:var(--danger);font-weight:600}
+.pbc-page .num-warn{color:var(--amber);font-weight:600}
+.pbc-page .num-good{color:var(--mwa-green);font-weight:600}
+.pbc-page .dim{color:var(--ink-soft)}
+
+/* ---------- popup ---------- */
+.pbc-page .modal{position:fixed;inset:0;background:rgba(20,36,51,.55);display:none;
+  z-index:900;overflow:auto;padding:26px 14px}
+.pbc-page .modal.open{display:block}
+.pbc-page .modal-inner{max-width:1050px;margin:0 auto;background:var(--panel);
+  border:1px solid var(--line);border-radius:var(--radius);padding:20px;
+  box-shadow:0 18px 48px rgba(8,90,182,.18)}
+.pbc-page .modal-head{display:flex;justify-content:space-between;align-items:flex-start;
+  gap:12px;margin-bottom:12px}
+.pbc-page .modal-head h3{margin:0;font-size:1.1rem;color:var(--mwa-navy-deep)}
+.pbc-page .modal-inner h2{font-size:.95rem;color:var(--mwa-navy-deep)}
+.pbc-page .modal-inner .hint{color:var(--ink-soft);font-size:.78rem;margin-bottom:8px}
+.pbc-page .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:860px){.pbc-page .grid2{grid-template-columns:1fr}}
+
+/* ---------- ฟอร์มและข้อความ ---------- */
+.pbc-page .formrow{display:flex;gap:8px;flex-wrap:wrap;align-items:center;
+  margin-bottom:8px}
+.pbc-page .formrow label{color:var(--ink-soft);font-size:.78rem;min-width:96px}
+.pbc-page .formrow input,.pbc-page .formrow select,.pbc-page .formrow textarea{
+  flex:1;min-width:130px}
+.pbc-page .msg{padding:10px 13px;border-radius:8px;font-size:.84rem;margin:10px 0;
+  display:none}
+.pbc-page .msg.show{display:block}
+.pbc-page .msg.ok{background:#e0f4de;border:1px solid rgba(7,156,0,.35);
+  color:#0a5b06}
+.pbc-page .msg.err{background:#fbe9e4;border:1px solid rgba(166,64,42,.35);
+  color:var(--danger)}
+.pbc-page .msg.info{background:#dcecfc;border:1px solid rgba(8,90,182,.28);
+  color:var(--mwa-navy-deep)}
+.pbc-page .msg ul{margin:6px 0 0;padding-left:18px}
+.pbc-page .dropzone{border:1.5px dashed var(--line);border-radius:var(--radius);
+  padding:28px;text-align:center;color:var(--ink-soft);cursor:pointer;
+  background:var(--pbc-panel-alt)}
+.pbc-page .dropzone:hover,.pbc-page .dropzone.drag{border-color:var(--mwa-sky);
+  color:var(--mwa-navy);background:#f2f9ff}
+.pbc-page .editnum{width:110px;text-align:right}
+.pbc-page .loading{color:var(--ink-soft);padding:26px;text-align:center}
+
+.pbc-page .pbc-split{display:grid;grid-template-columns:minmax(260px,1fr) 2fr;gap:18px}
+@media(max-width:900px){.pbc-page .pbc-split{grid-template-columns:1fr}}
+.pbc-page .pbc-kv{font-size:.84rem}
+.pbc-page .pbc-kv th{text-align:left;background:#eef4fa;color:var(--ink-soft);
+  font-weight:600;width:45%;position:static}
+.pbc-page .pbc-kv td{text-align:left;font-weight:600;color:var(--mwa-navy-deep)}
+.pbc-page .pbc-kv tr{cursor:default}
+.pbc-page .pbc-kv tr:hover td{background:transparent}
+.pbc-page tr.ms-pass td{background:#e0f4de}
+.pbc-page tr.ms-fail td{background:#fbe9e4}
+.pbc-page td.ms-pass{background:#e0f4de;color:#0a5b06;font-weight:600}
+.pbc-page td.ms-fail{background:#fbe9e4;color:var(--danger);font-weight:600}
+.pbc-page td.ms-pending{background:#f5f7fa;color:var(--ink-soft)}
+.pbc-page td.pr-done{background:#e0f4de;color:#0a5b06}
+.pbc-page td.pr-expected{background:#fff6e0;color:var(--amber)}
+.pbc-page td.pr-pending{background:#f5f7fa;color:var(--ink-soft)}
+.pbc-page .link-row td:first-child{color:var(--mwa-navy);text-decoration:underline}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="pbc-page">
+  <div class="wrap">
+
+    <div class="pbc-topbar">
+      <div>
+        <h1>ภาพรวมทุกสัญญา PBC</h1>
+        <div class="sub" id="ovSub">กำลังโหลด...</div>
+      </div>
+      <button id="btnReload">โหลดใหม่</button>
+    </div>
+
+    <div class="cards" id="ovCards"></div>
+
+    <div class="pbc-panel">
+      <h2>อัตราน้ำสูญเสียรวมทุกพื้นที่</h2>
+      <div class="hint" id="aggHint"></div>
+      <div class="chart-box"><canvas id="aggChart"></canvas></div>
+    </div>
+
+    <div class="pbc-panel">
+      <h2>เปรียบเทียบรายสัญญา</h2>
+      <div class="hint">คลิกที่แถวเพื่อเปิดหน้าติดตามรายสัญญา</div>
+      <div class="tablewrap" style="max-height:none">
+        <table id="cmpTable">
+          <thead><tr>
+            <th>สาขา</th><th>เลขที่สัญญา</th><th>ผู้รับจ้าง</th><th>DMA</th>
+            <th>Base Line</th><th>อัตราล่าสุด</th><th>แผน ณ เดือนนี้</th>
+            <th>เทียบแผน</th><th>สูญเสีย/เดือน</th><th>ALC สะสม</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="pbc-panel">
+      <h2>สถานะจุดวัดผลทุกสัญญา</h2>
+      <div class="hint">
+        เขียว = ผลจริงต่ำกว่าเป้า &nbsp;|&nbsp; แดง = สูงกว่าเป้า &nbsp;|&nbsp;
+        เทา = ยังไม่ถึงกำหนดวัดผล &nbsp;|&nbsp; ตัวเลขในช่องคือผลจริง เว้นว่างคือเป้า
+      </div>
+      <div class="tablewrap" style="max-height:none">
+        <table id="msMatrix"><thead></thead><tbody></tbody></table>
+      </div>
+    </div>
+
+    <div class="pbc-panel" id="procPanel">
+      <h2>ความคืบหน้าการจัดจ้าง สัญญาที่ยังไม่ลงนาม</h2>
+      <div class="hint" id="procHint"></div>
+      <div class="tablewrap" style="max-height:none">
+        <table id="procTable"><thead></thead><tbody></tbody></table>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+"use strict";
+
+var API = "/pbc/api";
+var C = { teal:"#009cff", amber:"#b5790f", red:"#a6402a", green:"#079c00",
+          muted:"#5c7488", band:"rgba(0,156,255,.14)", line:"#d9e6f2" };
+var DATA = null, CHART = null;
+
+function $(id){ return document.getElementById(id); }
+function esc(s){
+  return String(s==null?"":s).replace(/[&<>"']/g, function(c){
+    return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
+  });
+}
+function num(v, d){
+  if(v===null || v===undefined || v==="" || isNaN(v)) return "-";
+  return Number(v).toLocaleString("th-TH",
+    {minimumFractionDigits:d||0, maximumFractionDigits:d||0});
+}
+
+function load(){
+  $("ovSub").textContent = "กำลังโหลด...";
+  fetch(API + "/overview-all").then(function(r){ return r.json(); })
+    .then(function(j){
+      if(!j.ok){ $("ovSub").textContent = j.error || "โหลดไม่สำเร็จ"; return; }
+      DATA = j.data; render();
+    })
+    .catch(function(e){ $("ovSub").textContent = "เชื่อมต่อไม่สำเร็จ: " + e; });
+}
+
+function render(){
+  var s = DATA.summary;
+  $("ovSub").textContent = s.n_contracts + " สัญญา · ดำเนินการอยู่ " + s.n_started +
+    " · รอลงนาม " + s.n_pending + " · รวม " + s.n_dma + " พื้นที่เฝ้าระวัง";
+  renderCards();
+  renderAggChart();
+  renderCompare();
+  renderMatrix();
+  renderProcurement();
+}
+
+function renderCards(){
+  var s = DATA.summary, l = s.latest;
+  var cards = [];
+  cards.push({label:"สัญญาที่ดำเนินการอยู่", value: s.n_started + " / " + s.n_contracts,
+    note: s.n_pending ? "อีก " + s.n_pending + " สัญญารอลงนาม" : "ลงนามครบแล้ว"});
+  if(l){
+    cards.push({label:"อัตราน้ำสูญเสียรวม", value: num(l.actual_rate,2)+"%",
+      note:"รอบ 3 เดือนล่าสุด · " + esc(l.label)});
+    if(l.plan_rate != null){
+      var gap = l.actual_rate - l.plan_rate;
+      cards.push({label:"แผนรวม ณ เดือนนี้", cls: gap<=0 ? "good" : "bad",
+        value: num(l.plan_rate,2)+"%",
+        note: gap<=0 ? "ต่ำกว่าแผน " + num(-gap,2) + " จุด"
+                     : "สูงกว่าแผน " + num(gap,2) + " จุด"});
+    }
+  }
+  cards.push({label:"ตามแผน / ไม่ตามแผน", cls: s.n_off_plan ? "warn" : "good",
+    value: s.n_on_plan + " / " + s.n_off_plan, note:"นับเฉพาะสัญญาที่เริ่มแล้ว"});
+  if(s.loss_m3_month != null){
+    cards.push({label:"น้ำสูญเสียรวม", value: num(s.loss_m3_month),
+      note:"ลบ.ม. ต่อเดือน ทุกพื้นที่รวมกัน"});
+  }
+  cards.push({label:"ซ่อมท่อสะสม (ALC)",
+    value: num(s.alc_main_pipe) + " / " + num(s.alc_service_pipe),
+    note:"ท่อจ่ายน้ำ / ท่อบริการ"});
+  $("ovCards").innerHTML = cards.map(function(k){
+    return '<div class="card ' + (k.cls||"") + '">' +
+      '<div class="label">' + esc(k.label) + '</div>' +
+      '<div class="value">' + esc(k.value) + '</div>' +
+      '<div class="note">' + esc(k.note||"") + '</div></div>';
+  }).join("");
+}
+
+function renderAggChart(){
+  var series = DATA.series || [];
+  if(!series.length){
+    $("aggHint").textContent = "ยังไม่มีข้อมูลเพียงพอ";
+    return;
+  }
+  var minN = Math.min.apply(null, series.map(function(p){ return p.n_contracts; }));
+  var maxN = Math.max.apply(null, series.map(function(p){ return p.n_contracts; }));
+  $("aggHint").innerHTML =
+    "รวมปริมาณน้ำของทุกสัญญาที่เริ่มแล้วก่อน แล้วจึงคำนวณอัตราครั้งเดียว " +
+    "ไม่ใช่การเฉลี่ยอัตราของแต่ละสัญญา · เส้นแผนรวมแปลงจากเป้าของแต่ละสัญญาเป็นปริมาณ " +
+    "แล้วจึงรวมกัน" +
+    (minN !== maxN ? " · <b>จำนวนสัญญาในแต่ละเดือนไม่เท่ากัน (" + minN + "-" + maxN +
+      " สัญญา) เพราะแต่ละสัญญาเริ่มคนละเดือน</b>" : "");
+
+  var labels = series.map(function(p){ return p.label; });
+  var ds = [
+    {label:"อัตราฐานรวม", data: series.map(function(p){ return p.baseline_rate; }),
+     borderColor:"rgba(92,116,136,.55)", borderDash:[3,4], borderWidth:1.2,
+     pointRadius:0, fill:false, spanGaps:true},
+    {label:"แผนรวมตามสัญญา", data: series.map(function(p){ return p.plan_rate; }),
+     borderColor:C.amber, borderWidth:2.2, stepped:"after", pointRadius:0,
+     fill:false, spanGaps:true},
+    {label:"อัตราจริงรวม (รอบ 3 เดือน)",
+     data: series.map(function(p){ return p.actual_rate; }),
+     borderColor:C.teal, borderWidth:2.6, pointRadius:3,
+     pointBackgroundColor:C.teal, fill:false, spanGaps:true}
+  ];
+
+  var vals = [];
+  series.forEach(function(p){
+    ["actual_rate","plan_rate","baseline_rate"].forEach(function(k){
+      if(p[k] != null) vals.push(p[k]);
+    });
+  });
+  var lo = Math.min.apply(null, vals), hi = Math.max.apply(null, vals);
+  var pad = Math.max((hi-lo)*0.15, 2);
+  var step = (hi-lo) > 30 ? 10 : ((hi-lo) > 12 ? 5 : 2);
+  var yMin = Math.max(0, Math.floor((lo-pad)/step)*step);
+  var yMax = Math.ceil((hi+pad)/step)*step;
+
+  if(CHART) CHART.destroy();
+  CHART = new Chart($("aggChart"), {
+    type:"line",
+    data:{ labels: labels, datasets: ds },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      interaction:{ mode:"index", intersect:false },
+      plugins:{
+        legend:{ labels:{ color:C.muted, boxWidth:14 } },
+        tooltip:{ callbacks:{
+          afterTitle:function(items){
+            var p = series[items[0].dataIndex];
+            return "รวม " + p.n_contracts + " สัญญา";
+          },
+          label:function(ctx){
+            if(ctx.parsed.y===null) return null;
+            return ctx.dataset.label + ": " + ctx.parsed.y.toFixed(2) + "%";
+          } } }
+      },
+      scales:{
+        x:{ ticks:{ color:C.muted, maxRotation:0, autoSkipPadding:14, font:{size:10} },
+            grid:{ color:C.line } },
+        y:{ min:yMin, max:yMax,
+            ticks:{ color:C.muted, stepSize:step,
+                    callback:function(v){ return v + "%"; } },
+            grid:{ color:C.line },
+            title:{ display:true, color:C.muted, text:"อัตราน้ำสูญเสีย" } }
+      }
+    }
+  });
+}
+
+function renderCompare(){
+  var rows = (DATA.contracts || []).filter(function(r){ return r.started; });
+  var tb = $("cmpTable").querySelector("tbody");
+  tb.innerHTML = rows.map(function(r){
+    var cls = r.on_plan === undefined ? "" : (r.on_plan ? "num-good" : "num-bad");
+    var vs = r.vs_plan === undefined ? "-"
+           : (r.vs_plan <= 0 ? "ต่ำกว่าแผน " + num(-r.vs_plan,2)
+                             : "สูงกว่าแผน " + num(r.vs_plan,2));
+    return '<tr class="link-row" data-id="' + esc(r.contract_id) + '">' +
+      "<td>" + esc(r.branch_name || r.area_name) + "</td>" +
+      "<td>" + esc(r.contract_no) + "</td>" +
+      '<td style="text-align:left">' + esc(r.contractor_name || "-") + "</td>" +
+      "<td>" + num(r.n_dma) + "</td>" +
+      "<td>" + num(r.baseline_rate_x,3) + "</td>" +
+      "<td>" + num(r.current_rate,2) + "</td>" +
+      "<td>" + num(r.plan_rate_now,3) + "</td>" +
+      '<td class="' + cls + '">' + vs + "</td>" +
+      "<td>" + num(r.loss_m3_month) + "</td>" +
+      "<td>" + num(r.alc_main_pipe) + " / " + num(r.alc_service_pipe) + "</td></tr>";
+  }).join("");
+  Array.prototype.forEach.call(tb.querySelectorAll("tr"), function(tr){
+    tr.addEventListener("click", function(){
+      window.location = "/pbc?contract_id=" +
+        encodeURIComponent(tr.getAttribute("data-id"));
+    });
+  });
+}
+
+function renderMatrix(){
+  var cols = DATA.milestone_columns || [];
+  var rows = (DATA.contracts || []).filter(function(r){ return r.started; });
+  var th = "<tr><th>สาขา</th>" + cols.map(function(n){
+    return "<th>เดือนที่ " + n + "</th>"; }).join("") + "</tr>";
+  $("msMatrix").querySelector("thead").innerHTML = th;
+  $("msMatrix").querySelector("tbody").innerHTML = rows.map(function(r){
+    var map = {};
+    (r.milestones||[]).forEach(function(m){ map[m.month_no] = m; });
+    return "<tr><td>" + esc(r.branch_name || r.area_name) + "</td>" +
+      cols.map(function(n){
+        var m = map[n];
+        if(!m) return '<td class="ms-pending">-</td>';
+        if(m.status === "pending"){
+          return '<td class="ms-pending">' + num(m.target_rate,3) + "</td>";
+        }
+        return '<td class="ms-' + m.status + '">' + num(m.actual_rate,3) + "</td>";
+      }).join("") + "</tr>";
+  }).join("");
+}
+
+function renderProcurement(){
+  var rows = (DATA.contracts || []).filter(function(r){ return !r.started; });
+  if(!rows.length){ $("procPanel").style.display = "none"; return; }
+  $("procPanel").style.display = "";
+  var steps = DATA.procurement_steps || [];
+  $("procHint").textContent =
+    "ขั้นตอนที่แสดงมาจากตาราง ProcurementSteps ใน Google Sheet " +
+    "สัญญาที่ยังไม่มีข้อมูลจะขึ้นเป็นช่องว่าง";
+  $("procTable").querySelector("thead").innerHTML =
+    "<tr><th>สาขา</th><th>เลขที่สัญญา</th>" +
+    steps.map(function(s){ return "<th>" + esc(s) + "</th>"; }).join("") + "</tr>";
+  $("procTable").querySelector("tbody").innerHTML = rows.map(function(r){
+    var map = {};
+    (r.procurement||[]).forEach(function(p){ map[p.step_name] = p; });
+    return "<tr><td>" + esc(r.branch_name || r.area_name || "-") + "</td>" +
+      "<td>" + esc(r.contract_no) + "</td>" +
+      steps.map(function(name){
+        var p = map[name];
+        if(!p) return '<td class="pr-pending">-</td>';
+        return '<td class="pr-' + esc(p.status) + '">' +
+          esc(p.status_label) + (p.detail ? "<br>" + esc(p.detail) : "") + "</td>";
+      }).join("") + "</tr>";
+  }).join("");
+}
+
+$("btnReload").addEventListener("click", load);
+load();
+</script>
+{% endblock %}

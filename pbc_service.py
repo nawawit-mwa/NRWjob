@@ -156,17 +156,43 @@ def to_int(value, default=None):
     return int(v) if v is not None else default
 
 
+_MONTH_RE = __import__("re").compile(r"^(\d{4})-(\d{2})")
+
+
+def normalize_month(value):
+    """
+    แปลงค่าเดือนให้เป็นรูปแบบ YYYY-MM คืน None ถ้าอ่านไม่ได้
+
+    จำเป็นเพราะ Google Sheets มักแปลงข้อความ 2025-07 เป็นวันที่อัตโนมัติ
+    แล้วส่งกลับมาเป็น 2025-07-01 ตอนอ่านผ่าน API
+    ตัดเฉพาะส่วนปี-เดือนมาใช้ ข้อมูลยังถูกต้องเหมือนเดิม
+    """
+    m = _MONTH_RE.match(str(value or "").strip())
+    if not m:
+        return None
+    mon = int(m.group(2))
+    if not 1 <= mon <= 12:
+        return None
+    return "%s-%02d" % (m.group(1), mon)
+
+
 def month_add(month, delta):
     """'2026-07' + 2 -> '2026-09'"""
-    year, mon = (int(p) for p in month.split("-"))
+    norm = normalize_month(month)
+    if norm is None:
+        raise ValueError("รูปแบบเดือนไม่ถูกต้อง: %r" % (month,))
+    year, mon = int(norm[:4]), int(norm[5:7])
     idx = (year * 12 + mon - 1) + delta
     return "%04d-%02d" % (idx // 12, idx % 12 + 1)
 
 
 def month_diff(a, b):
     """จำนวนเดือนจาก a ถึง b (b - a)"""
-    ya, ma = (int(p) for p in a.split("-"))
-    yb, mb = (int(p) for p in b.split("-"))
+    na, nb = normalize_month(a), normalize_month(b)
+    if na is None or nb is None:
+        raise ValueError("รูปแบบเดือนไม่ถูกต้อง: %r หรือ %r" % (a, b))
+    ya, ma = int(na[:4]), int(na[5:7])
+    yb, mb = int(nb[:4]), int(nb[5:7])
     return (yb * 12 + mb) - (ya * 12 + ma)
 
 
@@ -204,10 +230,15 @@ def list_contracts(branch_codes=None):
     rows = read_tab(CFG.TAB_CONTRACTS)
     out = []
     for r in rows:
+        cid = (r.get("contract_id") or "").strip()
+        # ข้ามแถวที่ไม่ใช่ข้อมูลสัญญา เช่น บรรทัดหมายเหตุที่ติดมาตอนคัดลอกวาง
+        # (รหัสสัญญาจริงไม่มีช่องว่างอยู่ข้างใน)
+        if not cid or " " in cid:
+            continue
         if branch_codes is not None and r.get("branch_code") not in branch_codes:
             continue
         out.append({
-            "contract_id": r.get("contract_id", ""),
+            "contract_id": cid,
             "contract_no": r.get("contract_no", ""),
             "area_name": r.get("area_name", ""),
             "branch_code": r.get("branch_code", ""),
@@ -240,7 +271,7 @@ def get_targets(contract_id):
     rows = read_tab(CFG.TAB_TARGETS)
     out = []
     for r in rows:
-        if r.get("contract_id") != contract_id:
+        if (r.get("contract_id") or "").strip() != contract_id:
             continue
         no = to_int(r.get("measure_month_no"))
         rate = to_float(r.get("target_rate"))
@@ -259,7 +290,7 @@ def get_contract_dmas(contract_id, month=None):
     rows = read_tab(CFG.TAB_CONTRACT_DMA)
     out = []
     for r in rows:
-        if r.get("contract_id") != contract_id:
+        if (r.get("contract_id") or "").strip() != contract_id:
             continue
         code = (r.get("dma_code") or "").strip()
         if not code:
@@ -319,18 +350,35 @@ def get_monthly_effective(contract_id):
     """
     raw_rows = [
         r for r in read_tab(CFG.TAB_MONTHLY_RAW)
-        if r.get("contract_id") == contract_id
+        if (r.get("contract_id") or "").strip() == contract_id
     ]
+    # แปลงเดือนให้เป็นรูปแบบมาตรฐานก่อน แล้วทิ้งแถวที่อ่านเดือนไม่ได้
+    # ป้องกันไม่ให้แถวเดียวที่รูปแบบเพี้ยนทำให้ทั้งหน้าพัง
+    clean_raw = []
+    for r in raw_rows:
+        norm = normalize_month(r.get("month"))
+        if norm is None:
+            continue
+        row = dict(r)
+        row["month"] = norm
+        clean_raw.append(row)
+
     latest_raw = _latest_by_key(
-        raw_rows,
-        lambda r: (r.get("month", ""), r.get("dma_code", "")),
+        clean_raw,
+        lambda r: (r.get("month", ""), (r.get("dma_code") or "").strip()),
         lambda r: r.get("uploaded_at", ""),
     )
 
-    ovr_rows = [
-        r for r in read_tab(CFG.TAB_MONTHLY_OVERRIDE)
-        if r.get("contract_id") == contract_id
-    ]
+    ovr_rows = []
+    for r in read_tab(CFG.TAB_MONTHLY_OVERRIDE):
+        if (r.get("contract_id") or "").strip() != contract_id:
+            continue
+        norm = normalize_month(r.get("month"))
+        if norm is None:
+            continue
+        row = dict(r)
+        row["month"] = norm
+        ovr_rows.append(row)
     latest_ovr = _latest_by_key(
         ovr_rows,
         lambda r: (r.get("month", ""), r.get("dma_code", ""), r.get("field", "")),
@@ -339,6 +387,7 @@ def get_monthly_effective(contract_id):
 
     out = {}
     for (month, code), r in latest_raw.items():
+        code = code.strip()
         rec = {
             "month": month,
             "dma_code": code,
@@ -666,6 +715,47 @@ def save_monthly_work(contract_id, month, main_pipe, service_pipe, note, user):
         "alc_main_pipe": int(main_pipe or 0),
         "alc_service_pipe": int(service_pipe or 0),
         "note": note or "",
+        "updated_by": user,
+        "updated_at": now_str(),
+    }])
+
+
+def get_procurement(contract_id=None):
+    """
+    ความคืบหน้าการจัดจ้าง คืน dict {contract_id: [step, ...]} เรียงตาม step_order
+    ถ้ายังไม่มีข้อมูลใน Sheet จะไม่คืนสัญญานั้นเลย
+    """
+    rows = read_tab(CFG.TAB_PROCUREMENT)
+    latest = _latest_by_key(
+        rows,
+        lambda r: (r.get("contract_id", ""), r.get("step_order", "")),
+        lambda r: r.get("updated_at", ""),
+    )
+    out = {}
+    for (cid, _order), r in latest.items():
+        if contract_id and cid != contract_id:
+            continue
+        out.setdefault(cid, []).append({
+            "step_order": to_int(r.get("step_order"), 0),
+            "step_name": r.get("step_name", ""),
+            "status": (r.get("status") or "pending").strip().lower(),
+            "status_label": CFG.PROCUREMENT_STATUS.get(
+                (r.get("status") or "pending").strip().lower(), ""),
+            "detail": r.get("detail", ""),
+            "updated_at": r.get("updated_at", ""),
+        })
+    for cid in out:
+        out[cid].sort(key=lambda x: x["step_order"])
+    return out
+
+
+def save_procurement(contract_id, step_order, step_name, status, detail, user):
+    append_rows(CFG.TAB_PROCUREMENT, [{
+        "contract_id": contract_id,
+        "step_order": int(step_order),
+        "step_name": step_name,
+        "status": status,
+        "detail": detail or "",
         "updated_by": user,
         "updated_at": now_str(),
     }])

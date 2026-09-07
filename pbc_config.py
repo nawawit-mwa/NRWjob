@@ -95,6 +95,7 @@ TAB_DMA_TARGETS = "DMATargets"
 TAB_REMARKS = "Remarks"
 TAB_UPLOAD_LOG = "UploadLog"
 TAB_MONTHLY_WORK = "MonthlyWork"
+TAB_PROCUREMENT = "ProcurementSteps"
 
 # โครงคอลัมน์ของแต่ละ tab — ใช้ทั้งตอนสร้าง Sheet และตอนอ่าน/เขียน
 SHEET_SCHEMAS = {
@@ -141,6 +142,28 @@ SHEET_SCHEMAS = {
         "contract_id", "month", "alc_main_pipe", "alc_service_pipe",
         "note", "updated_by", "updated_at",
     ],
+    # ความคืบหน้าการจัดจ้างของสัญญาที่ยังไม่ลงนาม
+    TAB_PROCUREMENT: [
+        "contract_id", "step_order", "step_name", "status", "detail",
+        "updated_by", "updated_at",
+    ],
+}
+
+# ขั้นตอนจัดจ้างมาตรฐาน ใช้เป็นค่าตั้งต้นเมื่อยังไม่มีข้อมูลใน Sheet
+PROCUREMENT_STEPS = [
+    "จัดทำ TOR",
+    "จัดทำราคากลาง",
+    "รายงานขอจ้างและประกาศรับฟังวิจารณ์",
+    "ประกาศประกวดราคา e-bidding และยื่นเสนอราคา",
+    "พิจารณาผลและประกาศผู้ชนะเสนอราคา",
+    "ลงนามสัญญาและเริ่มงานได้",
+]
+
+# สถานะของแต่ละขั้นตอน
+PROCUREMENT_STATUS = {
+    "done": "แล้วเสร็จ",
+    "expected": "คาดการณ์",
+    "pending": "ยังไม่เริ่ม",
 }
 
 # คอลัมน์ที่ต้องบังคับเป็น text ใน Sheet (กันเลขศูนย์นำหน้าหาย/วันที่เพี้ยน)

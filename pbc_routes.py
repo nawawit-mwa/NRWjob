@@ -327,6 +327,15 @@ def create_pbc_blueprint(login_required=None, current_user_fn=None,
             enable_upload=CFG.ENABLE_WB220_UPLOAD,
         )
 
+    @bp.route("/overview")
+    @guard
+    def pbc_overview_page():
+        return render_template(
+            "pbc_overview.html",
+            active_page="pbc_overview",
+            user=user_obj(),
+        )
+
     # -------------------------------------------------------------- JSON
 
     @bp.route("/api/contracts")
@@ -341,6 +350,226 @@ def create_pbc_blueprint(login_required=None, current_user_fn=None,
         if not contract:
             return jsonify({"ok": False, "error": "ไม่พบสัญญา หรือไม่มีสิทธิ์เข้าถึง"}), 404
         return jsonify({"ok": True, "data": _build_overview(contract)})
+
+    @bp.route("/api/overview-all")
+    @guard
+    def api_overview_all():
+        """ภาพรวมทุกสัญญาที่ผู้ใช้เห็นได้ — รวมสัญญาที่ยังไม่ลงนามด้วย"""
+        contracts = _visible_contracts()
+        procurement = SVC.get_procurement()
+        agg_points = []
+        rows = []
+
+        for contract in contracts:
+            cid = contract["contract_id"]
+            start = contract["start_month"]
+            baseline_x = contract["baseline_rate_x"]
+            started = bool(start) and baseline_x is not None
+
+            row = {
+                "contract_id": cid,
+                "contract_no": contract["contract_no"],
+                "branch_name": contract["branch_name"],
+                "area_name": contract["area_name"],
+                "contractor_name": contract["contractor_name"],
+                "start_month": start,
+                "start_date": contract["start_date"],
+                "end_date": contract["end_date"],
+                "baseline_rate_x": baseline_x,
+                "status": contract["status"],
+                "started": started,
+                "procurement": procurement.get(cid, []),
+            }
+
+            if not started:
+                # ยังไม่ลงนาม แสดงเฉพาะความคืบหน้าการจัดจ้าง
+                rows.append(row)
+                continue
+
+            dmas = {d["dma_code"] for d in SVC.get_contract_dmas(cid)}
+            monthly = SVC.get_monthly_effective(cid)
+            targets = SVC.get_targets(cid)
+            milestones = [(t["month_no"], t["target_rate"]) for t in targets]
+            rolling = SVC.rolling_series(monthly, start, dmas)
+
+            for r in rolling:
+                agg_points.append({
+                    "month": r["month"],
+                    "inflow_m3": r["inflow_m3"],
+                    "sales_m3": r["sales_m3"],
+                    "loss_m3": r["loss_m3"],
+                    "plan_rate": FC.plan_rate_at(baseline_x, milestones, r["month_no"]),
+                    "baseline_rate": baseline_x,
+                })
+
+            latest = rolling[-1] if rolling else None
+            rolling_by_no = {r["month_no"]: r["loss_rate"] for r in rolling}
+            next_target = None
+            for t in targets:
+                if latest is None or t["month_no"] >= latest["month_no"]:
+                    next_target = t
+                    break
+
+            ms = []
+            for t in targets:
+                actual = rolling_by_no.get(t["month_no"])
+                ms.append({
+                    "month_no": t["month_no"],
+                    "target_rate": t["target_rate"],
+                    "actual_rate": actual,
+                    "status": "pending" if actual is None else
+                              ("pass" if actual <= t["target_rate"] else "fail"),
+                })
+
+            work = SVC.get_monthly_work(cid)
+            row.update({
+                "n_dma": len(dmas),
+                "latest_month": latest["month"] if latest else None,
+                "latest_label": latest["label"] if latest else None,
+                "latest_month_no": latest["month_no"] if latest else None,
+                "current_rate": latest["loss_rate"] if latest else None,
+                "loss_m3_month": (
+                    round(latest["loss_m3"] / CFG.ROLLING_MONTHS, 0)
+                    if latest else None
+                ),
+                "next_target": next_target,
+                "plan_rate_now": (
+                    FC.plan_rate_at(baseline_x, milestones, latest["month_no"])
+                    if latest else None
+                ),
+                "milestones": ms,
+                "alc_main_pipe": sum(w["alc_main_pipe"] for w in work.values()),
+                "alc_service_pipe": sum(w["alc_service_pipe"] for w in work.values()),
+            })
+            if row["current_rate"] is not None and row["plan_rate_now"] is not None:
+                row["vs_plan"] = round(row["current_rate"] - row["plan_rate_now"], 2)
+                row["on_plan"] = row["vs_plan"] <= 0
+            rows.append(row)
+
+        series = FC.aggregate_across_contracts(agg_points)
+        started_rows = [r for r in rows if r["started"]]
+        latest_agg = series[-1] if series else None
+        summary = {
+            "n_contracts": len(rows),
+            "n_started": len(started_rows),
+            "n_pending": len(rows) - len(started_rows),
+            "n_on_plan": sum(1 for r in started_rows if r.get("on_plan") is True),
+            "n_off_plan": sum(1 for r in started_rows if r.get("on_plan") is False),
+            "n_dma": sum(r.get("n_dma", 0) for r in started_rows),
+            "latest": latest_agg,
+            "loss_m3_month": (
+                round(latest_agg["loss_m3"] / CFG.ROLLING_MONTHS, 0)
+                if latest_agg else None
+            ),
+            "alc_main_pipe": sum(r.get("alc_main_pipe", 0) for r in started_rows),
+            "alc_service_pipe": sum(r.get("alc_service_pipe", 0) for r in started_rows),
+        }
+
+        # เลขจุดวัดผลทั้งหมดที่ปรากฏ ใช้เป็นหัวคอลัมน์ของเมทริกซ์
+        all_ms = sorted({m["month_no"] for r in started_rows
+                         for m in r.get("milestones", [])})
+
+        for s_row in series:
+            s_row["label"] = SVC.month_label_th(s_row["month"])
+
+        return jsonify({
+            "ok": True,
+            "data": {
+                "summary": summary,
+                "contracts": rows,
+                "series": series,
+                "milestone_columns": all_ms,
+                "procurement_steps": CFG.PROCUREMENT_STEPS,
+            },
+        })
+
+    @bp.route("/api/diagnose")
+    @guard
+    def api_diagnose():
+        """
+        ตรวจว่าทำไมสัญญาหนึ่งไม่มีข้อมูลแสดง ทั้งที่กรอก MonthlyRaw แล้ว
+        ไล่ทีละชั้นตามลำดับที่ระบบใช้จริง แล้วบอกว่าขาดตรงไหน
+        """
+        contract, _ = _resolve_contract(request.args.get("contract_id"))
+        if not contract:
+            return jsonify({"ok": False, "error": "ไม่พบสัญญา"}), 404
+        cid = contract["contract_id"]
+
+        raw_all = SVC.read_tab(CFG.TAB_MONTHLY_RAW)
+        ids_in_raw = sorted({(r.get("contract_id") or "").strip()
+                             for r in raw_all if r.get("contract_id")})
+        mine = [r for r in raw_all
+                if (r.get("contract_id") or "").strip() == cid]
+
+        dma_rows = SVC.get_contract_dmas(cid)
+        dma_set = {d["dma_code"] for d in dma_rows}
+        raw_codes = sorted({(r.get("dma_code") or "").strip() for r in mine})
+        raw_months = sorted({(r.get("month") or "").strip() for r in mine})
+
+        bad_month = [m for m in raw_months if SVC.normalize_month(m) is None]
+        converted = [m for m in raw_months
+                     if SVC.normalize_month(m) is not None and len(m) != 7]
+        matched = [c for c in raw_codes if c in dma_set]
+        only_raw = [c for c in raw_codes if c not in dma_set]
+        only_contract = sorted(dma_set - set(raw_codes))
+
+        monthly = SVC.get_monthly_effective(cid)
+        usable = {m for (m, code) in monthly if code in dma_set}
+        rolling = SVC.rolling_series(monthly, contract["start_month"], dma_set)
+
+        problems = []
+        if not mine:
+            problems.append(
+                "ไม่มีแถวใน MonthlyRaw ที่ contract_id ตรงกับ %r เลย "
+                "— รหัสที่พบในตารางคือ %s" % (cid, ids_in_raw))
+        if bad_month:
+            problems.append(
+                "อ่านเดือนไม่ได้ %d ค่า เช่น %s — แถวเหล่านี้ถูกข้ามทั้งหมด "
+                "ต้องแก้ให้เป็น YYYY-MM"
+                % (len(bad_month), bad_month[:5]))
+        if converted:
+            problems.append(
+                "Google Sheets แปลงเดือนเป็นวันที่ %d ค่า เช่น %s "
+                "— ระบบตัดเฉพาะปี-เดือนมาใช้ให้แล้ว ข้อมูลยังถูกต้อง "
+                "แต่ควรตั้งรูปแบบคอลัมน์เป็นข้อความก่อนวางครั้งต่อไป"
+                % (len(converted), converted[:3]))
+        if mine and not matched:
+            problems.append(
+                "รหัสพื้นที่ใน MonthlyRaw ไม่ตรงกับใน ContractDMA เลยสักตัว "
+                "— ใน MonthlyRaw เช่น %s แต่ใน ContractDMA เช่น %s"
+                % (raw_codes[:3], sorted(dma_set)[:3]))
+        if matched and not usable:
+            problems.append("จับคู่รหัสได้แต่ยังไม่มีเดือนใดใช้งานได้")
+        if usable and not rolling:
+            problems.append(
+                "มีข้อมูล %d เดือน แต่ยังไม่มีเดือนใดที่ครบ 3 เดือนติดกัน "
+                "— รอบวัดผลต้องใช้เดือนนั้นและ 2 เดือนก่อนหน้า "
+                "เดือนที่มี: %s" % (len(usable), sorted(usable)))
+        if not contract["start_month"]:
+            problems.append("ยังไม่ได้กรอก start_month ในตาราง Contracts")
+        if contract["baseline_rate_x"] is None:
+            problems.append("ยังไม่ได้กรอก baseline_rate_x ในตาราง Contracts")
+
+        return jsonify({"ok": True, "data": {
+            "contract_id": cid,
+            "start_month": contract["start_month"],
+            "baseline_rate_x": contract["baseline_rate_x"],
+            "n_rows_monthlyraw_total": len(raw_all),
+            "n_rows_this_contract": len(mine),
+            "contract_ids_found_in_raw": ids_in_raw,
+            "n_dma_in_contractdma": len(dma_set),
+            "n_dma_codes_in_raw": len(raw_codes),
+            "n_codes_matched": len(matched),
+            "codes_only_in_raw": only_raw[:20],
+            "codes_only_in_contractdma": only_contract[:20],
+            "months_in_raw": raw_months,
+            "months_bad_format": bad_month[:20],
+            "months_converted_by_sheets": converted[:20],
+            "n_usable_months": len(usable),
+            "n_rolling_points": len(rolling),
+            "problems": problems or ["ไม่พบปัญหา ข้อมูลควรแสดงผลได้ปกติ"],
+            "sample_rows": mine[:3],
+        }})
 
     @bp.route("/api/dma/<dma_code>")
     @guard
