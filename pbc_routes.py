@@ -150,10 +150,13 @@ def create_pbc_blueprint(login_required=None, current_user_fn=None,
             }
             rows.append(row)
 
-        # เป้าย่อยราย DMA ณ จุดวัดผลถัดไป
+        # เป้าย่อยราย DMA อ้างอิงเป้าสุดท้ายของสัญญา ไม่ใช่จุดวัดผลถัดไป
+        # เพราะการวางแผนลดน้ำสูญเสียต้องมองปลายทางทั้งสัญญา
+        # ถ้าวางแผนทีละจุดวัดผล จะได้เป้าที่หลวมและต้องเร่งงานหนักช่วงท้าย
+        final_target = targets[-1] if targets else None
         breakdown = {"rows": [], "summary": None, "measure_month_no": None}
-        if next_target and latest:
-            saved = SVC.get_dma_targets(cid, next_target["month_no"])
+        if final_target and latest:
+            saved = SVC.get_dma_targets(cid, final_target["month_no"])
             manual = {
                 code: t["target_loss_m3"]
                 for code, t in saved.items() if t["is_manual"]
@@ -173,7 +176,7 @@ def create_pbc_blueprint(login_required=None, current_user_fn=None,
                 })
             sales_month = sum(b["sales_m3"] for b in basis)
             allocated, summary = FC.build_dma_targets(
-                basis, sales_month, next_target["target_rate"] / 100.0,
+                basis, sales_month, final_target["target_rate"] / 100.0,
                 hours, CFG.DAYS_PER_MONTH, manual=manual,
             )
             for a in allocated:
@@ -190,8 +193,10 @@ def create_pbc_blueprint(login_required=None, current_user_fn=None,
                 "summary": {k: (round(v, 0) if isinstance(v, float) and k.endswith("m3")
                                 else v)
                             for k, v in summary.items()},
-                "measure_month_no": next_target["month_no"],
-                "measure_month": SVC.month_from_no(start, next_target["month_no"]),
+                "measure_month_no": final_target["month_no"],
+                "measure_month": SVC.month_from_no(start, final_target["month_no"]),
+                "target_rate": final_target["target_rate"],
+                "is_final": True,
                 "hours_per_day": hours,
                 "days": CFG.DAYS_PER_MONTH,
             }

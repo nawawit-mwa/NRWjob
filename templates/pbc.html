@@ -232,29 +232,37 @@
     <div class="tabpane" id="paneTargets">
       <div class="hint" id="targetHint"></div>
       <div class="msg info show" id="targetSummary"></div>
-      <div class="formrow" style="margin-bottom:12px">
+      <div class="formrow">
         <label style="min-width:auto">ปริมาณน้ำสูญเสียรวมที่ต้องการลด</label>
         <input type="number" id="totalReduction" min="0" step="1"
-               style="max-width:150px;flex:0 0 auto">
+               style="max-width:140px;flex:0 0 auto">
         <span class="dim">ลบ.ม./เดือน</span>
+        <span class="dim">=</span>
+        <input type="number" id="totalReductionNf" min="0" step="0.1"
+               style="max-width:110px;flex:0 0 auto">
+        <span class="dim">ลบ.ม./ชม. (NF รวม)</span>
+      </div>
+      <div class="formrow" style="margin-bottom:12px">
         <button id="btnUseTarget">ใช้ค่าตามเป้าสัญญา</button>
+        <button id="btnSumRows">ใช้ผลรวมจากที่กรอกในตาราง</button>
         <button id="btnRecalc">คำนวณเกลี่ยใหม่</button>
         <button id="btnResetTargets">ล้างค่าที่แก้เอง</button>
         <button class="primary" id="btnSaveTargets">บันทึกเป้าหมาย</button>
       </div>
       <div class="hint" id="targetUnitHint">
-        ทุกช่องปริมาณเป็น ลบ.ม. ต่อเดือน
+        กรอกช่องไหนก็ได้ อีกช่องจะคำนวณตามให้ทันที
+        (ปริมาณต่อเดือน = NF × ชั่วโมงต่อวัน × จำนวนวัน)
       </div>
       <div class="msg" id="targetMsg"></div>
       <div class="tablewrap">
         <table id="targetTable">
           <thead><tr>
             <th>DMA</th>
-            <th>ปริมาณน้ำสูญเสียปัจจุบัน</th>
-            <th>เป้าปริมาณน้ำสูญเสีย</th>
-            <th>ต้องลด<br>(แก้ได้)</th>
-            <th>คิดเป็น NF<br>(ลบ.ม./ชม.)</th>
-            <th>MNF ปัจจุบัน</th>
+            <th>L.Vol ปัจจุบัน</th>
+            <th>MNF จาก L.Vol</th>
+            <th>MNF ปัจจุบัน<br>(ลบ.ม./ชม.)</th>
+            <th>เป้า NF ที่ต้องการลด<br>(ลบ.ม./ชม.)</th>
+            <th>MNF เป้าหมาย<br>(ลบ.ม./ชม.)</th>
           </tr></thead>
           <tbody></tbody>
         </table>
@@ -603,13 +611,6 @@ function renderCards(){
             (monthsLeft===0 ? " · ถึงกำหนดแล้ว" : ""))});
   }
 
-  var bd = DATA.breakdown;
-  if(bd && bd.summary){
-    var need = bd.summary.total_reduction_m3 || 0;
-    cards.push({label:"ต้องลดน้ำสูญเสียอีก", cls: need>0?"bad":"good",
-      value: num(need,0), note:"ลบ.ม./เดือน เพื่อถึงเป้าจุดถัดไป"});
-  }
-
   if(out){
     // ถ้าช่วงความเชื่อมั่นกว้างจนคร่อมเส้นเป้า จะสรุปว่าผ่านหรือไม่ผ่านไม่ได้
     // ต้องแสดงเป็นกลาง ไม่ใช่เขียว/แดง ซึ่งจะทำให้เข้าใจผิดว่ามั่นใจแล้ว
@@ -870,14 +871,28 @@ function renderTargets(){
   }
   TARGET_ROWS = bd.rows.slice();
   if(!$("totalReduction").value && bd.summary){
-    $("totalReduction").value = Math.round(bd.summary.total_reduction_m3 || 0);
+    setTotalReduction(bd.summary.total_reduction_m3 || 0);
   }
   $("targetHint").innerHTML =
-    "กระจายเป้าตามศักยภาพที่แต่ละพื้นที่ลดได้จริง " +
+    "อ้างอิงเป้าสุดท้ายของสัญญา เดือนที่ " + bd.measure_month_no +
+    " (" + num(bd.target_rate, 3) + "%) · " +
+    "กระจายเป้าตามศักยภาพที่แต่ละ DMA ลดได้จริง " +
     "(ศักยภาพ = MNF ปัจจุบัน − พื้นค่า MNF × " + bd.hours_per_day + " ชม. × " +
     bd.days + " วัน) DMA ที่ไม่มีข้อมูลใช้สัดส่วนน้ำสูญเสียแทน · " +
-    "แก้ช่อง \"ต้องลด\" ได้ ระบบจะเกลี่ยส่วนที่เหลือให้ DMA อื่นอัตโนมัติ";
+    "แก้ช่อง \"เป้า NF ที่ต้องการลด\" ได้ ระบบจะเกลี่ยส่วนที่เหลือให้ DMA อื่นอัตโนมัติ";
   drawTargetRows();
+}
+
+function setTotalReduction(volume){
+  var v = Math.max(volume || 0, 0);
+  $("totalReduction").value = Math.round(v);
+  $("totalReductionNf").value = (v / denomOf()).toFixed(1);
+}
+
+function denomOf(){
+  var bd = DATA && DATA.breakdown;
+  if(!bd) return 24 * 30;
+  return (bd.hours_per_day || 24) * (bd.days || 30);
 }
 
 function drawTargetRows(){
@@ -885,33 +900,42 @@ function drawTargetRows(){
   var tb = $("targetTable").querySelector("tbody");
   var denom = (bd.hours_per_day || 24) * (bd.days || 30);
   tb.innerHTML = TARGET_ROWS.map(function(r){
-    // แปลงปริมาณที่ต้องลดต่อเดือน กลับเป็นอัตราการไหลที่ต้องลดลง
-    var nf = denom ? r.reduction_m3 / denom : null;
+    // ปริมาณน้ำสูญเสียต่อเดือน คิดกลับเป็นอัตราการไหลเฉลี่ยที่ไหลทิ้งตลอดเวลา
+    var mnfFromVol = denom ? r.loss_m3 / denom : null;
+    // อัตราการไหลที่ต้องกดลง = ปริมาณที่ต้องลด หารด้วยชั่วโมงรวมของเดือน
+    var nfCut = denom ? r.reduction_m3 / denom : null;
+    // MNF เป้าหมายมีความหมายเฉพาะ DMA ที่มีข้อมูล MNF จริง
+    var mnfTarget = (r.mnf_current == null || nfCut == null)
+      ? null : Math.max(r.mnf_current - nfCut, 0);
     return '<tr>' +
       '<td>' + esc(r.dma_code) +
         (r.is_manual ? ' <span class="pbc-badge ovr">แก้เอง</span>' : '') + '</td>' +
       '<td>' + num(r.loss_m3) + '</td>' +
-      '<td class="num-good">' + num(r.target_loss_m3) + '</td>' +
-      '<td><input class="editnum" type="number" min="0" step="1" ' +
+      '<td class="dim">' + num(mnfFromVol,1) + '</td>' +
+      '<td>' + num(r.mnf_current,1) + '</td>' +
+      '<td><input class="editnum" type="number" min="0" step="0.1" ' +
         'data-dma="' + esc(r.dma_code) + '" ' +
         'data-loss="' + (r.loss_m3 == null ? 0 : r.loss_m3) + '" value="' +
-        (r.reduction_m3==null ? "" : Math.round(r.reduction_m3)) + '"></td>' +
-      '<td class="num-warn">' + num(nf,1) + '</td>' +
-      '<td>' + num(r.mnf_current,1) + '</td></tr>';
+        (nfCut==null ? "" : nfCut.toFixed(1)) + '"></td>' +
+      '<td class="num-good">' + num(mnfTarget,1) + '</td></tr>';
   }).join("");
 
   Array.prototype.forEach.call(tb.querySelectorAll("input"), function(inp){
     inp.addEventListener("change", function(){
       var code = inp.getAttribute("data-dma");
       var loss = parseFloat(inp.getAttribute("data-loss")) || 0;
-      var v = parseFloat(inp.value);
-      if(isNaN(v) || v < 0){
+      var nf = parseFloat(inp.value);
+      if(isNaN(nf) || nf < 0){
         delete MANUAL[code];
       } else {
+        // ค่าที่กรอกเป็นอัตราการไหล แปลงเป็นปริมาณต่อเดือนก่อนส่งหลังบ้าน
+        var cut = nf * denomOf();
         // ลดได้มากสุดเท่าที่มีน้ำสูญเสียอยู่จริง
-        if(v > loss){ v = loss; inp.value = Math.round(loss); }
-        // ระบบหลังบ้านรับเป็นเป้าปริมาณน้ำสูญเสีย จึงแปลงจากค่าที่กรอก
-        MANUAL[code] = loss - v;
+        if(cut > loss){
+          cut = loss;
+          inp.value = (loss / denomOf()).toFixed(1);
+        }
+        MANUAL[code] = loss - cut;
       }
       recalcTargets();
     });
@@ -920,8 +944,11 @@ function drawTargetRows(){
   var s = bd.summary || {};
   var unalloc = s.unallocated_m3 || 0;
   var target = DATA.next_target ? DATA.next_target.target_rate : null;
-  var text = "ต้องลดรวม " + num(s.total_reduction_m3) + " · " +
-    "เป้าปริมาณน้ำสูญเสียรวมของแผนนี้ " + num(s.sum_target_loss_m3);
+  var alloc = s.allocated_reduction_m3 || 0;
+  var text = "ต้องลดรวม " + num(s.total_reduction_m3) + " ลบ.ม./เดือน" +
+    " (" + num(s.total_reduction_m3 / denomOf(), 1) + " ลบ.ม./ชม.)" +
+    " · กระจายแล้ว " + num(alloc) + " ลบ.ม./เดือน" +
+    " (" + num(alloc / denomOf(), 1) + " ลบ.ม./ชม.)";
   if(s.resulting_rate != null){
     text += " · อัตราที่จะได้ " + num(s.resulting_rate,2) + "%" +
       (target != null ? " (เป้า " + num(target,2) + "%)" : "");
@@ -1194,20 +1221,37 @@ function bindEvents(){
   });
 
   $("btnReload").addEventListener("click", load);
+  // สองช่องบนแถบควบคุมเป็นค่าเดียวกันคนละหน่วย แก้ช่องไหนอีกช่องตามทันที
+  $("totalReduction").addEventListener("input", function(){
+    var v = parseFloat($("totalReduction").value);
+    $("totalReductionNf").value =
+      isNaN(v) ? "" : (v / denomOf()).toFixed(1);
+  });
+  $("totalReductionNf").addEventListener("input", function(){
+    var v = parseFloat($("totalReductionNf").value);
+    $("totalReduction").value =
+      isNaN(v) ? "" : Math.round(v * denomOf());
+  });
+  $("btnSumRows").addEventListener("click", function(){
+    // รวมค่าที่กรอกในตารางขึ้นมาเป็นเป้ารวม
+    var sum = 0;
+    TARGET_ROWS.forEach(function(r){ sum += (r.reduction_m3 || 0); });
+    setTotalReduction(sum);
+    recalcTargets();
+  });
   $("btnRecalc").addEventListener("click", recalcTargets);
   $("btnUseTarget").addEventListener("click", function(){
     // กลับไปใช้ปริมาณที่คำนวณจากเป้าตามสัญญา
     var bd = DATA && DATA.breakdown;
     if(bd && bd.summary){
-      $("totalReduction").value = Math.round(bd.summary.total_reduction_m3 || 0);
+      setTotalReduction(bd.summary.total_reduction_m3 || 0);
       recalcTargets();
     }
   });
   $("btnResetTargets").addEventListener("click", function(){
     MANUAL = {};
     if(DATA && DATA.breakdown && DATA.breakdown.summary){
-      $("totalReduction").value =
-        Math.round(DATA.breakdown.summary.total_reduction_m3 || 0);
+      setTotalReduction(DATA.breakdown.summary.total_reduction_m3 || 0);
     }
     recalcTargets();
   });
