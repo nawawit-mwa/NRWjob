@@ -25,10 +25,12 @@ from datetime import datetime
 
 import pbc_config as CFG
 
+# import แบบยอมให้ล้มเหลวได้ — ถ้าเซิร์ฟเวอร์ไม่มีไลบรารีเหล่านี้
+# จะเสียแค่ฟีเจอร์ PBC ไม่ทำให้ทั้งแอปล้มตอน import
 try:
     import gspread
     from google.oauth2.service_account import Credentials
-except ImportError:  # ให้ import ไฟล์นี้ได้แม้ยังไม่ได้ติดตั้ง gspread
+except ImportError:
     gspread = None
     Credentials = None
 
@@ -445,6 +447,8 @@ def monthly_series(monthly, start_month, dma_codes=None):
             "sales_m3": round(agg["sales_m3"], 2),
             "loss_m3": round(agg["loss_m3"], 2),
             "loss_rate": round(agg["loss_rate"], 2),
+            # จำนวน DMA ที่มีข้อมูลจริงในเดือนนั้น ใช้ตรวจว่าข้อมูลครบหรือไม่
+            "n_dma": agg["n_records"],
         })
     out.sort(key=lambda x: x["month_no"])
     return out

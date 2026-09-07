@@ -194,8 +194,34 @@ def create_pbc_blueprint(login_required=None, current_user_fn=None,
                 "days": CFG.DAYS_PER_MONTH,
             }
 
+        # ตรวจคุณภาพชุดข้อมูลรายเดือน — สองอย่างที่ทำให้พยากรณ์เพี้ยนบ่อยที่สุด
+        # 1) เดือนที่ DMA มาไม่ครบ ทำให้ยอดรวมกระโดดโดยที่ % ยังดูปกติ
+        # 2) เดือนที่อัตราแกว่งแรงผิดปกติเมื่อเทียบกับเดือนก่อนหน้า
+        data_issues = []
+        n_expected = len(dmas)
+        for row in per_month:
+            if n_expected and row.get("n_dma", 0) < n_expected:
+                data_issues.append({
+                    "month": row["month"], "label": row["label"],
+                    "type": "missing_dma",
+                    "detail": "มีข้อมูล %d จาก %d พื้นที่"
+                              % (row.get("n_dma", 0), n_expected),
+                })
+        for prev, cur in zip(per_month, per_month[1:]):
+            if prev["loss_rate"] is None or cur["loss_rate"] is None:
+                continue
+            swing = abs(cur["loss_rate"] - prev["loss_rate"])
+            if swing >= 5.0:
+                data_issues.append({
+                    "month": cur["month"], "label": cur["label"],
+                    "type": "swing",
+                    "detail": "อัตราเปลี่ยนจากเดือนก่อน %.1f จุด (%.2f%% -> %.2f%%)"
+                              % (swing, prev["loss_rate"], cur["loss_rate"]),
+                })
+
         months_available = SVC.available_months(monthly)
         return {
+            "data_issues": data_issues,
             "contract": contract,
             "targets": targets,
             "rolling": rolling,

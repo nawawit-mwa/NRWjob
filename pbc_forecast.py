@@ -288,6 +288,16 @@ def forecast_rate(series, horizon_months, confidence_k=1.96,
         }
 
     slope, intercept, sd = _weighted_linreg(clean)
+
+    # หน่วงความชันช่วงข้อมูลน้อย
+    # ข้อมูล 3-5 จุดที่แกว่งแรงให้ความชันที่สูงเกินจริงมาก
+    # (เคยได้ -2.74 จุด/เดือน ทั้งที่สัญญาทั้งฉบับกำหนดลดรวม 6.90 จุดใน 25 เดือน
+    #  = 0.28 จุด/เดือน) หน่วงเข้าหาศูนย์จนกว่าจะมีข้อมูลพอ
+    shrink = min(1.0, max(n - 2, 0) / 4.0)
+    slope_raw = slope
+    slope = slope * shrink
+    intercept = clean[-1][1] - slope * clean[-1][0]  # ยึดจุดล่าสุดเป็นหลัก
+
     if n < 6:
         level = "low"
         message = "ความเชื่อมั่นต่ำ — มีข้อมูลเพียง %d รอบ ค่าพยากรณ์อาจเปลี่ยนได้มาก" % n
@@ -335,6 +345,8 @@ def forecast_rate(series, horizon_months, confidence_k=1.96,
         "message": message,
         "points": points,
         "slope_per_month": round(slope, 3),
+        "slope_raw_per_month": round(slope_raw, 3),
+        "shrink_factor": round(shrink, 2),
         "max_month_no": max_month,
     }
 

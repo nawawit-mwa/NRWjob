@@ -163,6 +163,8 @@
 
   <div class="cards" id="cards"></div>
 
+  <div class="msg" id="dataIssueMsg"></div>
+
   <div class="pbc-panel">
     <h2>เส้นทางสู่เป้าหมายตามสัญญา</h2>
     <div class="chart-box"><canvas id="trajectoryChart"></canvas></div>
@@ -389,11 +391,32 @@ function render(){
   $("contractSub").textContent =
     c.contract_no + " · " + c.branch_name + " · เริ่ม " + c.start_month +
     " · " + DATA.n_dma + " พื้นที่เฝ้าระวัง";
+  renderDataIssues();
   renderCards();
   renderTrajectory();
   renderDmaTable();
   renderBarChart();
   renderTargets();
+}
+
+function renderDataIssues(){
+  var box = $("dataIssueMsg");
+  var issues = DATA.data_issues || [];
+  if(!issues.length){ hideMsg(box); return; }
+  var missing = issues.filter(function(i){ return i.type === "missing_dma"; });
+  var swings  = issues.filter(function(i){ return i.type === "swing"; });
+  var html = "<b>ตรวจพบข้อมูลรายเดือนที่ควรตรวจสอบ</b> " +
+             "— มีผลโดยตรงกับอัตราน้ำสูญเสียและค่าคาดการณ์<ul>";
+  missing.forEach(function(i){
+    html += "<li>" + esc(i.label) + ": " + esc(i.detail) +
+            " — ยอดรวมเดือนนี้ต่ำกว่าความจริง</li>";
+  });
+  swings.forEach(function(i){
+    html += "<li>" + esc(i.label) + ": " + esc(i.detail) +
+            " — ตรวจว่ารอบอ่านน้ำของเดือนนี้ตรงกับเดือนอื่นหรือไม่</li>";
+  });
+  html += "</ul>";
+  showMsg(box, html, "err");
 }
 
 function renderCards(){
@@ -513,8 +536,12 @@ function renderTrajectory(){
       ds.push({label:"_lo", data: at(fc,"lo"), borderColor:"transparent",
         pointRadius:0, fill:false, spanGaps:true});
     }
-    ds.push({label:"คาดการณ์", data: fcLine, borderColor:C.teal,
-      borderDash:[5,4], borderWidth:2, pointRadius:0, spanGaps:true, fill:false});
+    // วาดเส้นพยากรณ์เฉพาะตอนที่สรุปได้
+    // เส้นที่มาจากข้อมูลไม่กี่จุดจะดูเป็นทางการทั้งที่เชื่อถือไม่ได้
+    if(showBand){
+      ds.push({label:"คาดการณ์", data: fcLine, borderColor:C.teal,
+        borderDash:[5,4], borderWidth:2, pointRadius:0, spanGaps:true, fill:false});
+    }
   }
   ds.push({label:"อัตราจริง (รอบ 3 เดือน)", data: at(rolling,"loss_rate"),
     borderColor:C.teal, borderWidth:2.6, pointRadius:4,
