@@ -165,10 +165,6 @@
 
   <div class="pbc-panel">
     <h2>เส้นทางสู่เป้าหมายตามสัญญา</h2>
-    <div class="hint" id="trajectoryHint">
-      จุดใหญ่คือเดือนวัดผลตามสัญญา ส่วนเส้นบางคือเป้าระหว่างทางที่ลากเชิงเส้น
-      ใช้ดูว่าตามแผนอยู่หรือไม่ ไม่ผูกพันตามสัญญา
-    </div>
     <div class="chart-box"><canvas id="trajectoryChart"></canvas></div>
   </div>
 
@@ -340,6 +336,20 @@ function showMsg(el, text, kind){
   el.innerHTML = text;
 }
 function hideMsg(el){ el.className = "msg"; }
+
+var TH_MONTHS = ["","ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.",
+                 "ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."];
+
+// แปลง "เดือนที่ N ของสัญญา" เป็นชื่อเดือนจริง เช่น เดือนที่ 8 -> "ม.ค. 70"
+// เดือนเริ่มสัญญานับเป็นเดือนที่ 1 (นิยามสัญญาข้อ 1.20)
+function monthLabelForNo(n){
+  var start = DATA && DATA.contract ? DATA.contract.start_month : "";
+  var parts = String(start || "").split("-");
+  if(parts.length !== 2) return "";
+  var idx = (parseInt(parts[0],10) * 12 + parseInt(parts[1],10) - 1) + (n - 1);
+  var year = Math.floor(idx / 12), mon = idx % 12 + 1;
+  return TH_MONTHS[mon] + " " + String((year + 543) % 100);
+}
 
 function intervalLabel(i){
   var h = Math.floor(i/4), m = (i%4)*15;
@@ -538,7 +548,10 @@ function renderTrajectory(){
   if(CHARTS.traj) CHARTS.traj.destroy();
   CHARTS.traj = new Chart($("trajectoryChart"), {
     type:"line",
-    data:{ labels: labels.map(function(n){ return "เดือนที่ " + n; }), datasets: ds },
+    data:{ labels: labels.map(function(n){
+             // สองบรรทัด: ชื่อเดือนจริงไว้บน เลขเดือนของสัญญาไว้ล่าง
+             return [monthLabelForNo(n), "เดือนที่ " + n];
+           }), datasets: ds },
     options:{
       responsive:true, maintainAspectRatio:false,
       interaction:{ mode:"index", intersect:false },
@@ -546,12 +559,18 @@ function renderTrajectory(){
         legend:{ labels:{ color:C.muted, boxWidth:14,
           filter:function(item){ return item.text.charAt(0) !== "_"; } } },
         tooltip:{ filter:function(item){ return item.dataset.label.charAt(0) !== "_"; },
-          callbacks:{ label:function(ctx){
-            if(ctx.parsed.y===null) return null;
-            return ctx.dataset.label + ": " + ctx.parsed.y.toFixed(2) + "%"; } } }
+          callbacks:{
+            title:function(items){
+              var n = labels[items[0].dataIndex];
+              return monthLabelForNo(n) + " (เดือนที่ " + n + ")";
+            },
+            label:function(ctx){
+              if(ctx.parsed.y===null) return null;
+              return ctx.dataset.label + ": " + ctx.parsed.y.toFixed(2) + "%"; } } }
       },
       scales:{
-        x:{ ticks:{ color:C.muted, maxRotation:0, autoSkipPadding:18 },
+        x:{ ticks:{ color:C.muted, maxRotation:0, autoSkipPadding:14,
+                    font:{size:10} },
             grid:{ color:C.line } },
         y:{ min:yRange.min, max:yRange.max, ticks:{ color:C.muted, stepSize:yRange.step,
               callback:function(v){ return v + "%"; } },
@@ -561,11 +580,6 @@ function renderTrajectory(){
     }
   });
 
-  var fcInfo = DATA.forecast ? DATA.forecast.message : "";
-  $("trajectoryHint").innerHTML =
-    "จุดใหญ่คือเดือนวัดผลตามสัญญา (เดือนที่ 8, 14, 20, 23, 26) " +
-    "เส้นบางคือเป้าระหว่างทางที่ลากเชิงเส้น ใช้ดูว่าตามแผนอยู่หรือไม่ ไม่ผูกพันตามสัญญา" +
-    (fcInfo ? " · " + esc(fcInfo) : "");
 }
 
 function renderDmaTable(){
