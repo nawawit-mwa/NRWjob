@@ -251,8 +251,8 @@
           <thead><tr>
             <th>DMA</th>
             <th>ปริมาณน้ำสูญเสียปัจจุบัน</th>
-            <th>เป้าปริมาณน้ำสูญเสีย<br>(แก้ได้)</th>
-            <th>ต้องลด</th>
+            <th>เป้าปริมาณน้ำสูญเสีย</th>
+            <th>ต้องลด<br>(แก้ได้)</th>
             <th>คิดเป็น NF<br>(ลบ.ม./ชม.)</th>
             <th>MNF ปัจจุบัน</th>
           </tr></thead>
@@ -532,7 +532,7 @@ function renderMilestones(){
       "<td>" + num(m.target_rate, 3) + "</td>" +
       "<td>" + (m.actual_rate == null ? '<span class="dim">-</span>'
                 : num(m.actual_rate, 3)) + "</td>" +
-      '<td style="text-align:left">' + esc(status) + "</td></tr>";
+      '<td style="text-align:center">' + esc(status) + "</td></tr>";
   }).join("");
 }
 
@@ -807,7 +807,7 @@ function renderDmaTable(){
       '<td>' + num(r.mnf_current,1) + '</td>' +
       '<td class="dim">' + num(r.mnf_floor,1) + '</td>' +
       '<td>' + num(r.avg_pressure_night,2) + '</td>' +
-      '<td style="text-align:left">' + tags + '</td></tr>';
+      '<td style="text-align:center">' + tags + '</td></tr>';
   }).join("");
 
   Array.prototype.forEach.call(tb.querySelectorAll("tr"), function(tr){
@@ -876,7 +876,7 @@ function renderTargets(){
     "กระจายเป้าตามศักยภาพที่แต่ละพื้นที่ลดได้จริง " +
     "(ศักยภาพ = MNF ปัจจุบัน − พื้นค่า MNF × " + bd.hours_per_day + " ชม. × " +
     bd.days + " วัน) DMA ที่ไม่มีข้อมูลใช้สัดส่วนน้ำสูญเสียแทน · " +
-    "แก้ช่อง \"เป้าปริมาณน้ำสูญเสีย\" ได้ ระบบจะเกลี่ยส่วนที่เหลือให้ DMA อื่นอัตโนมัติ";
+    "แก้ช่อง \"ต้องลด\" ได้ ระบบจะเกลี่ยส่วนที่เหลือให้ DMA อื่นอัตโนมัติ";
   drawTargetRows();
 }
 
@@ -891,19 +891,28 @@ function drawTargetRows(){
       '<td>' + esc(r.dma_code) +
         (r.is_manual ? ' <span class="pbc-badge ovr">แก้เอง</span>' : '') + '</td>' +
       '<td>' + num(r.loss_m3) + '</td>' +
+      '<td class="num-good">' + num(r.target_loss_m3) + '</td>' +
       '<td><input class="editnum" type="number" min="0" step="1" ' +
-        'data-dma="' + esc(r.dma_code) + '" value="' +
-        (r.target_loss_m3==null ? "" : Math.round(r.target_loss_m3)) + '"></td>' +
-      '<td class="num-warn">' + num(r.reduction_m3) + '</td>' +
+        'data-dma="' + esc(r.dma_code) + '" ' +
+        'data-loss="' + (r.loss_m3 == null ? 0 : r.loss_m3) + '" value="' +
+        (r.reduction_m3==null ? "" : Math.round(r.reduction_m3)) + '"></td>' +
       '<td class="num-warn">' + num(nf,1) + '</td>' +
       '<td>' + num(r.mnf_current,1) + '</td></tr>';
   }).join("");
 
   Array.prototype.forEach.call(tb.querySelectorAll("input"), function(inp){
     inp.addEventListener("change", function(){
+      var code = inp.getAttribute("data-dma");
+      var loss = parseFloat(inp.getAttribute("data-loss")) || 0;
       var v = parseFloat(inp.value);
-      if(isNaN(v) || v < 0){ delete MANUAL[inp.getAttribute("data-dma")]; }
-      else { MANUAL[inp.getAttribute("data-dma")] = v; }
+      if(isNaN(v) || v < 0){
+        delete MANUAL[code];
+      } else {
+        // ลดได้มากสุดเท่าที่มีน้ำสูญเสียอยู่จริง
+        if(v > loss){ v = loss; inp.value = Math.round(loss); }
+        // ระบบหลังบ้านรับเป็นเป้าปริมาณน้ำสูญเสีย จึงแปลงจากค่าที่กรอก
+        MANUAL[code] = loss - v;
+      }
       recalcTargets();
     });
   });
