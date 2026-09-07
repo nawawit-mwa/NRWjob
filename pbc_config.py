@@ -40,6 +40,14 @@ CSV_DMA_CURRENT = "pbc_dma_current.csv"        # MNF ล่าสุด/พื�
 CSV_DMA_MNF_DAILY = "pbc_dma_mnf_daily.csv"    # MNF รายวันย้อนหลัง
 CSV_HOURLY_ENVELOPE = "pbc_hourly_envelope.csv"  # แถบ min-max 96 ช่วง/วัน
 
+# ---------------------------------------------------------------- สวิตช์ฟีเจอร์
+
+# เปิด/ปิดการอัปโหลดรายงาน WB220
+# ปิดไว้เมื่อกรอกปริมาณน้ำเข้า/น้ำขายเองทั้งหมดผ่านตาราง MonthlyRaw ใน Sheet
+# ปิดแล้วแท็บอัปโหลดจะไม่แสดง และ endpoint จะปฏิเสธคำขอ
+# (ข้อมูลที่เคยอัปโหลดไว้ยังใช้งานได้ตามปกติ ไม่ถูกลบ)
+ENABLE_WB220_UPLOAD = os.environ.get("PBC_ENABLE_WB220", "0") == "1"
+
 # ---------------------------------------------------------------- ค่าคงที่เชิงธุรกิจ
 
 # จำนวนเดือนที่ใช้รวมเป็นหนึ่งรอบวัดผล (นิยามสัญญาข้อ 1.26–1.29)
@@ -86,6 +94,7 @@ TAB_MONTHLY_OVERRIDE = "MonthlyOverride"
 TAB_DMA_TARGETS = "DMATargets"
 TAB_REMARKS = "Remarks"
 TAB_UPLOAD_LOG = "UploadLog"
+TAB_MONTHLY_WORK = "MonthlyWork"
 
 # โครงคอลัมน์ของแต่ละ tab — ใช้ทั้งตอนสร้าง Sheet และตอนอ่าน/เขียน
 SHEET_SCHEMAS = {
@@ -93,6 +102,8 @@ SHEET_SCHEMAS = {
         "contract_id", "contract_no", "area_name", "branch_code", "branch_name",
         "start_month", "duration_days", "baseline_rate_x", "mnf_hours_per_day",
         "status", "note",
+        # เพิ่มภายหลังเพื่อรองรับรูปแบบรายงานนำเสนอผลงาน
+        "contractor_name", "start_date", "end_date", "baseline_pressure_m",
     ],
     TAB_TARGETS: [
         "contract_id", "measure_month_no", "target_rate", "note",
@@ -125,6 +136,11 @@ SHEET_SCHEMAS = {
         "upload_id", "contract_id", "month", "filename", "n_rows",
         "uploaded_by", "uploaded_at", "status", "message",
     ],
+    # ผลงานภาคสนามรายเดือน กรอกเอง ไม่มีในรายงาน WB220
+    TAB_MONTHLY_WORK: [
+        "contract_id", "month", "alc_main_pipe", "alc_service_pipe",
+        "note", "updated_by", "updated_at",
+    ],
 }
 
 # คอลัมน์ที่ต้องบังคับเป็น text ใน Sheet (กันเลขศูนย์นำหน้าหาย/วันที่เพี้ยน)
@@ -132,4 +148,5 @@ TEXT_COLUMNS = {
     "contract_id", "dma_code", "rtu_id", "month", "start_month",
     "effective_from", "effective_to", "event_date", "uploaded_at",
     "updated_at", "recorded_at", "upload_id", "branch_code",
+    "start_date", "end_date",
 }

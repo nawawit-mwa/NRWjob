@@ -220,6 +220,10 @@ def list_contracts(branch_codes=None):
             ),
             "status": r.get("status", ""),
             "note": r.get("note", ""),
+            "contractor_name": r.get("contractor_name", ""),
+            "start_date": r.get("start_date", ""),
+            "end_date": r.get("end_date", ""),
+            "baseline_pressure_m": to_float(r.get("baseline_pressure_m")),
         })
     return out
 
@@ -628,6 +632,43 @@ def get_remarks(contract_id, dma_code=None):
     rows.sort(key=lambda r: (r.get("event_date", ""), r.get("recorded_at", "")),
               reverse=True)
     return rows
+
+
+def get_monthly_work(contract_id):
+    """
+    ผลงานภาคสนามรายเดือน (จำนวนซ่อมท่อ ALC) คืน dict {month: record}
+    ข้อมูลนี้ไม่มีในรายงาน WB220 ต้องกรอกเอง
+    """
+    rows = [
+        r for r in read_tab(CFG.TAB_MONTHLY_WORK)
+        if r.get("contract_id") == contract_id
+    ]
+    latest = _latest_by_key(
+        rows, lambda r: r.get("month", ""), lambda r: r.get("updated_at", "")
+    )
+    out = {}
+    for month, r in latest.items():
+        out[month] = {
+            "month": month,
+            "alc_main_pipe": to_int(r.get("alc_main_pipe"), 0),
+            "alc_service_pipe": to_int(r.get("alc_service_pipe"), 0),
+            "note": r.get("note", ""),
+            "updated_by": r.get("updated_by", ""),
+            "updated_at": r.get("updated_at", ""),
+        }
+    return out
+
+
+def save_monthly_work(contract_id, month, main_pipe, service_pipe, note, user):
+    append_rows(CFG.TAB_MONTHLY_WORK, [{
+        "contract_id": contract_id,
+        "month": month,
+        "alc_main_pipe": int(main_pipe or 0),
+        "alc_service_pipe": int(service_pipe or 0),
+        "note": note or "",
+        "updated_by": user,
+        "updated_at": now_str(),
+    }])
 
 
 def save_remark(contract_id, dma_code, event_date, category, text, user):

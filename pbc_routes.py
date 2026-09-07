@@ -83,6 +83,7 @@ def create_pbc_blueprint(login_required=None, current_user_fn=None,
 
         rolling = SVC.rolling_series(monthly, start, dma_set)
         per_month = SVC.monthly_series(monthly, start, dma_set)
+        months_all = SVC.available_months(monthly)
 
         baseline_x = contract["baseline_rate_x"]
         milestones = [(t["month_no"], t["target_rate"]) for t in targets]
@@ -219,8 +220,74 @@ def create_pbc_blueprint(login_required=None, current_user_fn=None,
                               % (swing, prev["loss_rate"], cur["loss_rate"]),
                 })
 
-        months_available = SVC.available_months(monthly)
+        # ตารางเทียบเป้ากับผลจริงทุกจุดวัดผล (รูปแบบเดียวกับรายงานนำเสนอผลงาน)
+        rolling_by_no = {r["month_no"]: r for r in rolling}
+        milestones = []
+        for t in targets:
+            actual = rolling_by_no.get(t["month_no"])
+            row = {
+                "month_no": t["month_no"],
+                "month": SVC.month_from_no(start, t["month_no"]),
+                "label": SVC.month_label_th(SVC.month_from_no(start, t["month_no"])),
+                "target_rate": t["target_rate"],
+                "drop_from_x": (
+                    round(baseline_x - t["target_rate"], 3)
+                    if baseline_x is not None else None
+                ),
+                "actual_rate": actual["loss_rate"] if actual else None,
+                "status": "pending",
+            }
+            if actual:
+                row["status"] = "pass" if actual["loss_rate"] <= t["target_rate"] \
+                    else "fail"
+                row["diff"] = round(actual["loss_rate"] - t["target_rate"], 2)
+            milestones.append(row)
+
+        # แรงดันเฉลี่ยเดือนล่าสุด เทียบกับแรงดันฐาน (สัญญาข้อ 1.32 / 2.1.2(7))
+        pressure = None
+        if months_all:
+            last_month = months_all[-1]
+            values = [
+                rec["avg_pressure_24h"]
+                for (m, code), rec in monthly.items()
+                if m == last_month and code in dma_set
+                and rec.get("avg_pressure_24h") is not None
+            ]
+            if values:
+                current_p = sum(values) / len(values)
+                base_p = contract.get("baseline_pressure_m")
+                pressure = {
+                    "month": last_month,
+                    "label": SVC.month_label_th(last_month),
+                    "current": round(current_p, 3),
+                    "baseline": base_p,
+                    "diff": round(current_p - base_p, 3) if base_p else None,
+                    "n_dma": len(values),
+                    # ข้อ 2.1.2(7): แรงดันต้องไม่ต่ำกว่าฐาน
+                    # ถ้าฐานต่ำกว่า 10 ม. กปน. คุมไม่เกิน 10 ม.
+                    "below_baseline": (base_p is not None and current_p < base_p),
+                }
+
+        work = SVC.get_monthly_work(cid)
+        work_latest = None
+        if months_all:
+            for m in reversed(months_all):
+                if m in work:
+                    work_latest = dict(work[m])
+                    work_latest["label"] = SVC.month_label_th(m)
+                    break
+        work_total = {
+            "alc_main_pipe": sum(w["alc_main_pipe"] for w in work.values()),
+            "alc_service_pipe": sum(w["alc_service_pipe"] for w in work.values()),
+            "n_months": len(work),
+        }
+
+        months_available = months_all
         return {
+            "milestones": milestones,
+            "pressure": pressure,
+            "work_latest": work_latest,
+            "work_total": work_total,
             "data_issues": data_issues,
             "contract": contract,
             "targets": targets,
@@ -255,6 +322,7 @@ def create_pbc_blueprint(login_required=None, current_user_fn=None,
             # ใช้โดย base_sidebar.html — active_page ทำให้เมนูถูกไฮไลต์
             active_page="pbc",
             user=user_obj(),
+            enable_upload=CFG.ENABLE_WB220_UPLOAD,
         )
 
     # -------------------------------------------------------------- JSON
@@ -313,6 +381,12 @@ def create_pbc_blueprint(login_required=None, current_user_fn=None,
     @bp.route("/api/upload", methods=["POST"])
     @guard
     def api_upload():
+        if not CFG.ENABLE_WB220_UPLOAD:
+            return jsonify({
+                "ok": False,
+                "error": "ปิดการอัปโหลดรายงาน WB220 ไว้ "
+                         "ให้กรอกปริมาณน้ำเข้า/น้ำขายในตาราง MonthlyRaw แทน",
+            }), 403
         contract, _ = _resolve_contract(request.form.get("contract_id"))
         if not contract:
             return jsonify({"ok": False, "error": "ไม่พบสัญญา"}), 404
@@ -481,6 +555,26 @@ def create_pbc_blueprint(login_required=None, current_user_fn=None,
         return jsonify({"ok": True, "rows": rows, "summary": summary})
 
     # -------------------------------------------------------------- บันทึกงาน
+
+    @bp.route("/api/work", methods=["POST"])
+    @guard
+    def api_work():
+        data = request.get_json(silent=True) or {}
+        contract, _ = _resolve_contract(data.get("contract_id"))
+        if not contract:
+            return jsonify({"ok": False, "error": "ไม่พบสัญญา"}), 404
+        month = (data.get("month") or "").strip()
+        if len(month) != 7 or "-" not in month:
+            return jsonify({"ok": False, "error": "รูปแบบเดือนต้องเป็น YYYY-MM"}), 400
+        main_pipe = SVC.to_int(data.get("alc_main_pipe"), 0)
+        service_pipe = SVC.to_int(data.get("alc_service_pipe"), 0)
+        if main_pipe < 0 or service_pipe < 0:
+            return jsonify({"ok": False, "error": "จำนวนต้องไม่ติดลบ"}), 400
+        SVC.save_monthly_work(
+            contract["contract_id"], month, main_pipe, service_pipe,
+            data.get("note", ""), who(),
+        )
+        return jsonify({"ok": True})
 
     @bp.route("/api/remark", methods=["POST"])
     @guard

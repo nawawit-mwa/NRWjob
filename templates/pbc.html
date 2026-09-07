@@ -142,6 +142,18 @@
 .pbc-page .dropzone:hover,.pbc-page .dropzone.drag{border-color:var(--mwa-sky);
   color:var(--mwa-navy);background:#f2f9ff}
 .pbc-page .editnum{width:110px;text-align:right}
+.pbc-page .pbc-split{display:grid;grid-template-columns:minmax(260px,1fr) 2fr;gap:18px}
+@media(max-width:900px){.pbc-page .pbc-split{grid-template-columns:1fr}}
+.pbc-page .pbc-kv{font-size:.84rem}
+.pbc-page .pbc-kv th{text-align:left;background:#eef4fa;color:var(--ink-soft);
+  font-weight:600;width:45%;position:static}
+.pbc-page .pbc-kv td{text-align:left;font-weight:600;color:var(--mwa-navy-deep)}
+.pbc-page .pbc-kv tr{cursor:default}
+.pbc-page .pbc-kv tr:hover td{background:transparent}
+.pbc-page tr.ms-pass td{background:#e0f4de}
+.pbc-page tr.ms-fail td{background:#fbe9e4}
+.pbc-page tr.ms-pass:hover td{background:#d3efd0}
+.pbc-page tr.ms-fail:hover td{background:#f7ddd6}
 .pbc-page .loading{color:var(--ink-soft);padding:26px;text-align:center}
 </style>
 {% endblock %}
@@ -165,6 +177,26 @@
 
   <div class="msg" id="dataIssueMsg"></div>
 
+  <div class="pbc-panel" id="contractPanel">
+    <h2>ข้อมูลสัญญาและผลการดำเนินงาน</h2>
+    <div class="pbc-split">
+      <div>
+        <table class="pbc-kv"><tbody id="contractInfo"></tbody></table>
+      </div>
+      <div>
+        <div class="tablewrap" style="max-height:none">
+          <table id="milestoneTable">
+            <thead><tr>
+              <th>จุดวัดผล</th><th>เดือน</th><th>ลดจากฐาน</th>
+              <th>เป้า %</th><th>ผลจริง %</th><th>สถานะ</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="pbc-panel">
     <h2>เส้นทางสู่เป้าหมายตามสัญญา</h2>
     <div class="chart-box"><canvas id="trajectoryChart"></canvas></div>
@@ -174,7 +206,10 @@
     <div class="tabs">
       <div class="tab active" data-pane="paneTable">สถานะราย DMA</div>
       <div class="tab" data-pane="paneTargets">เป้าหมายย่อยราย DMA</div>
+      <div class="tab" data-pane="paneWork">ผลงานภาคสนาม</div>
+      {% if enable_upload %}
       <div class="tab" data-pane="paneUpload">อัปโหลดรายงาน WB220</div>
+      {% endif %}
     </div>
 
     <!-- ------------------ สถานะราย DMA ------------------ -->
@@ -218,7 +253,27 @@
       </div>
     </div>
 
+    <!-- ------------------ ผลงานภาคสนาม ------------------ -->
+    <div class="tabpane" id="paneWork">
+      <div class="hint">
+        จำนวนซ่อมท่อจากกิจกรรมสำรวจหาจุดรั่ว (ALC) และแรงดันน้ำ
+        ข้อมูลส่วนนี้ไม่มีในรายงาน WB220 ต้องกรอกเอง
+      </div>
+      <div class="cards" id="workCards"></div>
+      <div class="formrow">
+        <label>เดือน</label>
+        <input type="month" id="workMonth">
+        <label style="min-width:80px">ท่อจ่ายน้ำ</label>
+        <input type="number" id="workMain" min="0" step="1" placeholder="จำนวนจุด">
+        <label style="min-width:70px">ท่อบริการ</label>
+        <input type="number" id="workService" min="0" step="1" placeholder="จำนวนจุด">
+        <button class="primary" id="btnSaveWork">บันทึก</button>
+      </div>
+      <div class="msg" id="workMsg"></div>
+    </div>
+
     <!-- ------------------ อัปโหลด ------------------ -->
+    {% if enable_upload %}
     <div class="tabpane" id="paneUpload">
       <div class="hint">
         อัปโหลดไฟล์รายงาน AN/WB220 (.xls) ที่ export จากระบบ WLMA เดือนละหนึ่งไฟล์
@@ -236,6 +291,7 @@
       <div class="msg" id="uploadMsg"></div>
       <div id="uploadPreview"></div>
     </div>
+    {% endif %}
   </div>
 </div>
 
@@ -393,10 +449,104 @@ function render(){
     " · " + DATA.n_dma + " พื้นที่เฝ้าระวัง";
   renderDataIssues();
   renderCards();
+  renderContractInfo();
+  renderMilestones();
+  renderWork();
   renderTrajectory();
   renderDmaTable();
   renderBarChart();
   renderTargets();
+}
+
+function renderContractInfo(){
+  var c = DATA.contract, p = DATA.pressure;
+  var rows = [
+    ["งานจ้าง PBC สาขา", c.branch_name || "-"],
+    ["สัญญาเลขที่", c.contract_no || "-"],
+    ["ผู้รับจ้าง", c.contractor_name || "-"],
+    ["ระยะเวลาสัญญา", c.duration_days ? num(c.duration_days) + " วัน" : "-"],
+    ["วันที่เริ่มงาน", c.start_date || (c.start_month || "-")],
+    ["วันที่สิ้นสุดสัญญา", c.end_date || "-"],
+    ["Base Line (%)", c.baseline_rate_x == null ? "-" : num(c.baseline_rate_x, 3)],
+    ["จำนวนพื้นที่เฝ้าระวัง", DATA.n_dma + " DMA"],
+  ];
+  if(c.baseline_pressure_m != null){
+    rows.push(["แรงดันน้ำ Base Line (เมตร)", num(c.baseline_pressure_m, 3)]);
+  }
+  if(p){
+    // ข้อ 2.1.2(7) แรงดันต้องไม่ต่ำกว่าแรงดันเฉลี่ยฐาน
+    var cls = p.below_baseline ? "num-bad" : "num-good";
+    rows.push(["แรงดันน้ำ " + p.label + " (เมตร)",
+      '<span class="' + (p.baseline == null ? "" : cls) + '">' +
+      num(p.current, 3) + "</span>" +
+      (p.diff == null ? "" :
+        ' <span class="dim">(' + (p.diff >= 0 ? "+" : "") + num(p.diff, 3) + ")</span>")]);
+  }
+  $("contractInfo").innerHTML = rows.map(function(r){
+    return "<tr><th>" + esc(r[0]) + "</th><td>" + r[1] + "</td></tr>";
+  }).join("");
+}
+
+function renderMilestones(){
+  var ms = DATA.milestones || [];
+  var tb = $("milestoneTable").querySelector("tbody");
+  if(!ms.length){ tb.innerHTML = ""; return; }
+  tb.innerHTML = ms.map(function(m){
+    var cls = m.status === "pass" ? "ms-pass"
+            : (m.status === "fail" ? "ms-fail" : "");
+    var status = m.status === "pass" ? "ผ่านเป้า"
+               : (m.status === "fail"
+                  ? "สูงกว่าเป้า " + num(m.diff, 2) + " จุด"
+                  : "ยังไม่ถึงกำหนด");
+    return '<tr class="' + cls + '">' +
+      "<td>เดือนที่ " + m.month_no + "</td>" +
+      "<td>" + esc(m.label) + "</td>" +
+      '<td class="dim">' + (m.drop_from_x == null ? "-" :
+        "X − " + num(m.drop_from_x, 3)) + "</td>" +
+      "<td>" + num(m.target_rate, 3) + "</td>" +
+      "<td>" + (m.actual_rate == null ? '<span class="dim">-</span>'
+                : num(m.actual_rate, 3)) + "</td>" +
+      '<td style="text-align:left">' + esc(status) + "</td></tr>";
+  }).join("");
+}
+
+function renderWork(){
+  var latest = DATA.work_latest, total = DATA.work_total || {};
+  var cards = [];
+  if(latest){
+    cards.push({label:"ซ่อมท่อจ่ายน้ำ " + latest.label,
+      value: num(latest.alc_main_pipe), note:"จุด"});
+    cards.push({label:"ซ่อมท่อบริการ " + latest.label,
+      value: num(latest.alc_service_pipe), note:"จุด"});
+  }
+  cards.push({label:"ซ่อมท่อจ่ายน้ำสะสม", value: num(total.alc_main_pipe || 0),
+    note:"รวม " + (total.n_months || 0) + " เดือนที่บันทึกไว้"});
+  cards.push({label:"ซ่อมท่อบริการสะสม", value: num(total.alc_service_pipe || 0),
+    note:"รวม " + (total.n_months || 0) + " เดือนที่บันทึกไว้"});
+  $("workCards").innerHTML = cards.map(function(k){
+    return '<div class="card"><div class="label">' + esc(k.label) + "</div>" +
+      '<div class="value">' + esc(k.value) + "</div>" +
+      '<div class="note">' + esc(k.note) + "</div></div>";
+  }).join("");
+  var months = DATA.months_available || [];
+  if(months.length && !$("workMonth").value){
+    $("workMonth").value = months[months.length - 1];
+  }
+}
+
+function saveWork(){
+  var month = $("workMonth").value;
+  if(!month){ showMsg($("workMsg"), "ยังไม่ได้เลือกเดือน", "err"); return; }
+  fetch(API + "/work", {
+    method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({ contract_id: SELECTED, month: month,
+      alc_main_pipe: $("workMain").value || 0,
+      alc_service_pipe: $("workService").value || 0 })
+  }).then(function(r){ return r.json(); }).then(function(j){
+    if(!j.ok){ showMsg($("workMsg"), esc(j.error), "err"); return; }
+    showMsg($("workMsg"), "บันทึกผลงานเดือน " + month + " แล้ว", "ok");
+    load();
+  });
 }
 
 function renderDataIssues(){
@@ -615,7 +765,7 @@ function renderDmaTable(){
   $("tableHint").textContent = latest
     ? "ยอดรวมรอบ 3 เดือน: " + latest.window.join(", ") +
       " (หน่วยปริมาณเป็น ลบ.ม.)"
-    : "ยังไม่มีข้อมูลครบรอบ 3 เดือน — อัปโหลดรายงาน WB220 เพิ่ม";
+    : "ยังไม่มีข้อมูลครบรอบ 3 เดือน — ต้องมีข้อมูลอย่างน้อย 3 เดือนติดกัน";
 
   var tb = $("dmaTable").querySelector("tbody");
   tb.innerHTML = rows.map(function(r){
@@ -1015,8 +1165,14 @@ function bindEvents(){
     if(e.key === "Escape") $("dmaModal").classList.remove("open");
   });
   $("mRemarkSave").addEventListener("click", saveRemark);
+  $("btnSaveWork").addEventListener("click", saveWork);
+  bindUploadEvents();
+}
 
+function bindUploadEvents(){
+  // แท็บอัปโหลดอาจถูกซ่อนไว้ (ปิดฟีเจอร์ WB220) จึงต้องเช็คก่อนผูก event
   var dz = $("dropzone"), fi = $("fileInput");
+  if(!dz || !fi) return;
   dz.addEventListener("click", function(){ fi.click(); });
   fi.addEventListener("change", function(){
     if(fi.files.length) setFile(fi.files[0]);
