@@ -336,14 +336,13 @@
     <h2 style="font-size:15px;margin:18px 0 6px">ข้อมูลรายเดือน</h2>
     <div class="hint">
       แท่งซ้อนกัน ความสูงรวมคือปริมาณน้ำเข้า · เส้นทึบคืออัตรารายเดือน
-      เส้นหนาคืออัตรารอบ 3 เดือนซึ่งเป็นตัวที่ใช้วัดผลตามสัญญา
+      เส้นหนาคืออัตรา ณ เดือนที่วัดผล ซึ่งเป็นตัวที่ใช้ประเมินผลตามสัญญา
     </div>
     <div class="chart-box short" style="margin-bottom:14px">
       <canvas id="mVolumeChart"></canvas>
     </div>
     <div class="hint">
       แรงดันน้ำ (เมตร) · เส้นประคือแรงดันเฉลี่ยฐานตามสัญญา
-      ซึ่งข้อ 2.1.2(7) กำหนดว่าแรงดันต้องไม่ต่ำกว่าเส้นนี้
     </div>
     <div class="chart-box short" style="margin-bottom:14px">
       <canvas id="mPressureMonthChart"></canvas>
@@ -609,7 +608,7 @@ function renderCards(){
 
   if(latest){
     var cls = (nt && latest.loss_rate <= nt.target_rate) ? "good" : "warn";
-    cards.push({label:"อัตราปัจจุบัน (รอบ 3 เดือน)", cls:cls,
+    cards.push({label:"อัตรา ณ เดือนที่วัดผล", cls:cls,
       value: num(latest.loss_rate,2)+"%",
       note: "เดือนที่ " + latest.month_no + " · " +
             latest.window.map(thaiMonth).join(", ")});
@@ -732,7 +731,7 @@ function renderTrajectory(){
         borderDash:[5,4], borderWidth:2, pointRadius:0, spanGaps:true, fill:false});
     }
   }
-  ds.push({label:"อัตราจริง (รอบ 3 เดือน)", data: at(rolling,"loss_rate"),
+  ds.push({label:"อัตราจริง ณ เดือนที่วัดผล", data: at(rolling,"loss_rate"),
     borderColor:C.teal, borderWidth:2.6, pointRadius:2.5, pointHoverRadius:5,
     pointBackgroundColor:C.teal, spanGaps:true, fill:false});
 
@@ -1097,7 +1096,7 @@ function drawMonthlyCharts(history){
   }
   var labels = h.map(function(x){ return x.label; });
 
-  // อัตรารอบ 3 เดือน คำนวณแบบเดียวกับที่ใช้วัดผลตามสัญญา
+  // อัตรา ณ เดือนที่วัดผล (นิยามสัญญาข้อ 1.29) คำนวณจากเดือนนั้นและ 2 เดือนก่อนหน้า
   // รวมปริมาณ 3 เดือนก่อน แล้วจึงหารครั้งเดียว ไม่ใช่เฉลี่ยอัตรารายเดือน
   var rolling = h.map(function(_, i){
     if(i < 2) return null;
@@ -1117,23 +1116,25 @@ function drawMonthlyCharts(history){
 
   if(CHARTS.volMonth) CHARTS.volMonth.destroy();
   CHARTS.volMonth = new Chart($("mVolumeChart"), {
+    // เส้นต้องอยู่ก่อนแท่งใน datasets เพื่อให้ Chart.js วาดเส้นทับแท่ง
+    // ไม่งั้นแท่งจะบังเส้นอัตราซึ่งเป็นตัวเลขหลักที่ต้องอ่าน
     data:{ labels: labels, datasets:[
+      { type:"line", label:"อัตรา ณ เดือนที่วัดผล", yAxisID:"y1", data: rolling,
+        borderColor:"#7a4a00", borderWidth:2.6, pointRadius:2.5,
+        pointBackgroundColor:"#7a4a00", fill:false, spanGaps:true, order:0 },
+      { type:"line", label:"อัตรารายเดือน", yAxisID:"y1",
+        data: h.map(function(x){ return x.loss_rate; }),
+        borderColor:"#41586d", borderWidth:1.4, borderDash:[4,3],
+        pointRadius:0, fill:false, spanGaps:true, order:1 },
       // โทนพาสเทล เพราะแท่งกินพื้นที่มาก ถ้าสีเข้มจะกลบเส้นอัตราที่เป็นตัวหลัก
       { type:"bar", label:"น้ำจำหน่าย", yAxisID:"y",
         data: h.map(function(x){ return x.sales_m3; }),
         backgroundColor:"#e8f3fb", borderColor:"#b7d8ef", borderWidth:1,
-        stack:"v" },
+        stack:"v", order:2 },
       { type:"bar", label:"น้ำสูญเสีย", yAxisID:"y",
         data: h.map(function(x){ return x.loss_m3; }),
         backgroundColor:"#eeb5a4", borderColor:"#dd9781", borderWidth:1,
-        stack:"v" },
-      { type:"line", label:"อัตรารายเดือน", yAxisID:"y1",
-        data: h.map(function(x){ return x.loss_rate; }),
-        borderColor:"#41586d", borderWidth:1.4, borderDash:[4,3],
-        pointRadius:0, fill:false, spanGaps:true },
-      { type:"line", label:"อัตรารอบ 3 เดือน", yAxisID:"y1", data: rolling,
-        borderColor:"#7a4a00", borderWidth:2.6, pointRadius:2.5,
-        pointBackgroundColor:"#7a4a00", fill:false, spanGaps:true }
+        stack:"v", order:2 }
     ]},
     options:{
       responsive:true, maintainAspectRatio:false,
@@ -1185,7 +1186,7 @@ function drawMonthlyCharts(history){
   pds.push({label:"เฉลี่ย 24 ชม.",
     data: h.map(function(x){ return x.avg_pressure_24h; }),
     borderColor:C.teal, borderWidth:2.4, fill:false, spanGaps:true,
-    // เดือนที่ต่ำกว่าฐานทำจุดสีแดง เพราะเป็นเงื่อนไขที่ผิดสัญญาได้
+    // เดือนที่ต่ำกว่าฐานทำจุดสีแดงให้เห็นชัด
     pointRadius: h.map(function(x){
       return (base != null && x.avg_pressure_24h != null &&
               x.avg_pressure_24h < base) ? 5 : 2.5; }),
