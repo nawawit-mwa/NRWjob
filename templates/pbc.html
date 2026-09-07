@@ -1118,19 +1118,22 @@ function drawMonthlyCharts(history){
   if(CHARTS.volMonth) CHARTS.volMonth.destroy();
   CHARTS.volMonth = new Chart($("mVolumeChart"), {
     data:{ labels: labels, datasets:[
+      // โทนพาสเทล เพราะแท่งกินพื้นที่มาก ถ้าสีเข้มจะกลบเส้นอัตราที่เป็นตัวหลัก
       { type:"bar", label:"น้ำจำหน่าย", yAxisID:"y",
         data: h.map(function(x){ return x.sales_m3; }),
-        backgroundColor:"rgba(0,156,255,.55)", stack:"v" },
+        backgroundColor:"#e8f3fb", borderColor:"#b7d8ef", borderWidth:1,
+        stack:"v" },
       { type:"bar", label:"น้ำสูญเสีย", yAxisID:"y",
         data: h.map(function(x){ return x.loss_m3; }),
-        backgroundColor:"rgba(166,64,42,.6)", stack:"v" },
+        backgroundColor:"#eeb5a4", borderColor:"#dd9781", borderWidth:1,
+        stack:"v" },
       { type:"line", label:"อัตรารายเดือน", yAxisID:"y1",
         data: h.map(function(x){ return x.loss_rate; }),
-        borderColor:C.muted, borderWidth:1.4, borderDash:[4,3],
+        borderColor:"#41586d", borderWidth:1.4, borderDash:[4,3],
         pointRadius:0, fill:false, spanGaps:true },
       { type:"line", label:"อัตรารอบ 3 เดือน", yAxisID:"y1", data: rolling,
-        borderColor:C.amber, borderWidth:2.4, pointRadius:2.5,
-        pointBackgroundColor:C.amber, fill:false, spanGaps:true }
+        borderColor:"#7a4a00", borderWidth:2.6, pointRadius:2.5,
+        pointBackgroundColor:"#7a4a00", fill:false, spanGaps:true }
     ]},
     options:{
       responsive:true, maintainAspectRatio:false,
@@ -1151,10 +1154,10 @@ function drawMonthlyCharts(history){
             title:{ display:true, color:C.muted, text:"ปริมาณ (ลบ.ม.)" } },
         // แกนอัตราไม่เริ่มที่ศูนย์ ไม่งั้นเส้นจะแบนจนดูไม่ออกว่าลดลง
         y1:{ position:"right", min:Math.max(0, rLo - rPad), max: rHi + rPad,
-             ticks:{ color:C.amber, font:{size:10},
+             ticks:{ color:"#7a4a00", font:{size:10},
                      callback:function(v){ return v.toFixed(0) + "%"; } },
              grid:{ drawOnChartArea:false },
-             title:{ display:true, color:C.amber, text:"อัตราน้ำสูญเสีย" } }
+             title:{ display:true, color:"#7a4a00", text:"อัตราน้ำสูญเสีย" } }
       }
     }
   });
