@@ -175,8 +175,6 @@
 
   <div class="cards" id="cards"></div>
 
-  <div class="msg" id="dataIssueMsg"></div>
-
   <div class="pbc-panel" id="contractPanel">
     <h2>ข้อมูลสัญญาและผลการดำเนินงาน</h2>
     <div class="pbc-split">
@@ -447,7 +445,6 @@ function render(){
   $("contractSub").textContent =
     c.contract_no + " · " + c.branch_name + " · เริ่ม " + c.start_month +
     " · " + DATA.n_dma + " พื้นที่เฝ้าระวัง";
-  renderDataIssues();
   renderCards();
   renderContractInfo();
   renderMilestones();
@@ -547,26 +544,6 @@ function saveWork(){
     showMsg($("workMsg"), "บันทึกผลงานเดือน " + month + " แล้ว", "ok");
     load();
   });
-}
-
-function renderDataIssues(){
-  var box = $("dataIssueMsg");
-  var issues = DATA.data_issues || [];
-  if(!issues.length){ hideMsg(box); return; }
-  var missing = issues.filter(function(i){ return i.type === "missing_dma"; });
-  var swings  = issues.filter(function(i){ return i.type === "swing"; });
-  var html = "<b>ตรวจพบข้อมูลรายเดือนที่ควรตรวจสอบ</b> " +
-             "— มีผลโดยตรงกับอัตราน้ำสูญเสียและค่าคาดการณ์<ul>";
-  missing.forEach(function(i){
-    html += "<li>" + esc(i.label) + ": " + esc(i.detail) +
-            " — ยอดรวมเดือนนี้ต่ำกว่าความจริง</li>";
-  });
-  swings.forEach(function(i){
-    html += "<li>" + esc(i.label) + ": " + esc(i.detail) +
-            " — ตรวจว่ารอบอ่านน้ำของเดือนนี้ตรงกับเดือนอื่นหรือไม่</li>";
-  });
-  html += "</ul>";
-  showMsg(box, html, "err");
 }
 
 function renderCards(){
