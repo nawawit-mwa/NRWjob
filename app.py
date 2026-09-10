@@ -157,6 +157,19 @@ def mediumterm_trend():
     )
 
 
+@app.route("/mediumterm/baseline")
+def mediumterm_baseline():
+    """หน้าตั้งค่า Baseline แยกต่างหาก (2026-09 รอบ 4) — เดิมเป็นแผงพับเก็บอยู่ในหน้า mediumterm.html
+    ผู้ใช้ขอให้แยกออกมาเป็นเมนูของตัวเองในแถบข้าง (อยู่ใต้ "ติดตาม MNF เทียบ ก.ย. 68") แทน ไม่ต้องส่ง
+    branch_groups/branches/reason_categories เหมือน mediumterm_trend() เพราะหน้านี้ไม่มีตาราง DMA/remark
+    ใดๆ แค่โชว์รายการ baseline (จาก baseline_meta.json) + ฟอร์มสร้างคำสั่งรัน fetch_baseline_data.py เอง
+    (ไม่ยิง Oracle จากหน้าเว็บโดยตรง — กันหน้าเว็บค้าง/Flask timeout เหมือนที่ยืนยันไว้ตอนออกแบบแผงเดิม)
+    ดูได้โดยไม่ต้อง login เหมือนหน้า mediumterm_trend (แค่ดูรายการ/สร้างคำสั่งคัดลอก ไม่มีการเขียนข้อมูลใดๆ
+    จากหน้านี้)"""
+    user = get_optional_user()
+    return render_template("mediumterm_baseline.html", user=user, active_page="mediumterm_baseline")
+
+
 @app.route("/mediumterm/rtu-branch-map")
 def mediumterm_rtu_branch_map():
     """คืน {RTUID: {BranchID, BranchName, BranchGroupID, BranchGroupName}} ของทุก DMA ในครั้งเดียว —

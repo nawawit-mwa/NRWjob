@@ -93,55 +93,16 @@
   .mt-remark-item:last-child { border-bottom:none; }
   .mt-remark-item .meta { color:var(--ink-soft); font-size:0.72rem; }
 
-  /* แผงตั้งค่า Baseline (ใหม่) — เพิ่ม baseline แบบ "N วันย้อนหลัง" (rolling) เป็นทางเลือกคู่กับ baseline
-     เดือนปฏิทินเดิม (มิ.ย./ส.ค./ก.ย. 68) ไม่ได้แทนที่ — ซ่อนไว้เป็นค่าเริ่มต้น (ปุ่ม toggle) ไม่ให้รก
-     หน้าจอหลัก จำสถานะเปิด/ปิดไว้ใน localStorage ต่อเครื่องผู้ใช้ */
-  .mt-baseline-toggle { display:inline-flex; align-items:center; gap:6px; padding:6px 14px;
-    border:1px solid var(--line); border-radius:8px; background:var(--panel); font-family:var(--font-ui);
-    font-size:0.82rem; font-weight:600; color:var(--mwa-navy-deep); cursor:pointer; margin-bottom:10px; }
-  .mt-baseline-body { display:none; margin-bottom:18px; padding:16px 18px; border:1px solid var(--line);
-    border-radius:10px; background:var(--panel); }
-  .mt-baseline-body.open { display:block; }
-  /* เตือนความสด — เฉพาะ baseline แบบ rolling (custom_*) เท่านั้น เพราะ baseline เดือนปิดตรึงค่าตลอดกาล
-     ไม่ต้องเตือน ต่างจาก rolling ที่ออกแบบให้ต้องรันคำสั่งรีเฟรชเอง ไม่ผูก Task Scheduler อัตโนมัติ */
+  /* แผงตั้งค่า Baseline — ย้ายไปเป็นหน้าแยกต่างหากแล้ว (/mediumterm/baseline ดู
+     templates/mediumterm_baseline.html) ตามที่ผู้ใช้ขอ (2026-09 รอบ 4) ให้ขึ้นเป็นเมนูข้างใต้ "ติดตาม MNF
+     เทียบ ก.ย. 68" แทนที่จะเป็นแผงพับเก็บในหน้านี้ — เหลือไว้ที่นี่แค่แบนเนอร์เตือนความสด (เฉพาะ baseline
+     แบบ rolling ที่คำนวณมาแล้ว ≥ 7 วัน เพราะเดือนปิดตรึงค่าตลอดกาลไม่ต้องเตือน) พร้อมลิงก์ไปหน้าตั้งค่าเต็ม */
   .mt-baseline-stale-banner { display:none; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:14px;
     padding:10px 14px; border-radius:8px; background:#f7ecd6; color:#7a5310; font-size:0.85rem; font-weight:600; }
   .mt-baseline-stale-banner.show { display:flex; }
-  .mt-baseline-stale-banner button { padding:4px 10px; border:1px solid #cf9a3b; border-radius:6px;
-    background:#fff; color:#7a5310; font-family:var(--font-ui); font-size:0.78rem; font-weight:600; cursor:pointer; }
-  .mt-baseline-list { display:flex; flex-direction:column; gap:8px; margin-bottom:6px; }
-  /* คลิกได้ (ดูวิธีตั้งเป็น baseline ที่ใช้งาน) — ไม่ใช่สลับให้ทันทีเพราะเว็บนี้รันบน Render คนละเครื่องกับ
-     output/config.json (ดู renderBaselineSwitchInstructions ฝั่ง JS) ให้ hover/selected ชัดว่ากดได้ */
-  .mt-baseline-row { display:flex; flex-wrap:wrap; align-items:center; gap:10px; padding:8px 12px;
-    border:1px solid var(--line); border-radius:8px; font-size:0.82rem; cursor:pointer; }
-  .mt-baseline-row:hover { border-color:var(--mwa-sky); }
-  .mt-baseline-row.active { border-color:var(--mwa-sky); background:#eef6fc; }
-  .mt-baseline-row.selected { box-shadow:0 0 0 2px var(--mwa-sky) inset; }
-  .mt-baseline-row .name { font-weight:700; color:var(--mwa-navy-deep); min-width:190px; }
-  .mt-baseline-row .meta { color:var(--ink-soft); font-size:0.78rem; }
-  .mt-baseline-row .hint { margin-left:auto; color:var(--mwa-sky); font-size:0.74rem; font-weight:600;
-    white-space:nowrap; }
-  .mt-baseline-active-tag { padding:2px 8px; border-radius:999px; font-size:0.72rem; font-weight:700;
-    background:var(--mwa-sky); color:#fff; }
-  .mt-baseline-switch { display:none; margin-bottom:16px; padding:12px 14px; border:1px dashed var(--mwa-sky);
-    border-radius:8px; background:#f3f9fd; }
-  .mt-baseline-switch.show { display:block; }
-  .mt-baseline-switch pre { background:#0d2436; color:#c9e8ff; padding:8px 12px; border-radius:6px;
-    font-size:0.8rem; margin:8px 0; display:inline-block; }
-  .mt-baseline-switch .steps { font-size:0.8rem; color:var(--ink-soft); line-height:1.7; }
-  .mt-baseline-switch .steps code { background:#eef2f6; padding:1px 5px; border-radius:4px; }
-  .mt-baseline-form { display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin-top:4px;
-    padding-top:14px; border-top:1px dashed var(--line); }
-  .mt-baseline-form label { display:flex; flex-direction:column; gap:4px; font-size:0.76rem;
-    color:var(--ink-soft); font-weight:600; }
-  .mt-baseline-form input { padding:6px 9px; border:1px solid var(--line); border-radius:6px;
-    font-family:var(--font-ui); font-size:0.82rem; width:150px; }
-  .mt-baseline-cmd { display:none; margin-top:12px; }
-  .mt-baseline-cmd.show { display:block; }
-  .mt-baseline-cmd pre { background:#0d2436; color:#c9e8ff; padding:12px 14px; border-radius:8px;
-    font-size:0.8rem; overflow-x:auto; margin:0 0 8px; white-space:pre-wrap; word-break:break-all; }
-  .mt-baseline-cmd .steps { font-size:0.8rem; color:var(--ink-soft); line-height:1.7; }
-  .mt-baseline-cmd .steps code { background:#eef2f6; padding:1px 5px; border-radius:4px; }
+  .mt-baseline-stale-link { padding:4px 10px; border:1px solid #cf9a3b; border-radius:6px;
+    background:#fff; color:#7a5310; font-family:var(--font-ui); font-size:0.78rem; font-weight:600;
+    text-decoration:none; white-space:nowrap; }
 </style>
 {% endblock %}
 
@@ -153,45 +114,13 @@
     <b id="mtBaselineMonthLabel">–</b>
     (ประมวลผลสัปดาห์ละครั้ง : ประมวลผลล่าสุด <span id="mtGeneratedAtLabel">–</span>)
     <br>(คนละระบบกับการจับสัญญาณเฉียบพลัน Case A/B/C ในหน้า "ติดตาม MNF/RTU")
+    <br><a href="{{ url_for('mediumterm_baseline') }}">⚙️ ตั้งค่า / ดูรายการ Baseline ทั้งหมด</a>
   </p>
 
-  <!-- แผงตั้งค่า Baseline (ใหม่) — เพิ่ม baseline แบบ "N วันย้อนหลัง" (rolling เช่น 60 วัน) เป็นตัวเลือก
-       คู่กับ baseline เดือนปฏิทินเดิม ไม่ได้แทนที่ ไม่ดึง Oracle ให้อัตโนมัติจากหน้าเว็บ (กันหน้าเว็บค้าง/
-       Flask timeout) — แค่สร้างคำสั่งให้คัดลอกไปรันเองที่เครื่อง NRW_MediumTerm ตามที่ยืนยันไว้ -->
+  <!-- แผงตั้งค่า Baseline ย้ายไปหน้าแยก /mediumterm/baseline แล้ว — เหลือแค่แบนเนอร์เตือนความสด -->
   <div class="mt-baseline-stale-banner" id="mtBaselineStaleBanner">
     <span id="mtBaselineStaleText"></span>
-    <button type="button" id="mtBaselineStaleOpenBtn">เปิดการตั้งค่า Baseline</button>
-  </div>
-
-  <button type="button" class="mt-baseline-toggle" id="mtBaselineToggleBtn">⚙️ ตั้งค่า Baseline</button>
-  <div class="mt-baseline-body" id="mtBaselineBody">
-    <div class="mt-baseline-list" id="mtBaselineList">
-      <div class="mt-meta">กำลังโหลดรายการ baseline…</div>
-    </div>
-
-    <!-- คลิกแถว baseline ด้านบน -> โผล่กล่องนี้ พร้อมวิธีตั้งเป็นตัวที่ใช้งาน (ไม่ใช่สลับให้ทันที เพราะเว็บนี้
-         รันบน Render คนละเครื่องกับ output/config.json ที่อยู่บนเครื่องผู้ใช้ — เขียนข้ามเครื่องจากเว็บไม่ได้
-         ต้องแก้ไฟล์เองที่เครื่องแล้วรอ compute_weekly_trend.py รอบถัดไป) -->
-    <div class="mt-baseline-switch" id="mtBaselineSwitchBox"></div>
-
-    <div class="mt-meta" style="margin-bottom:4px;">
-      สร้าง/รีเฟรช baseline แบบ rolling ใหม่ (เช่น 60 วันล่าสุด) — เลือกจำนวนวัน/วันที่สิ้นสุดด้านล่าง
-      แล้วกด "สร้างคำสั่ง" เพื่อได้คำสั่งไปรันเองที่เครื่อง (ไม่ได้รันจากหน้าเว็บนี้โดยตรง)
-    </div>
-    <div class="mt-baseline-form">
-      <label>จำนวนวันย้อนหลัง
-        <input type="number" id="mtBaselineDays" value="60" min="10" max="120">
-      </label>
-      <label>วันที่สิ้นสุด (ค่าเริ่มต้น = เมื่อวาน)
-        <input type="date" id="mtBaselineEnd">
-      </label>
-      <button type="button" class="mt-popup-nav-btn" id="mtBaselineGenBtn">สร้างคำสั่ง</button>
-    </div>
-    <div class="mt-baseline-cmd" id="mtBaselineCmdBox">
-      <pre id="mtBaselineCmdText"></pre>
-      <button type="button" class="mt-popup-nav-btn" id="mtBaselineCopyBtn">คัดลอกคำสั่ง</button>
-      <div class="steps" id="mtBaselineSteps"></div>
-    </div>
+    <a href="{{ url_for('mediumterm_baseline') }}" class="mt-baseline-stale-link">เปิดการตั้งค่า Baseline</a>
   </div>
 
   <div class="mt-toolbar">
@@ -356,7 +285,6 @@
   let filteredRows = [];      // แถวหลังกรอง/เรียงล่าสุดที่ตารางแสดงอยู่จริง — ใช้เดินหน้า/ถอยหลังใน popup
   let currentPopupDma = null; // dma_code ของ popup ที่เปิดอยู่ตอนนี้ (null = ปิดอยู่)
   let envelopeByDma = {};     // { dma_code: {flowCurrent[], flowBaselineMin[], flowBaselineMax[], pressure...[]} }
-  let baselineMetaCache = {}; // baseline_meta.json ล่าสุดที่โหลดมา — ใช้ตอนคลิกแถว baseline (นอก loadAll())
   let sortKey = "mnf_delta_pct";
   let sortDir = "desc";
   let chartF = null, chartP = null;
@@ -471,77 +399,10 @@
   }
 
   // ---------------------------------------------------------------------
-  // แผงตั้งค่า Baseline (ใหม่) — อ่าน baseline_meta.json (เขียนโดย fetch_baseline_data.py เวอร์ชันใหม่
-  // ที่รองรับ --days นอกจาก --month เดิม) แสดงรายการ baseline ที่มีทั้งหมด (เดือนปฏิทิน + rolling N วัน)
-  // พร้อม badge "กำลังใช้งาน" (เทียบกับ baseline_month จาก mediumterm_dma_summary.csv ที่โหลดอยู่แล้ว)
-  // และเตือนความสดถ้า baseline แบบ rolling ที่ใช้งานอยู่คำนวณมาแล้ว ≥ 7 วัน
+  // เตือนความสด — รายการ baseline ทั้งหมด + วิธีตั้งใช้งาน ย้ายไปหน้าแยก /mediumterm/baseline แล้ว
+  // (ดู templates/mediumterm_baseline.html) หน้านี้เหลือแค่เช็คว่า baseline แบบ rolling ที่ใช้งานอยู่
+  // (เทียบกับ baseline_month จาก mediumterm_dma_summary.csv ที่โหลดอยู่แล้ว) คำนวณมาแล้ว ≥ 7 วันหรือไม่
   // ---------------------------------------------------------------------
-  function renderBaselineList(meta, activeId) {
-    const listEl = document.getElementById("mtBaselineList");
-    const ids = Object.keys(meta || {});
-    if (!ids.length) {
-      listEl.innerHTML =
-        '<div class="mt-meta">ยังไม่มีข้อมูล baseline ให้แสดง — ต้องรัน <code>fetch_baseline_data.py</code> ' +
-        'เวอร์ชันที่รองรับ baseline_meta.json อย่างน้อย 1 ครั้งก่อน (รันเฉยๆ ไม่ต้องใส่ argument ก็ได้ ' +
-        'เพื่อให้ baseline เดิม 3 เดือนถูกบันทึกลง meta ด้วย)</div>';
-      return;
-    }
-    // เดือนปฏิทินก่อน (เรียงชื่อ) แล้วตามด้วย rolling — rolling มักเป็นตัวที่ผู้ใช้เพิ่งสร้าง อยากเห็นท้ายสุด
-    ids.sort((a, b) => {
-      const ra = !!(meta[a] && meta[a].rolling), rb = !!(meta[b] && meta[b].rolling);
-      return ra === rb ? a.localeCompare(b) : (ra ? 1 : -1);
-    });
-    listEl.innerHTML = ids.map(id => {
-      const m = meta[id] || {};
-      const isActive = id === activeId;
-      return `<div class="mt-baseline-row${isActive ? " active" : ""}" data-id="${escapeHtml(id)}">
-        <span class="name">${escapeHtml(m.label || id)}</span>
-        <span class="meta">${escapeHtml(m.start || "—")} – ${escapeHtml(m.end || "—")} (${m.days || "?"} วัน)</span>
-        <span class="meta">คำนวณล่าสุด: ${escapeHtml(m.computed_at || "—")}</span>
-        ${m.rolling ? '<span class="meta">🔄 rolling — ควรรันซ้ำทุกสัปดาห์</span>' : ""}
-        ${isActive ? '<span class="mt-baseline-active-tag">กำลังใช้งาน</span>' : '<span class="hint">ดูวิธีตั้งใช้งาน ›</span>'}
-      </div>`;
-    }).join("");
-  }
-
-  // คลิกแถว baseline (event delegation — แถวถูกวาดใหม่ทุกครั้งที่ loadAll() รัน ผูก listener ที่ container
-  // แทนที่จะผูกทีละแถว) -> โชว์วิธีตั้งเป็น baseline ที่ใช้งาน ไม่ใช่สลับให้ทันที เพราะหน้าเว็บนี้รันบน Render
-  // (production) คนละเครื่องกับ output/config.json ที่อยู่บนเครื่องผู้ใช้ (NRW_MediumTerm) — เขียนไฟล์ข้าม
-  // เครื่องจากเว็บไม่ได้จริงๆ (ไม่ใช่ข้อจำกัดของโค้ด แต่ของสถาปัตยกรรมทั้งระบบ) ต้องแก้ไฟล์เองที่เครื่องแล้ว
-  // รอ compute_weekly_trend.py รอบถัดไป (หรือรันเองทันที)
-  function renderBaselineSwitchInstructions(id) {
-    const box = document.getElementById("mtBaselineSwitchBox");
-    const m = baselineMetaCache[id] || {};
-    box.innerHTML =
-      `<div class="mt-meta" style="margin-bottom:2px;">` +
-      `หน้าเว็บนี้รันอยู่บน Render (คนละเครื่องกับที่มี <code>output/config.json</code>) จึงสลับ baseline ` +
-      `ที่ใช้งานจากตรงนี้ให้ทันทีไม่ได้ — ตั้งเป็น "${escapeHtml(m.label || id)}" โดย:</div>` +
-      `<pre>"baseline_month": "${escapeHtml(id)}"</pre>` +
-      `<div class="steps">` +
-      `1) เปิด <code>output/config.json</code> ที่เครื่อง NRW_MediumTerm แก้บรรทัด <code>baseline_month</code> ` +
-      `เป็นค่าด้านบน (คัดลอกได้)<br>` +
-      `2) รัน <code>python compute_weekly_trend.py</code> อีกครั้ง (หรือรอรอบ Task Scheduler รายสัปดาห์ถัดไป)<br>` +
-      `3) รีเฟรชหน้านี้ — badge "กำลังใช้งาน" จะย้ายมาที่ ${escapeHtml(m.label || id)}` +
-      `</div>` +
-      `<button type="button" class="mt-popup-nav-btn" id="mtBaselineSwitchCopyBtn" style="margin-top:8px;">` +
-      `คัดลอกค่านี้</button>`;
-    box.classList.add("show");
-    document.getElementById("mtBaselineSwitchCopyBtn").addEventListener("click", () => {
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(`"baseline_month": "${id}"`).catch(() => {});
-      }
-    });
-    document.querySelectorAll("#mtBaselineList .mt-baseline-row").forEach(el => {
-      el.classList.toggle("selected", el.getAttribute("data-id") === id);
-    });
-  }
-
-  document.getElementById("mtBaselineList").addEventListener("click", (e) => {
-    const row = e.target.closest(".mt-baseline-row");
-    if (!row) return;
-    renderBaselineSwitchInstructions(row.getAttribute("data-id"));
-  });
-
   function checkBaselineFreshness(meta, activeId) {
     const banner = document.getElementById("mtBaselineStaleBanner");
     const m = meta && meta[activeId];
@@ -552,7 +413,7 @@
     if (daysSince >= 7) {
       document.getElementById("mtBaselineStaleText").textContent =
         `⚠️ Baseline "${m.label || activeId}" ที่ใช้งานอยู่คำนวณล่าสุดเมื่อ ${daysSince} วันที่แล้ว ` +
-        `(เป็น baseline แบบ rolling ควรรันคำสั่งรีเฟรชทุกสัปดาห์ ดูที่แผงตั้งค่า Baseline ด้านล่าง)`;
+        `(เป็น baseline แบบ rolling ควรรันคำสั่งรีเฟรชทุกสัปดาห์ — ไปที่หน้าตั้งค่า Baseline)`;
       banner.classList.add("show");
     } else {
       banner.classList.remove("show");
@@ -577,10 +438,7 @@
 
       const baselineMonth = summary.length ? summary[0].baseline_month : "–";
       document.getElementById("mtBaselineMonthLabel").textContent = baselineMonth || "–";
-      baselineMetaCache = baselineMeta || {};
-      renderBaselineList(baselineMeta, baselineMonth);
       checkBaselineFreshness(baselineMeta, baselineMonth);
-      document.getElementById("mtBaselineSwitchBox").classList.remove("show"); // ล้างกล่องเดิมทุกครั้งที่โหลดข้อมูลใหม่
       // current_window_start/end + generated_at เหมือนกันทุกแถว (คำนวณจาก "วันล่าสุดในข้อมูล" ครั้งเดียว
       // ตอนรัน compute_weekly_trend.py ไม่ได้แยกต่อ DMA) เอาจากแถวแรกพอ
       const first = summary[0] || {};
@@ -967,61 +825,8 @@
     });
   }
 
-  // ---------------------------------------------------------------------
-  // แผงตั้งค่า Baseline — toggle เปิด/ปิด (จำสถานะไว้ใน localStorage ต่อเครื่อง/เบราว์เซอร์ผู้ใช้ ไม่ใช่
-  // ต่อ user login) + ฟอร์มสร้างคำสั่ง fetch_baseline_data.py --days ให้คัดลอกไปรันเอง (ไม่ยิง Oracle จาก
-  // หน้าเว็บโดยตรงตามที่ยืนยันไว้ — กันหน้าเว็บค้าง/Flask timeout ถ้าดึงข้อมูลหลายเดือนพร้อมกัน)
-  // ---------------------------------------------------------------------
-  const BASELINE_PANEL_OPEN_KEY = "mt_baseline_panel_open";
-  const baselineBody = document.getElementById("mtBaselineBody");
-  function setBaselinePanelOpen(open) {
-    baselineBody.classList.toggle("open", open);
-    try { localStorage.setItem(BASELINE_PANEL_OPEN_KEY, open ? "1" : "0"); } catch (e) { /* private mode ฯลฯ */ }
-  }
-  document.getElementById("mtBaselineToggleBtn").addEventListener("click", () => {
-    setBaselinePanelOpen(!baselineBody.classList.contains("open"));
-  });
-  document.getElementById("mtBaselineStaleOpenBtn").addEventListener("click", () => setBaselinePanelOpen(true));
-  try {
-    setBaselinePanelOpen(localStorage.getItem(BASELINE_PANEL_OPEN_KEY) === "1");
-  } catch (e) {
-    setBaselinePanelOpen(false);
-  }
-
-  // ค่าเริ่มต้นวันที่สิ้นสุด = เมื่อวาน (ข้อมูลของ "วันนี้" ยังไม่เต็มวันจริง ไม่ควรรวมใน baseline)
-  (function setDefaultBaselineEndDate() {
-    const d = new Date();
-    d.setDate(d.getDate() - 1);
-    const iso = d.toISOString().slice(0, 10);
-    document.getElementById("mtBaselineEnd").value = iso;
-  })();
-
-  document.getElementById("mtBaselineGenBtn").addEventListener("click", () => {
-    const daysInput = document.getElementById("mtBaselineDays");
-    const days = parseInt(daysInput.value, 10) || 60;
-    const endStr = document.getElementById("mtBaselineEnd").value;
-    const cmd = `python fetch_baseline_data.py --days ${days}${endStr ? ` --end ${endStr}` : ""}`;
-    document.getElementById("mtBaselineCmdText").textContent = cmd;
-    document.getElementById("mtBaselineSteps").innerHTML =
-      `1) เปิด command prompt ที่โฟลเดอร์ <code>NRW_MediumTerm</code> แล้ววางคำสั่งด้านบนรัน (ดึงข้อมูลจริงจาก ` +
-      `Oracle ใช้เวลาสักครู่)<br>` +
-      `2) แก้ <code>output/config.json</code> ตั้ง <code>"baseline_month": "custom_${days}d"</code> ` +
-      `(ชื่อ id จะคงที่แบบนี้เสมอไม่ว่าจะรันกี่รอบ ไม่ต้องแก้ค่านี้ซ้ำในรอบถัดไป)<br>` +
-      `3) รัน <code>python compute_weekly_trend.py</code> อีกครั้ง (หรือรอรอบ Task Scheduler รายสัปดาห์ถัดไป) ` +
-      `เพื่อให้ตาราง/กราฟหน้านี้อัปเดตตาม baseline ใหม่<br>` +
-      `แนะนำ: รันคำสั่งข้อ 1 ซ้ำทุกสัปดาห์ — baseline แบบ rolling นี้ไม่ผูก Task Scheduler อัตโนมัติ ต้องรีเฟรชเอง ` +
-      `(ต่างจาก baseline เดือนปิดที่รันครั้งเดียวพอ)`;
-    document.getElementById("mtBaselineCmdBox").classList.add("show");
-  });
-
-  document.getElementById("mtBaselineCopyBtn").addEventListener("click", () => {
-    const text = document.getElementById("mtBaselineCmdText").textContent;
-    const btn = document.getElementById("mtBaselineCopyBtn");
-    const done = () => { const orig = "คัดลอกคำสั่ง"; btn.textContent = "คัดลอกแล้ว ✓"; setTimeout(() => { btn.textContent = orig; }, 1500); };
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text).then(done).catch(() => {});
-    }
-  });
+  // แผงตั้งค่า Baseline (รายการ baseline / สร้างคำสั่ง fetch_baseline_data.py / วิธีตั้งใช้งาน) ย้ายไปหน้าแยก
+  // /mediumterm/baseline ทั้งหมดแล้ว — เหลือแค่ checkBaselineFreshness() ด้านบนกับลิงก์ในแบนเนอร์/ย่อหน้าแนะนำ
 
   loadAll();
 })();
