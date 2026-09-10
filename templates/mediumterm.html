@@ -1,5 +1,15 @@
 {% extends "base_sidebar.html" %}
-{% block title %}การเปลี่ยนแปลงน้ำเข้า/MNF เทียบ ก.ย. 68 — Smart NRW{% endblock %}
+{#
+  หน้านี้ใช้ร่วมกันระหว่าง /mediumterm (baseline หลัก เช่น ก.ย. 68 — ค่าเริ่มต้นของตัวแปรด้านล่างทั้งหมด
+  ตรงกับพฤติกรรมเดิมก่อนรอบนี้ทุกประการ) และ /mediumterm/60d (baseline ตัวที่สอง — ดู app.py) ต่างกันแค่
+  ชื่อไฟล์ CSV ที่อ่าน + หัวข้อ/title (ตัวเลข/กราฟข้างในคำนวณจากไฟล์ที่โหลดมาเหมือนกันทุกจุด ไม่ต้องแยกโค้ด)
+  ตัวแปรที่ route ส่งมา (ทุกตัว optional มีค่า default ด้านล่างให้ /mediumterm เดิมไม่ต้องส่งอะไรเพิ่มเลย):
+    page_title            — ข้อความ <title> ของแท็บเบราว์เซอร์
+    page_heading          — หัวข้อใหญ่บนสุดของหน้า (มี emoji 📈 นำหน้าอยู่แล้ว)
+    summary_csv_filename  — ชื่อไฟล์ static/data/<...> ของตาราง DMA (ไม่ต้องใส่ path เต็ม)
+    envelope_csv_filename — ชื่อไฟล์ static/data/<...> ของกราฟ popup รายวัน
+#}
+{% block title %}{{ page_title | default("การเปลี่ยนแปลงน้ำเข้า/MNF เทียบ ก.ย. 68 — Smart NRW") }}{% endblock %}
 
 {% block extra_head %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
@@ -108,9 +118,9 @@
 
 {% block content %}
 <div class="container">
-  <div class="section-title">📈 การเปลี่ยนแปลงกราฟน้ำเข้าและ MNF ล่าสุด เทียบเดือน ก.ย. 68</div>
+  <div class="section-title">📈 {{ page_heading | default("การเปลี่ยนแปลงกราฟน้ำเข้าและ MNF ล่าสุด เทียบเดือน ก.ย. 68") }}</div>
   <p class="mt-popup-sub" style="margin-bottom:18px;">
-    เปรียบเทียบค่าเฉลี่ย 7 วันล่าสุด (<span id="mtCurrentWindowLabel">–</span>) กับ baseline เดือน
+    เปรียบเทียบค่าเฉลี่ย 7 วันล่าสุด (<span id="mtCurrentWindowLabel">–</span>) กับ baseline
     <b id="mtBaselineMonthLabel">–</b>
     (ประมวลผลสัปดาห์ละครั้ง : ประมวลผลล่าสุด <span id="mtGeneratedAtLabel">–</span>)
     <br>(คนละระบบกับการจับสัญญาณเฉียบพลัน Case A/B/C ในหน้า "ติดตาม MNF/RTU")
@@ -121,6 +131,14 @@
   <div class="mt-baseline-stale-banner" id="mtBaselineStaleBanner">
     <span id="mtBaselineStaleText"></span>
     <a href="{{ url_for('mediumterm_baseline') }}" class="mt-baseline-stale-link">เปิดการตั้งค่า Baseline</a>
+  </div>
+
+  <!-- ขึ้นเฉพาะตอนยังไม่มีไฟล์ CSV ของ baseline นี้เลย (เช่นหน้า /mediumterm/60d ก่อนรัน
+       fetch_baseline_data.py --days 60 ครั้งแรก) — ดู loadAll() -->
+  <div class="mt-baseline-stale-banner" id="mtNoDataBanner">
+    <span>⚠️ ยังไม่มีข้อมูลสำหรับ baseline นี้ — ต้องสร้าง baseline ก่อนแล้วรอรอบคำนวณสัปดาห์ถัดไป (หรือรัน
+      compute_weekly_trend.py เองอีกครั้ง)</span>
+    <a href="{{ url_for('mediumterm_baseline') }}" class="mt-baseline-stale-link">ไปหน้าตั้งค่า Baseline</a>
   </div>
 
   <div class="mt-toolbar">
@@ -258,8 +276,8 @@
 {% block extra_scripts %}
 <script>
 (function () {
-  const SUMMARY_CSV_URL = "{{ url_for('static', filename='data/mediumterm_dma_summary.csv') }}";
-  const ENVELOPE_CSV_URL = "{{ url_for('static', filename='data/mediumterm_hourly_envelope.csv') }}";
+  const SUMMARY_CSV_URL = "{{ url_for('static', filename='data/' + (summary_csv_filename | default('mediumterm_dma_summary.csv'))) }}";
+  const ENVELOPE_CSV_URL = "{{ url_for('static', filename='data/' + (envelope_csv_filename | default('mediumterm_hourly_envelope.csv'))) }}";
   const BRANCH_MAP_URL = "{{ url_for('mediumterm_rtu_branch_map') }}";
   const REMARKS_LATEST_URL = "{{ url_for('mediumterm_remarks_latest') }}";
   const REMARKS_FOR_RTU_URL = "{{ url_for('mediumterm_remarks_for_rtu', rtu_id='__ID__') }}";
@@ -369,12 +387,16 @@
     return out;
   }
 
+  // กันพัง — ถ้าไฟล์ CSV ยังไม่มี (404) เช่นหน้า /mediumterm/60d ก่อนที่ผู้ใช้จะรัน
+  // fetch_baseline_data.py --days 60 + compute_weekly_trend.py ครั้งแรก คืน [] แทนการ reject ทั้ง
+  // Promise.all() ใน loadAll() (เดิมถ้า reject ตรงนี้ .then() ด้านล่างจะไม่รันเลย หน้าเว็บจะค้างเงียบๆ
+  // ไม่มีข้อความอะไรขึ้นเลย) — loadAll() จะโชว์แบนเนอร์ "ยังไม่มีข้อมูล" แทนถ้าตารางว่างเปล่าแบบนี้
   function parseCsv(url) {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       Papa.parse(url, {
         download: true, header: true, dynamicTyping: true, skipEmptyLines: true,
         complete: (res) => resolve(res.data),
-        error: reject,
+        error: () => resolve([]),
       });
     });
   }
@@ -436,8 +458,14 @@
       const branchMap = { ...branchMapRaw };
       delete branchMap._debug;
 
+      document.getElementById("mtNoDataBanner").classList.toggle("show", summary.length === 0);
+
       const baselineMonth = summary.length ? summary[0].baseline_month : "–";
-      document.getElementById("mtBaselineMonthLabel").textContent = baselineMonth || "–";
+      // โชว์ label สวยๆ จาก baseline_meta.json (เช่น "60 วันล่าสุด (dd/mm/yyyy–dd/mm/yyyy)") แทนค่าดิบ
+      // ในคอลัมน์ baseline_month ของ CSV (เช่น "custom_60d") ถ้าหาไม่เจอใน meta ค่อย fallback เป็นค่าดิบ
+      const baselineLabel = (baselineMeta && baselineMeta[baselineMonth] && baselineMeta[baselineMonth].label)
+        || baselineMonth || "–";
+      document.getElementById("mtBaselineMonthLabel").textContent = baselineLabel;
       checkBaselineFreshness(baselineMeta, baselineMonth);
       // current_window_start/end + generated_at เหมือนกันทุกแถว (คำนวณจาก "วันล่าสุดในข้อมูล" ครั้งเดียว
       // ตอนรัน compute_weekly_trend.py ไม่ได้แยกต่อ DMA) เอาจากแถวแรกพอ

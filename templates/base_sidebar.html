@@ -23,6 +23,8 @@
              class="side-nav-item {{ 'active' if active_page == 'monitoring' }}">ติดตาม MNF/RTU</a>
           <a href="{{ url_for('mediumterm_trend') }}"
              class="side-nav-item {{ 'active' if active_page == 'mediumterm' }}">ติดตาม MNF เทียบ ก.ย. 68</a>
+          <a href="{{ url_for('mediumterm_60d_trend') }}"
+             class="side-nav-item {{ 'active' if active_page == 'mediumterm_60d' }}">ติดตาม MNF เทียบย้อนหลัง 60 วัน</a>
           <a href="{{ url_for('mediumterm_baseline') }}"
              class="side-nav-item {{ 'active' if active_page == 'mediumterm_baseline' }}">⚙️ ตั้งค่า Baseline</a>
           <a href="{{ url_for('incident_tree') }}"
@@ -75,6 +77,8 @@
              class="side-nav-item {{ 'active' if active_page == 'monitoring' }}">ติดตาม MNF/RTU</a>
           <a href="{{ url_for('mediumterm_trend') }}"
              class="side-nav-item {{ 'active' if active_page == 'mediumterm' }}">ติดตาม MNF เทียบ ก.ย. 68</a>
+          <a href="{{ url_for('mediumterm_60d_trend') }}"
+             class="side-nav-item {{ 'active' if active_page == 'mediumterm_60d' }}">ติดตาม MNF เทียบย้อนหลัง 60 วัน</a>
           <a href="{{ url_for('mediumterm_baseline') }}"
              class="side-nav-item {{ 'active' if active_page == 'mediumterm_baseline' }}">⚙️ ตั้งค่า Baseline</a>
         </div>

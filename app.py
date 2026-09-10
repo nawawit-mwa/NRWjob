@@ -157,6 +157,40 @@ def mediumterm_trend():
     )
 
 
+# baseline_id ตัวที่สอง (ต้องตรงกับ "secondary_baseline_id" ใน output/config.json ที่เครื่อง
+# NRW_MediumTerm ทุกตัวอักษร — ไฟล์ static ชื่อ mediumterm_dma_summary{SECONDARY_BASELINE_SUFFIX}.csv /
+# mediumterm_hourly_envelope{SECONDARY_BASELINE_SUFFIX}.csv ถูกเขียนโดย compute_weekly_trend.py ตาม
+# output_suffix_for() ของมันเอง — ถ้าผู้ใช้เปลี่ยน secondary_baseline_id ที่เครื่องเป็นค่าอื่น (เช่นอยาก
+# เปลี่ยนจาก 60 วันเป็น 45 วัน) ต้องมาแก้ค่านี้ในโค้ดเว็บด้วย เพราะ Render อ่าน config.json ที่เครื่องผู้ใช้
+# ไม่ได้ (คนละเครื่องกัน — ข้อจำกัดสถาปัตยกรรมเดียวกับที่เมนู "ติดตาม MNF เทียบ ก.ย. 68" เป็น hardcode string
+# อยู่แล้ว ดู nrw-medium-term-trend-monitoring-design.md)
+SECONDARY_BASELINE_SUFFIX = "_custom_60d"
+
+
+@app.route("/mediumterm/60d")
+def mediumterm_60d_trend():
+    """หน้าเดียวกับ mediumterm_trend() ทุกประการ (ใช้เทมเพลต mediumterm.html ร่วมกัน) แค่ชี้ไปอ่านไฟล์ CSV
+    ของ baseline ตัวที่สอง (rolling 60 วันล่าสุด) แทน — เพิ่มขึ้นตามที่ผู้ใช้ขอ (2026-09 รอบ 5) ให้มีเมนู
+    "ติดตาม MNF เทียบย้อนหลัง 60 วัน" แสดงคู่กับ "ติดตาม MNF เทียบ ก.ย. 68" เดิมพร้อมกันถาวร ไม่ใช่สลับกัน
+    ไปมาแบบแผงตั้งค่า Baseline (นั่นยังคงไว้สำหรับกรณีอยากเปลี่ยน baseline หลักของหน้า /mediumterm เอง)"""
+    user = get_optional_user()
+    can_add_remark = True
+
+    branch_groups = sc.get_all_records("BranchGroups")
+    branches = sc.get_all_records("Branches")
+
+    return render_template(
+        "mediumterm.html", user=user, active_page="mediumterm_60d",
+        can_add_remark=can_add_remark,
+        branch_groups=branch_groups, branches=branches,
+        reason_categories=trend_remark_service.REASON_CATEGORIES,
+        page_title="การเปลี่ยนแปลงน้ำเข้า/MNF เทียบย้อนหลัง 60 วัน — Smart NRW",
+        page_heading="การเปลี่ยนแปลงกราฟน้ำเข้าและ MNF ล่าสุด เทียบย้อนหลัง 60 วัน",
+        summary_csv_filename=f"mediumterm_dma_summary{SECONDARY_BASELINE_SUFFIX}.csv",
+        envelope_csv_filename=f"mediumterm_hourly_envelope{SECONDARY_BASELINE_SUFFIX}.csv",
+    )
+
+
 @app.route("/mediumterm/baseline")
 def mediumterm_baseline():
     """หน้าตั้งค่า Baseline แยกต่างหาก (2026-09 รอบ 4) — เดิมเป็นแผงพับเก็บอยู่ในหน้า mediumterm.html
