@@ -70,9 +70,10 @@
     Baseline คือช่วงข้อมูลที่ใช้เป็น "ค่าปกติ" สำหรับเทียบกับค่าเฉลี่ย 7 วันล่าสุด — ตอนนี้มี 2 หน้าแสดงผล
     พร้อมกันถาวร: <a href="{{ url_for('mediumterm_trend') }}">ติดตาม MNF เทียบ ก.ย. 68</a> (baseline หลัก
     เดือนปฏิทิน ตรึงค่าตลอดกาล — ปรับได้จากแผงด้านล่างถ้าอยากเปลี่ยนไปเทียบเดือนอื่น) และ
-    <a href="{{ url_for('mediumterm_60d_trend') }}">ติดตาม MNF เทียบย้อนหลัง 60 วัน</a> (baseline แบบ
-    "N วันย้อนหลัง" — rolling ต้องรีเฟรชเองเป็นระยะ) หน้านี้ใช้ดูรายการ baseline ที่มีทั้งหมด ดูวิธีตั้งเป็น
-    baseline หลักของหน้าแรก และสร้างคำสั่งสำหรับสร้าง/รีเฟรช baseline แบบ rolling ใหม่ —
+    <a href="{{ url_for('mediumterm_60d_trend') }}">ติดตาม MNF ช่วง 60 วัน</a> (baseline แบบเฉลี่ยช่วงที่เว้น
+    จากวันปัจจุบัน — rolling ต้องรีเฟรชเองเป็นระยะ) หน้านี้ไม่มีเมนูลิงก์ตรงในแถบข้างแล้ว (เข้าถึงได้จากลิงก์
+    ในหน้าแสดงผลทั้งสองหน้าแทน) ใช้ดูรายการ baseline ที่มีทั้งหมด ดูวิธีตั้งเป็น baseline หลักของหน้าแรก
+    และสร้างคำสั่งสำหรับสร้าง/รีเฟรช baseline แบบ rolling ใหม่ —
     <b>ไม่ได้ดึงข้อมูลจาก Oracle จากหน้าเว็บนี้โดยตรง</b> (กันหน้าเว็บค้าง/Flask timeout) เป็นเพียงตัวสร้าง
     คำสั่งให้คัดลอกไปรันเองที่เครื่อง NRW_MediumTerm
   </p>
@@ -94,17 +95,18 @@
   </div>
 
   <div class="mt-baseline-panel">
-    <h2>สร้าง/รีเฟรช Baseline แบบ Rolling ใหม่</h2>
+    <h2>สร้าง/รีเฟรช Baseline "ช่วง 60 วัน"</h2>
     <div class="mt-meta" style="margin-bottom:12px;">
-      เช่น 60 วันล่าสุด — เลือกจำนวนวัน/วันที่สิ้นสุดด้านล่าง แล้วกด "สร้างคำสั่ง" เพื่อได้คำสั่งไปรันเองที่เครื่อง
-      (ไม่ได้รันจากหน้าเว็บนี้โดยตรง)
+      Baseline นี้คิดจากค่าเฉลี่ยของช่วงที่เว้นจากวันปัจจุบัน (เช่น ค่าเฉลี่ยของวันที่ -75 ถึง -45 นับจากวันนี้
+      — เว้นข้อมูล 45 วันล่าสุดที่อาจยังไม่นิ่งออกไป) ระบุ "เริ่มนับจากกี่วันที่แล้ว" ต้องมากกว่า "ถึงกี่วันที่แล้ว"
+      เสมอ แล้วกด "สร้างคำสั่ง" เพื่อได้คำสั่งไปรันเองที่เครื่อง (ไม่ได้รันจากหน้าเว็บนี้โดยตรง)
     </div>
     <div class="mt-baseline-form">
-      <label>จำนวนวันย้อนหลัง
-        <input type="number" id="mtBaselineDays" value="60" min="10" max="120">
+      <label>เริ่มนับจากกี่วันที่แล้ว
+        <input type="number" id="mtBaselineOffsetStart" value="75" min="1" max="365">
       </label>
-      <label>วันที่สิ้นสุด (ค่าเริ่มต้น = เมื่อวาน)
-        <input type="date" id="mtBaselineEnd">
+      <label>ถึงกี่วันที่แล้ว
+        <input type="number" id="mtBaselineOffsetEnd" value="45" min="0" max="364">
       </label>
       <button type="button" class="mt-popup-nav-btn" id="mtBaselineGenBtn">สร้างคำสั่ง</button>
     </div>
@@ -259,27 +261,29 @@
     });
   }
 
-  // ค่าเริ่มต้นวันที่สิ้นสุด = เมื่อวาน (ข้อมูลของ "วันนี้" ยังไม่เต็มวันจริง ไม่ควรรวมใน baseline)
-  (function setDefaultBaselineEndDate() {
-    const d = new Date();
-    d.setDate(d.getDate() - 1);
-    const iso = d.toISOString().slice(0, 10);
-    document.getElementById("mtBaselineEnd").value = iso;
-  })();
-
   document.getElementById("mtBaselineGenBtn").addEventListener("click", () => {
-    const daysInput = document.getElementById("mtBaselineDays");
-    const days = parseInt(daysInput.value, 10) || 60;
-    const endStr = document.getElementById("mtBaselineEnd").value;
-    const cmd = `python fetch_baseline_data.py --days ${days}${endStr ? ` --end ${endStr}` : ""}`;
+    const offsetStartInput = document.getElementById("mtBaselineOffsetStart");
+    const offsetEndInput = document.getElementById("mtBaselineOffsetEnd");
+    const offsetStart = parseInt(offsetStartInput.value, 10) || 75;
+    const offsetEnd = parseInt(offsetEndInput.value, 10) || 45;
+    if (offsetStart <= offsetEnd) {
+      document.getElementById("mtBaselineCmdText").textContent = "";
+      document.getElementById("mtBaselineSteps").innerHTML =
+        `⚠️ "เริ่มนับจากกี่วันที่แล้ว" (${offsetStart}) ต้องมากกว่า "ถึงกี่วันที่แล้ว" (${offsetEnd}) — แก้ตัวเลข ` +
+        `แล้วกด "สร้างคำสั่ง" อีกครั้ง`;
+      document.getElementById("mtBaselineCmdBox").classList.add("show");
+      return;
+    }
+    const cmd = `python fetch_baseline_data.py --offset-start ${offsetStart} --offset-end ${offsetEnd}`;
     document.getElementById("mtBaselineCmdText").textContent = cmd;
     document.getElementById("mtBaselineSteps").innerHTML =
       `1) เปิด command prompt ที่โฟลเดอร์ <code>NRW_MediumTerm</code> แล้ววางคำสั่งด้านบนรัน (ดึงข้อมูลจริงจาก ` +
       `Oracle ใช้เวลาสักครู่)<br>` +
-      `2) แก้ <code>output/config.json</code> ตั้ง <code>"baseline_month": "custom_${days}d"</code> ` +
-      `(ชื่อ id จะคงที่แบบนี้เสมอไม่ว่าจะรันกี่รอบ ไม่ต้องแก้ค่านี้ซ้ำในรอบถัดไป)<br>` +
+      `2) คำสั่งนี้ได้ baseline_id ชื่อ <code>custom_60d</code> เสมอ (ค่า default ตรงกับ ` +
+      `<code>secondary_baseline_id</code> ที่ตั้งไว้อยู่แล้วสำหรับหน้า "ติดตาม MNF ช่วง 60 วัน" — ไม่ต้องแก้ ` +
+      `<code>output/config.json</code> เพิ่มสำหรับกรณีปกติ)<br>` +
       `3) รัน <code>python compute_weekly_trend.py</code> อีกครั้ง (หรือรอรอบ Task Scheduler รายสัปดาห์ถัดไป) ` +
-      `เพื่อให้ตาราง/กราฟหน้า "ติดตาม MNF เทียบ ก.ย. 68" อัปเดตตาม baseline ใหม่<br>` +
+      `เพื่อให้ตาราง/กราฟหน้า "ติดตาม MNF ช่วง 60 วัน" อัปเดตตาม baseline ใหม่<br>` +
       `แนะนำ: รันคำสั่งข้อ 1 ซ้ำทุกสัปดาห์ — baseline แบบ rolling นี้ไม่ผูก Task Scheduler อัตโนมัติ ต้องรีเฟรชเอง ` +
       `(ต่างจาก baseline เดือนปิดที่รันครั้งเดียวพอ)`;
     document.getElementById("mtBaselineCmdBox").classList.add("show");

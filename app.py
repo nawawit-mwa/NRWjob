@@ -170,9 +170,16 @@ SECONDARY_BASELINE_SUFFIX = "_custom_60d"
 @app.route("/mediumterm/60d")
 def mediumterm_60d_trend():
     """หน้าเดียวกับ mediumterm_trend() ทุกประการ (ใช้เทมเพลต mediumterm.html ร่วมกัน) แค่ชี้ไปอ่านไฟล์ CSV
-    ของ baseline ตัวที่สอง (rolling 60 วันล่าสุด) แทน — เพิ่มขึ้นตามที่ผู้ใช้ขอ (2026-09 รอบ 5) ให้มีเมนู
-    "ติดตาม MNF เทียบย้อนหลัง 60 วัน" แสดงคู่กับ "ติดตาม MNF เทียบ ก.ย. 68" เดิมพร้อมกันถาวร ไม่ใช่สลับกัน
-    ไปมาแบบแผงตั้งค่า Baseline (นั่นยังคงไว้สำหรับกรณีอยากเปลี่ยน baseline หลักของหน้า /mediumterm เอง)"""
+    ของ baseline ตัวที่สอง (rolling "60 วัน") แทน — เพิ่มขึ้นตามที่ผู้ใช้ขอ (2026-09 รอบ 5) ให้มีเมนู
+    "ติดตาม MNF ช่วง 60 วัน" แสดงคู่กับ "ติดตาม MNF เทียบ ก.ย. 68" เดิมพร้อมกันถาวร ไม่ใช่สลับกันไปมาแบบแผง
+    ตั้งค่า Baseline (นั่นยังคงไว้สำหรับกรณีอยากเปลี่ยน baseline หลักของหน้า /mediumterm เอง แค่ไม่มีเมนูลิงก์
+    ตรงในแถบข้างแล้วตามที่ผู้ใช้ขอ 2026-09 รอบ 6 — เข้าถึงได้ผ่านลิงก์ในหน้า mediumterm.html เอง)
+
+    2026-09 รอบ 6: เปลี่ยนชื่อหัวข้อจาก "เทียบย้อนหลัง 60 วัน" เป็น "ช่วง 60 วัน" เพราะ baseline ตัวนี้ไม่ใช่
+    ค่าเฉลี่ยของ 60 วันล่าสุดต่อเนื่องอีกต่อไป (เปลี่ยนวิธีคำนวณเป็นเฉลี่ยช่วง -75 ถึง -45 วันจากวันนี้แทน —
+    ดู fetch_baseline_data.py --offset-start/--offset-end) ป้ายกำกับที่แม่นยำกว่าจึงมาจาก baseline_meta.json
+    (label ต่อ baseline_id) ซึ่งหน้า mediumterm.html อ่านมาแสดงเองอยู่แล้ว ส่วน page_title/page_heading ที่นี่
+    เป็นแค่หัวข้อกว้างๆ ของหน้า"""
     user = get_optional_user()
     can_add_remark = True
 
@@ -184,8 +191,8 @@ def mediumterm_60d_trend():
         can_add_remark=can_add_remark,
         branch_groups=branch_groups, branches=branches,
         reason_categories=trend_remark_service.REASON_CATEGORIES,
-        page_title="การเปลี่ยนแปลงน้ำเข้า/MNF เทียบย้อนหลัง 60 วัน — Smart NRW",
-        page_heading="การเปลี่ยนแปลงกราฟน้ำเข้าและ MNF ล่าสุด เทียบย้อนหลัง 60 วัน",
+        page_title="การเปลี่ยนแปลงน้ำเข้า/MNF ช่วง 60 วัน — Smart NRW",
+        page_heading="การเปลี่ยนแปลงกราฟน้ำเข้าและ MNF ล่าสุด ช่วง 60 วัน",
         summary_csv_filename=f"mediumterm_dma_summary{SECONDARY_BASELINE_SUFFIX}.csv",
         envelope_csv_filename=f"mediumterm_hourly_envelope{SECONDARY_BASELINE_SUFFIX}.csv",
     )
