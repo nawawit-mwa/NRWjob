@@ -332,8 +332,19 @@ def create_pbc_blueprint(login_required=None, current_user_fn=None,
                     "ended": elapsed > total,
                 }
 
+        # ความสดของข้อมูล MNF ใช้บอกผู้ใช้ว่าต้องรันสคริปต์ใหม่หรือยัง
+        rtu_dates = [v.get("last_date") for v in rtu.values() if v.get("last_date")]
+        rtu_info = {
+            "n_dma": len(dmas),
+            "n_with_data": sum(1 for v in rtu.values()
+                               if v.get("mnf_current") is not None),
+            "last_date": max(rtu_dates) if rtu_dates else None,
+            "oldest_date": min(rtu_dates) if rtu_dates else None,
+        }
+
         months_available = months_all
         return {
+            "rtu_info": rtu_info,
             "progress": progress,
             "milestones": milestones,
             "pressure": pressure,

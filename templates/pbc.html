@@ -154,6 +154,12 @@
 .pbc-page tr.ms-fail td{background:#fbe9e4}
 .pbc-page tr.ms-pass:hover td{background:#d3efd0}
 .pbc-page tr.ms-fail:hover td{background:#f7ddd6}
+.pbc-page .pbc-code{background:#f2f6fa;border:1px solid var(--line);
+  border-radius:6px;padding:9px 12px;font-family:Consolas,Menlo,monospace;
+  font-size:.8rem;white-space:pre;overflow-x:auto;color:var(--mwa-navy-deep)}
+.pbc-page #helpBody h2{font-size:.92rem;margin:16px 0 4px;
+  color:var(--mwa-navy-deep)}
+.pbc-page #helpBody p{margin:4px 0 8px;font-size:.85rem}
 .pbc-page .loading{color:var(--ink-soft);padding:26px;text-align:center}
 </style>
 {% endblock %}
@@ -166,6 +172,10 @@
     <div>
       <h1>ติดตามพื้นที่ PBC</h1>
       <div class="sub" id="contractSub">กำลังโหลด...</div>
+        <div class="sub" style="margin-top:4px">
+          <a href="#" id="helpLink">วิธีอัปเดตข้อมูลหน้านี้</a>
+          <span class="dim" id="mnfFreshness"></span>
+        </div>
     </div>
     <div style="display:flex;gap:8px;align-items:center">
       <select id="contractSelect"></select>
@@ -312,6 +322,16 @@
 </div>
 
 <!-- ------------------ popup ราย DMA ------------------ -->
+<div class="modal" id="helpModal">
+  <div class="modal-inner" style="max-width:720px">
+    <div class="modal-head">
+      <h3>วิธีอัปเดตข้อมูลหน้านี้</h3>
+      <button id="helpClose">ปิด</button>
+    </div>
+    <div id="helpBody"></div>
+  </div>
+</div>
+
 <div class="modal" id="dmaModal">
   <div class="modal-inner">
     <div class="modal-head">
@@ -499,6 +519,7 @@ function render(){
     c.contract_no + " · " + c.branch_name + " · เริ่ม " + c.start_month +
     " · " + DATA.n_dma + " พื้นที่เฝ้าระวัง";
   renderCards();
+  renderHelp();
   renderContractInfo();
   renderMilestones();
   renderWork();
@@ -506,6 +527,53 @@ function render(){
   renderDmaTable();
   renderBarChart();
   renderTargets();
+}
+
+function renderHelp(){
+  var info = DATA.rtu_info || {};
+  var fresh = $("mnfFreshness");
+  if(info.last_date){
+    // เตือนเมื่อข้อมูล MNF เก่ากว่า 3 วัน เพราะสคริปต์ควรรันรายวัน
+    var days = Math.floor(
+      (Date.now() - new Date(info.last_date + "T00:00:00").getTime()) / 86400000);
+    fresh.innerHTML = " · MNF ล่าสุด " + thaiDate(info.last_date) +
+      " (" + info.n_with_data + " จาก " + info.n_dma + " DMA)" +
+      (days >= 3 ? ' <span class="num-warn">ข้อมูลเก่า ' + days + ' วัน</span>' : "");
+  } else {
+    fresh.innerHTML = ' · <span class="num-warn">ยังไม่มีข้อมูล MNF</span>';
+  }
+
+  var hasMnf = !!info.last_date;
+  var html =
+    '<div class="msg show ' + (hasMnf ? "info" : "err") + '">' +
+    "<b>ข้อมูล MNF</b> — " +
+    (hasMnf
+      ? ("อัปเดตล่าสุด " + thaiDate(info.last_date) + " มีข้อมูล " +
+         info.n_with_data + " จาก " + info.n_dma + " DMA")
+      : "ยังไม่มีข้อมูล คอลัมน์ MNF จะว่างและกราฟ 15 นาทีจะไม่มีเส้น") +
+    "</div>" +
+
+    "<p>ข้อมูลในหน้านี้มาจาก 2 แหล่ง อัปเดตคนละวิธี</p>" +
+
+    "<h2>1. ข้อมูลรายเดือน (ตัวที่ใช้วัดผลตามสัญญา)</h2>" +
+    "<p>ปริมาณน้ำเข้า น้ำออกบิล น้ำอื่นๆ และแรงดัน กรอกในตาราง " +
+    "<b>MonthlyRaw</b> ของ Google Sheet ชื่อ NRW_PBC โดยตรง " +
+    "หนึ่งแถวต่อหนึ่ง DMA ต่อหนึ่งเดือน</p>" +
+    "<p class='dim'>แก้ตัวเลขที่กรอกผิด ให้เพิ่มแถวใหม่ต่อท้ายแทนการลบของเดิม " +
+    "ระบบใช้แถวล่างสุดของแต่ละคู่ DMA กับเดือนเสมอ</p>" +
+
+    "<h2>2. ข้อมูล MNF และกราฟ 15 นาที (ใช้เฝ้าระวัง)</h2>" +
+    "<p>มาจากข้อมูล RTU ต้องรันสคริปต์ที่เครื่อง BI</p>" +
+    "<pre class='pbc-code'>cd C:\\NEW_PBC\npython compute_pbc_daily.py</pre>" +
+    "<p>แล้ว commit และ push โฟลเดอร์ <b>C:\\NRWjob</b> เพื่อให้ไฟล์ขึ้นเว็บจริง " +
+    "ควรรันวันละครั้ง</p>" +
+    "<p class='dim'>ถ้ารันแล้วตัวเลขยังไม่ขึ้น ให้ดูบรรทัด " +
+    "\"ข้อมูลที่ใช้:\" ในผลลัพธ์ว่าจับ DMA ได้กี่ตัว " +
+    "ถ้าเป็น 0 แปลว่ารหัสใน config\\dma_meter_map.csv ไม่ตรงกับรหัสใน MonthlyRaw</p>" +
+
+    "<p class='dim'>ตัวเลขอัตราน้ำสูญเสียและผลการวัดตามสัญญา " +
+    "ไม่ได้ใช้ข้อมูล RTU เลย ต่อให้ยังไม่ได้รันสคริปต์ ตัวเลขตามสัญญาก็ถูกต้อง</p>";
+  $("helpBody").innerHTML = html;
 }
 
 function renderContractInfo(){
@@ -1379,6 +1447,16 @@ function bindEvents(){
     recalcTargets();
   });
   $("btnSaveTargets").addEventListener("click", saveTargets);
+  $("helpLink").addEventListener("click", function(e){
+    e.preventDefault();
+    $("helpModal").classList.add("open");
+  });
+  $("helpClose").addEventListener("click", function(){
+    $("helpModal").classList.remove("open");
+  });
+  $("helpModal").addEventListener("click", function(e){
+    if(e.target === $("helpModal")) $("helpModal").classList.remove("open");
+  });
   $("mClose").addEventListener("click", function(){
     $("dmaModal").classList.remove("open");
   });
@@ -1386,7 +1464,10 @@ function bindEvents(){
     if(e.target === $("dmaModal")) $("dmaModal").classList.remove("open");
   });
   document.addEventListener("keydown", function(e){
-    if(e.key === "Escape") $("dmaModal").classList.remove("open");
+    if(e.key === "Escape"){
+      $("dmaModal").classList.remove("open");
+      $("helpModal").classList.remove("open");
+    }
   });
   if($("mRemarkSave")) $("mRemarkSave").addEventListener("click", saveRemark);
   $("btnSaveWork").addEventListener("click", saveWork);
