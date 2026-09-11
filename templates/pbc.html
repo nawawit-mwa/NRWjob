@@ -231,7 +231,7 @@
           <thead><tr>
             <th>พื้นที่</th><th>น้ำเข้า</th><th>น้ำจำหน่าย</th><th>น้ำสูญเสีย</th>
             <th>อัตรา %</th><th>MNF ปัจจุบัน</th><th>พื้นค่า MNF</th>
-            <th>แรงดันกลางคืน (ม.)</th><th>สถานะ</th>
+            <th>แรงดันเฉลี่ย (ม.)</th><th>สถานะ</th>
           </tr></thead>
           <tbody></tbody>
         </table>
@@ -371,7 +371,7 @@
       <table id="mHistory">
         <thead><tr>
           <th>เดือน</th><th>น้ำเข้า</th><th>น้ำจำหน่าย</th><th>น้ำอื่นๆ</th>
-          <th>สูญเสีย</th><th>อัตรา %</th><th>แรงดันกลางคืน</th>
+          <th>สูญเสีย</th><th>อัตรา %</th><th>แรงดันเฉลี่ย (ม.)</th>
         </tr></thead>
         <tbody></tbody>
       </table>
@@ -892,7 +892,7 @@ function renderDmaTable(){
       '<td class="' + rateCls + '">' + num(r.loss_rate,2) + '</td>' +
       '<td>' + num(r.mnf_current,1) + '</td>' +
       '<td class="dim">' + num(r.mnf_floor,1) + '</td>' +
-      '<td>' + num(r.avg_pressure_night,2) + '</td>' +
+      '<td>' + num(r.avg_pressure_24h,2) + '</td>' +
       '<td style="text-align:center">' + tags + '</td></tr>';
   }).join("");
 
@@ -1239,7 +1239,6 @@ function drawMonthlyCharts(history){
   var pv = [];
   h.forEach(function(x){
     if(x.avg_pressure_24h != null) pv.push(x.avg_pressure_24h);
-    if(x.avg_pressure_night != null) pv.push(x.avg_pressure_night);
   });
   if(base != null) pv.push(base);
   pv.push(10);                                  // เส้นเกณฑ์ 10 เมตรของ กปน.
@@ -1254,7 +1253,7 @@ function drawMonthlyCharts(history){
   pds.push({label:"เกณฑ์ 10 เมตร", data: labels.map(function(){ return 10; }),
     borderColor:"rgba(92,116,136,.45)", borderDash:[2,4], borderWidth:1,
     pointRadius:0, fill:false});
-  pds.push({label:"เฉลี่ย 24 ชม.",
+  pds.push({label:"แรงดันเฉลี่ย 24 ชม.",
     data: h.map(function(x){ return x.avg_pressure_24h; }),
     borderColor:C.teal, borderWidth:2.4, fill:false, spanGaps:true,
     // เดือนที่ต่ำกว่าฐานทำจุดสีแดงให้เห็นชัด
@@ -1264,10 +1263,6 @@ function drawMonthlyCharts(history){
     pointBackgroundColor: h.map(function(x){
       return (base != null && x.avg_pressure_24h != null &&
               x.avg_pressure_24h < base) ? C.red : C.teal; })});
-  pds.push({label:"เฉลี่ยกลางคืน",
-    data: h.map(function(x){ return x.avg_pressure_night; }),
-    borderColor:C.amber, borderWidth:1.6, borderDash:[3,3],
-    pointRadius:0, fill:false, spanGaps:true});
 
   if(CHARTS.presMonth) CHARTS.presMonth.destroy();
   CHARTS.presMonth = new Chart($("mPressureMonthChart"), {
@@ -1309,7 +1304,7 @@ function drawHistory(history){
       cell("other_m3", h.other_m3) +
       '<td>' + num(h.loss_m3) + '</td>' +
       '<td>' + num(h.loss_rate,2) + '</td>' +
-      '<td>' + num(h.avg_pressure_night,2) + '</td></tr>';
+      '<td>' + num(h.avg_pressure_24h,2) + '</td></tr>';
   }).join("");
 }
 
