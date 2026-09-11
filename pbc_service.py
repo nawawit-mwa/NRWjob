@@ -17,6 +17,7 @@ pbc_service.py — ชั้นข้อมูลของโมดูลติ�
 import csv
 import io
 import json
+import re
 import os
 import threading
 import time
@@ -176,6 +177,51 @@ def normalize_month(value):
     return "%s-%02d" % (m.group(1), mon)
 
 
+_MONTH_RE = re.compile(r"^\s*(\d{4})[-/](\d{1,2})")
+_SLASH_RE = re.compile(r"^\s*(\d{1,2})[-/](\d{1,2})[-/](\d{4})")
+
+
+def normalize_month(value):
+    """
+    แปลงค่าที่อ่านจาก Sheet ให้เป็นรูปแบบ YYYY-MM เสมอ
+
+    Google Sheets มักตีความ "2025-07" เป็นวันที่ แล้วส่งกลับมาเป็น
+    "2025-07-01" หรือ "7/1/2025" ตามรูปแบบที่ตั้งไว้
+    ถ้าไม่แปลงก่อน การคำนวณเลขเดือนของสัญญาจะพังทั้งหน้า
+
+    คืนสตริงว่างถ้าแปลงไม่ได้ ผู้เรียกต้องเช็คเอง
+    """
+    if value is None:
+        return ""
+    text = str(value).strip()
+    if not text:
+        return ""
+    m = _MONTH_RE.match(text)
+    if m:
+        return "%04d-%02d" % (int(m.group(1)), int(m.group(2)))
+    m = _SLASH_RE.match(text)
+    if m:
+        # รูปแบบมีสแลชและปีอยู่ท้าย ตีความตามค่าเริ่มต้นของ Sheets คือ เดือน/วัน/ปี
+        return "%04d-%02d" % (int(m.group(3)), int(m.group(1)))
+    return ""
+
+
+def normalize_date(value):
+    """แปลงวันที่ให้เป็น YYYY-MM-DD ตัดเวลาออก คืนค่าเดิมถ้าแปลงไม่ได้"""
+    if value is None:
+        return ""
+    text = str(value).strip()
+    if not text:
+        return ""
+    m = re.match(r"^(\d{4})[-/](\d{1,2})[-/](\d{1,2})", text)
+    if m:
+        return "%04d-%02d-%02d" % (int(m.group(1)), int(m.group(2)), int(m.group(3)))
+    m = _SLASH_RE.match(text)
+    if m:
+        return "%04d-%02d-%02d" % (int(m.group(3)), int(m.group(1)), int(m.group(2)))
+    return text
+
+
 def month_add(month, delta):
     """'2026-07' + 2 -> '2026-09'"""
     norm = normalize_month(month)
@@ -243,7 +289,7 @@ def list_contracts(branch_codes=None):
             "area_name": r.get("area_name", ""),
             "branch_code": r.get("branch_code", ""),
             "branch_name": r.get("branch_name", ""),
-            "start_month": r.get("start_month", ""),
+            "start_month": normalize_month(r.get("start_month")),
             "duration_days": to_int(r.get("duration_days"), 0),
             "baseline_rate_x": to_float(r.get("baseline_rate_x")),
             "mnf_hours_per_day": to_float(
@@ -252,8 +298,8 @@ def list_contracts(branch_codes=None):
             "status": r.get("status", ""),
             "note": r.get("note", ""),
             "contractor_name": r.get("contractor_name", ""),
-            "start_date": r.get("start_date", ""),
-            "end_date": r.get("end_date", ""),
+            "start_date": normalize_date(r.get("start_date")),
+            "end_date": normalize_date(r.get("end_date")),
             "baseline_pressure_m": to_float(r.get("baseline_pressure_m")),
         })
     return out
@@ -296,8 +342,8 @@ def get_contract_dmas(contract_id, month=None):
         if not code:
             continue
         if month:
-            eff_from = (r.get("effective_from") or "").strip()
-            eff_to = (r.get("effective_to") or "").strip()
+            eff_from = normalize_month(r.get("effective_from"))
+            eff_to = normalize_month(r.get("effective_to"))
             if eff_from and month < eff_from:
                 continue
             if eff_to and month > eff_to:

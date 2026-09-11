@@ -74,6 +74,22 @@ def create_pbc_blueprint(login_required=None, current_user_fn=None,
         """รวบรวมทุกอย่างที่หน้าจอต้องใช้ในการเรียกครั้งเดียว"""
         cid = contract["contract_id"]
         start = contract["start_month"]
+        if not start:
+            # ยังไม่ได้กรอกเดือนเริ่มสัญญา คำนวณอะไรไม่ได้เลย
+            # แจ้งให้เห็นบนหน้าจอแทนที่จะพังทั้งหน้า
+            return {
+                "contract": contract, "targets": [], "rolling": [], "monthly": [],
+                "interim_line": [], "latest": None, "next_target": None,
+                "forecast": {"level": "none", "message": "", "points": []},
+                "outlook": None, "dma_rows": [], "milestones": [], "pressure": None,
+                "work_latest": None, "work_total": {}, "progress": None,
+                "breakdown": {"rows": [], "summary": None, "measure_month_no": None},
+                "months_available": [], "months_label": [],
+                "n_dma": len(SVC.get_contract_dmas(cid)), "n_dma_no_rtu": 0,
+                "data_issues": [],
+                "setup_error": "ยังไม่ได้กรอกเดือนเริ่มสัญญา (start_month) "
+                               "ในตาราง Contracts — ต้องเป็นรูปแบบ YYYY-MM",
+            }
         hours = contract["mnf_hours_per_day"] or CFG.DEFAULT_MNF_HOURS_PER_DAY
 
         dmas = [d["dma_code"] for d in SVC.get_contract_dmas(cid)]

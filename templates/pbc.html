@@ -492,6 +492,9 @@ function load(){
 // ---------------------------------------------------------------- แสดงผล
 function render(){
   var c = DATA.contract;
+  if(DATA.setup_error){
+    $("contractSub").textContent = DATA.setup_error;
+  }
   $("contractSub").textContent =
     c.contract_no + " · " + c.branch_name + " · เริ่ม " + c.start_month +
     " · " + DATA.n_dma + " พื้นที่เฝ้าระวัง";
