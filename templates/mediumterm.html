@@ -113,6 +113,17 @@
   .mt-baseline-stale-link { padding:4px 10px; border:1px solid #cf9a3b; border-radius:6px;
     background:#fff; color:#7a5310; font-family:var(--font-ui); font-size:0.78rem; font-weight:600;
     text-decoration:none; white-space:nowrap; }
+
+  /* ลิงก์ "วิธีอัปเดตข้อมูลหน้านี้" — ขึ้นตลอดเวลา (2026-09 รอบ 7) แทนแบนเนอร์เตือนเฉพาะตอนข้อมูลเก่า
+     ของเดิม (mtBaselineStaleBanner) ที่ผู้ใช้บอกว่าดูรกเมื่อขึ้นเต็มแถบ — ลดเหลือแค่ลิงก์เล็กๆ กดแล้วค่อย
+     เปิด popup อธิบายรายละเอียด (ใช้คลาส .mt-popup-overlay/.mt-popup-box/.mt-popup-close ร่วมกับ popup
+     กราฟ DM ด้านล่าง ไม่ต้องสร้างสไตล์ใหม่) */
+  .mt-update-info-row { margin:0 0 14px; }
+  .mt-update-info-link { font-size:0.82rem; color:var(--mwa-sky); text-decoration:none; font-weight:600; }
+  .mt-update-info-link:hover { text-decoration:underline; }
+  .mt-update-info-body p { margin:0 0 10px; }
+  .mt-update-info-body p:last-child { margin-bottom:0; }
+  .mt-update-info-body code { background:#eef2f6; padding:1px 6px; border-radius:4px; font-size:0.85em; }
 </style>
 {% endblock %}
 
@@ -127,11 +138,12 @@
     <br><a href="{{ url_for('mediumterm_baseline') }}">⚙️ ตั้งค่า / ดูรายการ Baseline ทั้งหมด</a>
   </p>
 
-  <!-- แผงตั้งค่า Baseline ย้ายไปหน้าแยก /mediumterm/baseline แล้ว — เหลือแค่แบนเนอร์เตือนความสด -->
-  <div class="mt-baseline-stale-banner" id="mtBaselineStaleBanner">
-    <span id="mtBaselineStaleText"></span>
-    <a href="{{ url_for('mediumterm_baseline') }}" class="mt-baseline-stale-link">เปิดการตั้งค่า Baseline</a>
-  </div>
+  <!-- แผงตั้งค่า Baseline ย้ายไปหน้าแยก /mediumterm/baseline แล้ว — เหลือลิงก์ "วิธีอัปเดตข้อมูล" ขึ้นตลอดเวลา
+       (2026-09 รอบ 7 — เปลี่ยนจากแบนเนอร์เตือนเฉพาะตอนข้อมูลเก่า ≥7 วัน เป็นลิงก์ลอยตลอด กันหน้าเว็บรก ตามที่
+       ผู้ใช้ขอ) เนื้อหา popup สร้างจาก renderUpdateInfoPopup() ด้านล่าง -->
+  <p class="mt-update-info-row">
+    <a href="#" id="mtUpdateInfoLink" class="mt-update-info-link">ℹ️ วิธีอัปเดตข้อมูลหน้านี้</a>
+  </p>
 
   <!-- ขึ้นเฉพาะตอนยังไม่มีไฟล์ CSV ของ baseline นี้เลย (เช่นหน้า /mediumterm/60d ก่อนรัน
        fetch_baseline_data.py --days 60 ครั้งแรก) — ดู loadAll() -->
@@ -214,6 +226,14 @@
   </div>
 </div>
 
+<div class="mt-popup-overlay" id="mtUpdateInfoOverlay">
+  <div class="mt-popup-box" style="max-width:560px;">
+    <button type="button" class="mt-popup-close" id="mtUpdateInfoClose">✕</button>
+    <h3>วิธีอัปเดตข้อมูลหน้านี้</h3>
+    <div class="mt-update-info-body" id="mtUpdateInfoBody"></div>
+  </div>
+</div>
+
 <div class="mt-popup-overlay" id="mtPopupOverlay">
   <div class="mt-popup-box">
     <button type="button" class="mt-popup-close" id="mtPopupClose">✕</button>
@@ -286,6 +306,7 @@
   // (เขียนใน output/) + compute_weekly_trend.py (คัดลอกไป static/data/ พร้อมไฟล์ mediumterm_*.csv อื่นๆ
   // ตอนรันสัปดาห์ละครั้ง) ยังไม่มีไฟล์นี้ก็ได้ — fetchJsonSafe คืน {} เฉยๆ ไม่ error ทั้งหน้า
   const BASELINE_META_URL = "{{ url_for('static', filename='data/baseline_meta.json') }}";
+  const MEDIUMTERM_BASELINE_URL = "{{ url_for('mediumterm_baseline') }}";
 
   // สี — ใช้ token สีเดียวกับธีมหลักของเว็บ (var(--mwa-green)/--amber/--danger) ไม่ใช่สีสุ่มใหม่
   const COLOR_LABEL = { green: "mt-pill-green", yellow: "mt-pill-yellow", red: "mt-pill-red", gray: "mt-pill-gray" };
@@ -425,21 +446,31 @@
   // (ดู templates/mediumterm_baseline.html) หน้านี้เหลือแค่เช็คว่า baseline แบบ rolling ที่ใช้งานอยู่
   // (เทียบกับ baseline_month จาก mediumterm_dma_summary.csv ที่โหลดอยู่แล้ว) คำนวณมาแล้ว ≥ 7 วันหรือไม่
   // ---------------------------------------------------------------------
-  function checkBaselineFreshness(meta, activeId) {
-    const banner = document.getElementById("mtBaselineStaleBanner");
+  // สร้างเนื้อหา popup "วิธีอัปเดตข้อมูลหน้านี้" — ขึ้นตลอดเวลาไม่ว่า baseline จะเก่าหรือใหม่ (2026-09 รอบ 7
+  // แทนที่ checkBaselineFreshness() เดิมที่โชว์แบนเนอร์เตือนเฉพาะตอน rolling + คำนวณมา ≥ 7 วัน) เนื้อหาแบ่ง
+  // เป็น 2 ส่วนเสมอ: (1) เตือนว่าต้องรัน compute_weekly_trend.py ทุกสัปดาห์ไม่ว่า baseline แบบไหนก็ตาม
+  // (เพราะ "ค่าเฉลี่ย 7 วันล่าสุด" ต้องรีเฟรชเสมอ) (2) เฉพาะ baseline แบบ rolling เพิ่มคำเตือนว่าตัว baseline
+  // เองก็ต้องรีเฟรชเป็นระยะด้วย พร้อมจำนวนวันที่คำนวณมาแล้ว — baseline แบบเดือนปฏิทิน (ปิดตรึงค่าแล้ว) ไม่ต้อง
+  function renderUpdateInfoPopup(meta, activeId, generatedAt) {
     const m = meta && meta[activeId];
-    if (!m || !m.rolling || !m.computed_at) { banner.classList.remove("show"); return; }
-    const computedAt = new Date(String(m.computed_at).replace(" ", "T"));
-    if (isNaN(computedAt.getTime())) { banner.classList.remove("show"); return; }
-    const daysSince = Math.floor((Date.now() - computedAt.getTime()) / 86400000);
-    if (daysSince >= 7) {
-      document.getElementById("mtBaselineStaleText").textContent =
-        `⚠️ Baseline "${m.label || activeId}" ที่ใช้งานอยู่คำนวณล่าสุดเมื่อ ${daysSince} วันที่แล้ว ` +
-        `(เป็น baseline แบบ rolling ควรรันคำสั่งรีเฟรชทุกสัปดาห์ — ไปที่หน้าตั้งค่า Baseline)`;
-      banner.classList.add("show");
+    const label = (m && m.label) || activeId || "–";
+    let html = `<p>ต้องรัน <code>python compute_weekly_trend.py</code> ที่เครื่อง NRW_MediumTerm สัปดาห์ละครั้ง ` +
+      `(ผ่าน Task Scheduler) เพื่อให้ข้อมูลเปรียบเทียบของหน้านี้ (ค่าเฉลี่ย 7 วันล่าสุด) ทันสมัยอยู่เสมอ — ` +
+      `ประมวลผลล่าสุดเมื่อ <b>${generatedAt || "–"}</b></p>`;
+    if (m && m.rolling) {
+      const computedAt = m.computed_at ? new Date(String(m.computed_at).replace(" ", "T")) : null;
+      const daysSince = (computedAt && !isNaN(computedAt.getTime()))
+        ? Math.floor((Date.now() - computedAt.getTime()) / 86400000) : null;
+      html += `<p>Baseline "${label}" ที่ใช้งานอยู่เป็นแบบ <b>rolling</b> — นอกจาก compute_weekly_trend.py ` +
+        `ด้านบนแล้ว ต้องรันคำสั่งรีเฟรชตัวข้อมูล baseline เองเป็นระยะด้วย (คำนวณ baseline ล่าสุดเมื่อ ` +
+        `${daysSince !== null ? daysSince + " วันที่แล้ว" : "ไม่ทราบ"}) ดูคำสั่งที่ต้องรันได้ที่หน้า ` +
+        `<a href="${MEDIUMTERM_BASELINE_URL}">⚙️ ตั้งค่า Baseline</a></p>`;
     } else {
-      banner.classList.remove("show");
+      html += `<p>Baseline "${label}" เป็นเดือนปฏิทินที่ปิดตรึงค่าแล้ว ไม่ต้องรันคำสั่งดึงข้อมูล baseline ใหม่ ` +
+        `(รัน compute_weekly_trend.py ด้านบนอย่างเดียวก็พอ)</p>`;
     }
+    const body = document.getElementById("mtUpdateInfoBody");
+    if (body) body.innerHTML = html;
   }
 
   function loadAll() {
@@ -466,7 +497,6 @@
       const baselineLabel = (baselineMeta && baselineMeta[baselineMonth] && baselineMeta[baselineMonth].label)
         || baselineMonth || "–";
       document.getElementById("mtBaselineMonthLabel").textContent = baselineLabel;
-      checkBaselineFreshness(baselineMeta, baselineMonth);
       // current_window_start/end + generated_at เหมือนกันทุกแถว (คำนวณจาก "วันล่าสุดในข้อมูล" ครั้งเดียว
       // ตอนรัน compute_weekly_trend.py ไม่ได้แยกต่อ DMA) เอาจากแถวแรกพอ
       const first = summary[0] || {};
@@ -475,6 +505,7 @@
           ? `${first.current_window_start} ถึง ${first.current_window_end}` : "–";
       document.getElementById("mtGeneratedAtLabel").textContent =
         first.generated_at ? String(first.generated_at).split(" ")[0] : "–";
+      renderUpdateInfoPopup(baselineMeta, baselineMonth, first.generated_at);
 
       rows = summary.filter(r => r.dma_code).map(r => {
         const b = branchMap[r.dma_code] || {};
@@ -820,6 +851,21 @@
     }
   });
 
+  // popup "วิธีอัปเดตข้อมูลหน้านี้" — เนื้อหาถูกเติมไว้แล้วตอนโหลดข้อมูล (renderUpdateInfoPopup ใน loadAll())
+  // ตรงนี้แค่เปิด/ปิด overlay เหมือน mtPopupOverlay ด้านบนทุกประการ
+  document.getElementById("mtUpdateInfoLink").addEventListener("click", (e) => {
+    e.preventDefault();
+    document.getElementById("mtUpdateInfoOverlay").classList.add("open");
+  });
+  document.getElementById("mtUpdateInfoClose").addEventListener("click", () => {
+    document.getElementById("mtUpdateInfoOverlay").classList.remove("open");
+  });
+  document.getElementById("mtUpdateInfoOverlay").addEventListener("click", (e) => {
+    if (e.target === document.getElementById("mtUpdateInfoOverlay")) {
+      document.getElementById("mtUpdateInfoOverlay").classList.remove("open");
+    }
+  });
+
   const remarkForm = document.getElementById("mtRemarkForm");
   if (remarkForm) {
     remarkForm.addEventListener("submit", (e) => {
@@ -854,7 +900,7 @@
   }
 
   // แผงตั้งค่า Baseline (รายการ baseline / สร้างคำสั่ง fetch_baseline_data.py / วิธีตั้งใช้งาน) ย้ายไปหน้าแยก
-  // /mediumterm/baseline ทั้งหมดแล้ว — เหลือแค่ checkBaselineFreshness() ด้านบนกับลิงก์ในแบนเนอร์/ย่อหน้าแนะนำ
+  // /mediumterm/baseline ทั้งหมดแล้ว — เหลือแค่ renderUpdateInfoPopup() ด้านบนกับลิงก์ในย่อหน้าแนะนำ
 
   loadAll();
 })();

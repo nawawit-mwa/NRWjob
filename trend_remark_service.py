@@ -9,7 +9,7 @@ trend_remark_service.py
 ที่มีอยู่แล้ว เพราะ get_or_create_worksheet สร้างเฉพาะ tab ที่ยังไม่มีเท่านั้น)
 
 หมวดเหตุผล (ReasonCategory) ที่เสนอ — ผู้ใช้เลือกจาก dropdown ในหน้าเว็บ (แก้ list นี้ได้ตามต้องการ):
-    น้ำขายเพิ่ม / ปรับประตูน้ำ DMA / อยู่ขั้นตอน ALC / อื่นๆ
+    น้ำขายเพิ่ม / ปรับประตูน้ำ DMA / อยู่ขั้นตอน ALC / แก้ไขเครื่องวัด / อื่นๆ
 """
 
 from datetime import datetime
@@ -18,7 +18,9 @@ import sheets_client as sc
 
 TREND_REMARK_SHEET_NAME = "TrendRemarks"
 
-REASON_CATEGORIES = ["น้ำขายเพิ่ม", "ปรับประตูน้ำ DMA", "อยู่ขั้นตอน ALC", "อื่นๆ"]
+# เพิ่ม "แก้ไขเครื่องวัด" (2026-09 รอบ 7 ตามที่ผู้ใช้ขอ) — วาง "อื่นๆ" ไว้ท้ายสุดเสมอ (เป็น catch-all
+# ของ save_trend_remark() ด้านล่างถ้าค่าที่ส่งมาไม่ตรงกับหมวดใดเลย)
+REASON_CATEGORIES = ["น้ำขายเพิ่ม", "ปรับประตูน้ำ DMA", "อยู่ขั้นตอน ALC", "แก้ไขเครื่องวัด", "อื่นๆ"]
 
 
 def save_trend_remark(rtu_id: str, reason_category: str, detail: str, recorded_by: str,
