@@ -211,10 +211,15 @@
     </div>
 
     <div class="pbc-panel" id="procPanel">
-      <h2>ความคืบหน้าการจัดจ้าง สัญญาที่ยังไม่ลงนาม</h2>
+      <h2>สัญญาที่ยังไม่ลงนาม</h2>
       <div class="hint" id="procHint"></div>
       <div class="tablewrap" style="max-height:none">
-        <table id="procTable"><thead></thead><tbody></tbody></table>
+        <table id="procTable">
+          <thead><tr>
+            <th>สาขา</th><th>เลขที่สัญญา</th><th>วันที่ลงนามสัญญา</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
       </div>
     </div>
 
@@ -423,24 +428,20 @@ function renderProcurement(){
   var rows = (DATA.contracts || []).filter(function(r){ return !r.started; });
   if(!rows.length){ $("procPanel").style.display = "none"; return; }
   $("procPanel").style.display = "";
-  var steps = DATA.procurement_steps || [];
   $("procHint").textContent =
-    "ขั้นตอนที่แสดงมาจากตาราง ProcurementSteps ใน Google Sheet " +
-    "สัญญาที่ยังไม่มีข้อมูลจะขึ้นเป็นช่องว่าง";
-  $("procTable").querySelector("thead").innerHTML =
-    "<tr><th>สาขา</th><th>เลขที่สัญญา</th>" +
-    steps.map(function(s){ return "<th>" + esc(s) + "</th>"; }).join("") + "</tr>";
+    "วันที่ลงนามมาจากขั้นตอนสุดท้ายในตาราง ProcurementSteps ของ Google Sheet";
   $("procTable").querySelector("tbody").innerHTML = rows.map(function(r){
-    var map = {};
-    (r.procurement||[]).forEach(function(p){ map[p.step_name] = p; });
+    // เอาเฉพาะขั้นตอนสุดท้าย ซึ่งคือการลงนามสัญญาและเริ่มงานได้
+    var last = null;
+    (r.procurement || []).forEach(function(p){
+      if(!last || p.step_order > last.step_order) last = p;
+    });
+    var cell = last
+      ? '<td class="pr-' + esc(last.status) + '">' +
+        esc(last.status_label) + (last.detail ? " " + esc(last.detail) : "") + "</td>"
+      : '<td class="pr-pending">ยังไม่ระบุ</td>';
     return "<tr><td>" + esc(r.branch_name || r.area_name || "-") + "</td>" +
-      "<td>" + esc(r.contract_no) + "</td>" +
-      steps.map(function(name){
-        var p = map[name];
-        if(!p) return '<td class="pr-pending">-</td>';
-        return '<td class="pr-' + esc(p.status) + '">' +
-          esc(p.status_label) + (p.detail ? "<br>" + esc(p.detail) : "") + "</td>";
-      }).join("") + "</tr>";
+      "<td>" + esc(r.contract_no) + "</td>" + cell + "</tr>";
   }).join("");
 }
 
