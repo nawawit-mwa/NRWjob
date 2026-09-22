@@ -20,11 +20,11 @@
         <div class="side-nav-group">
           <div class="side-nav-label">ภาพรวม</div>
           <a href="{{ url_for('monitoring') }}"
-             class="side-nav-item {{ 'active' if active_page == 'monitoring' }}">ติดตาม MNF/RTU</a>
-          <a href="{{ url_for('mediumterm_trend') }}"
-             class="side-nav-item {{ 'active' if active_page == 'mediumterm' }}">ติดตาม MNF เทียบ ก.ย. 68</a>
+             class="side-nav-item {{ 'active' if active_page == 'monitoring' }}">ติดตาม MNF/RTU รายวัน</a>
           <a href="{{ url_for('mediumterm_60d_trend') }}"
              class="side-nav-item {{ 'active' if active_page == 'mediumterm_60d' }}">ติดตาม MNF ช่วง 60 วัน</a>
+          <a href="{{ url_for('mediumterm_trend') }}"
+             class="side-nav-item {{ 'active' if active_page == 'mediumterm' }}">ติดตาม MNF เทียบ ก.ย. 68</a>
           <a href="{{ url_for('incident_tree') }}"
              class="side-nav-item {{ 'active' if active_page == 'incident_tree' }}">ติดตามเหตุการณ์</a>
           <a href="{{ url_for('dashboard') }}"
