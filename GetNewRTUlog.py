@@ -1,6 +1,7 @@
 import subprocess
 import shutil
 import os
+import sys
 import glob
 import json
 import time
@@ -26,6 +27,14 @@ DEFAULT_SHARE_DIRS = r"\\172.19.32.165\apps\NRW_Share;Y:\NRW_Share"
 SERVER_SHARE_DIR = os.environ.get("NRW_SHARE_DIR", DEFAULT_SHARE_DIRS)
 FALLBACK_LOCAL_FETCH = True
 STALE_WARN_HOURS = 26
+
+# Python ที่ใช้เรียกสคริปต์ย่อย — ใช้ตัวเดียวกับที่รันไฟล์นี้อยู่ (sys.executable) แทนคำว่า "python" เฉยๆ
+# เพราะตอน Task Scheduler รัน PATH อาจไม่มี python ทำให้สคริปต์ย่อยไม่ถูกเรียกเลยแต่ task ยังขึ้น 0x0
+# (ถ้ารันจาก GetNewRTUlog.exe ที่ build ด้วย PyInstaller, sys.executable คือตัว exe เอง -> ใช้ "python" ตามเดิม)
+PYTHON_EXE = "python" if getattr(sys, "frozen", False) else (sys.executable or "python")
+
+# log ทุกรอบ (ทั้งข้อความของไฟล์นี้และของสคริปต์ย่อย) — อยู่นอก C:\NRWjob เพื่อไม่ให้ `git add .` เอาขึ้น Render
+LOG_DIR = r"C:\Users\00100156\Desktop\BI\NRW_Monitoring\logs"
 
 # จดว่ารอบล่าสุดหยิบ export_id ไหนมาแล้ว (กันคัดลอกไฟล์ 500MB ซ้ำทุกรอบเมื่อ server ยังไม่มีชุดใหม่)
 PULL_STATE_FILE = r"C:\Users\00100156\Desktop\BI\NRW_Monitoring\server_pull_state.json"
@@ -141,6 +150,61 @@ def pull_from_server(share_dir, dest_csv, dest_parquet, state_path=PULL_STATE_FI
         print(f"⚠️ บันทึก {state_path} ไม่ได้ (รอบหน้าจะคัดลอกซ้ำ ไม่กระทบผลลัพธ์): {e}")
     return "pulled"
 
+
+class _Tee:
+    """เขียนทุกอย่างที่ print ลงทั้งหน้าจอและไฟล์ log"""
+    def __init__(self, stream, fh):
+        self.stream, self.fh = stream, fh
+    def write(self, data):
+        for target in (self.stream, self.fh):
+            if target is None:
+                continue
+            try:
+                target.write(data)
+            except Exception:
+                try:
+                    target.write(data.encode("ascii", "replace").decode("ascii"))
+                except Exception:
+                    pass
+        self.flush()
+    def flush(self):
+        for target in (self.stream, self.fh):
+            try:
+                if target is not None:
+                    target.flush()
+            except Exception:
+                pass
+
+
+def setup_run_log():
+    """เปิดไฟล์ log รายเดือน แล้วส่ง stdout/stderr ไปทั้งหน้าจอและไฟล์ — ล้มเหลวก็รันต่อได้ปกติ"""
+    try:
+        os.makedirs(LOG_DIR, exist_ok=True)
+        path = os.path.join(LOG_DIR, f"GetNewRTUlog_{datetime.now():%Y%m}.log")
+        fh = open(path, "a", encoding="utf-8")
+        fh.write(f"\n===== เริ่มรอบใหม่ {datetime.now():%Y-%m-%d %H:%M:%S} "
+                 f"(python={PYTHON_EXE}, cwd={os.getcwd()}) =====\n")
+        sys.stdout = _Tee(sys.__stdout__, fh)
+        sys.stderr = _Tee(sys.__stderr__, fh)
+        return path
+    except Exception as e:
+        print(f"⚠️ เปิดไฟล์ log ไม่ได้: {e}")
+        return None
+
+
+def run_step(args, cwd):
+    """รันสคริปต์ย่อยแล้วส่งข้อความของมันผ่าน print (จึงลงไฟล์ log ด้วย) — exit code ไม่ใช่ 0 จะ raise
+    CalledProcessError เหมือน subprocess.run(check=True) เดิม"""
+    env = dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONUTF8="1")
+    proc = subprocess.Popen(args, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                            text=True, encoding="utf-8", errors="replace", env=env)
+    for line in proc.stdout:
+        print(line, end="")
+    rc = proc.wait()
+    if rc != 0:
+        raise subprocess.CalledProcessError(rc, args)
+
+
 def git_push_auto(repo_dir, commit_message=None):
     """ฟังก์ชันสั่ง git add, commit, และ push อัตโนมัติ"""
     if commit_message is None:
@@ -152,7 +216,7 @@ def git_push_auto(repo_dir, commit_message=None):
         print(f"--- 📌 เริ่มกระบวนการ Git Push ใน {repo_dir} ---")
 
         # 1. git add .
-        subprocess.run(["git", "add", "."], cwd=repo_dir, check=True)
+        run_step(["git", "add", "."], cwd=repo_dir)
         print("✅ Git add เรียบร้อย")
 
        # 2. git commit -m "..."
@@ -173,7 +237,7 @@ def git_push_auto(repo_dir, commit_message=None):
         print(f"✅ Git commit เรียบร้อย: '{commit_message}'")
 
         # 3. git push
-        subprocess.run(["git", "push"], cwd=repo_dir, check=True)
+        run_step(["git", "push"], cwd=repo_dir)
         print("🚀 Git push ขึ้นเซิร์ฟเวอร์เรียบร้อยแล้ว!\n")
 
     except subprocess.CalledProcessError as e:
@@ -223,7 +287,7 @@ def fetch_locally_legacy(dir_script1, script1_path, dir_raw, destination_file1):
     ยังไม่เก่า) ไฟล์ VIEW_METER_HIST_RTU_*.csv ที่เหลือในเครื่องอาจเป็นชุดเก่าก่อนย้าย ห้ามเอาไปทับข้อมูลใหม่
     """
     print(f"--- 1b. กำลังรัน WLMAmeterExport.py ใน {dir_script1} ---")
-    subprocess.run(["python", script1_path], cwd=dir_script1, check=True)
+    run_step([PYTHON_EXE, script1_path], cwd=dir_script1)
     print("✅ รัน WLMAmeterExport.py เสร็จสิ้น\n")
 
     print("--- 2b. กำลังค้นหาไฟล์ CSV ดิบล่าสุด ---")
@@ -306,14 +370,14 @@ def run_batch_tasks():
         # ขั้นตอนที่ 3: รัน script2.py ใน folder_b
         # ==========================================
         print(f"--- 3. กำลังรัน evaluate_export_rtu_data.py ใน {dir_script2} ---")
-        subprocess.run(["python", script2_path], cwd=dir_script2, check=True)
+        run_step([PYTHON_EXE, script2_path], cwd=dir_script2)
         print("✅ รัน evaluate_export_rtu_data.py เสร็จสิ้น\n")
 
         # ==========================================
         # ขั้นตอนที่ 4: รัน script3.py ใน folder_b
         # ==========================================
         print(f"--- 4. กำลังรัน prepare_dma_csv.py ใน {dir_script2} ---")
-        subprocess.run(["python", script3_path], cwd=dir_script3, check=True)
+        run_step([PYTHON_EXE, script3_path], cwd=dir_script3)
         print("✅ รัน prepare_dma_csv.py เสร็จสิ้น\n")
 
         # ==========================================
@@ -396,4 +460,8 @@ def run_batch_tasks():
     git_push_auto(repo_dir=git_folder)
 
 if __name__ == "__main__":
-    run_batch_tasks()
+    _log_path = setup_run_log()
+    if _log_path:
+        print(f"📝 log: {_log_path}")
+    run_batch_tasks()
+    print(f"===== จบรอบ {datetime.now():%Y-%m-%d %H:%M:%S} =====")
