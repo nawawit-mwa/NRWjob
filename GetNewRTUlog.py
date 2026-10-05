@@ -15,12 +15,15 @@ git_folder = r"C:\NRWjob"
 # เครื่องนี้แค่ "หยิบ" ไฟล์ชุดล่าสุดจาก share มาใช้ (ไม่ต่อ Oracle เองอีก) แล้วประมวลผล + git push ต่อเหมือนเดิม
 #
 # SERVER_SHARE_DIR: path UNC ของ shared folder บน server (ตั้งทับได้ด้วย env NRW_SHARE_DIR โดยไม่ต้องแก้โค้ด
-#   เช่น  setx NRW_SHARE_DIR \\SERVER-NAME\NRW_Share ) — ไฟล์อยู่ในโฟลเดอร์ย่อย rtu\ ของ share นี้
+#   เช่น  setx NRW_SHARE_DIR \\172.19.32.165\apps\NRW_Share ) — ไฟล์อยู่ในโฟลเดอร์ย่อย rtu\ ของ share นี้
 # FALLBACK_LOCAL_FETCH: ถ้าต่อ share ไม่ได้/ยังไม่มีข้อมูล ให้กลับไปรัน WLMAmeterExport.py ดึง Oracle จาก
 #   เครื่องนี้แบบเดิม (ใช้ช่วงเปลี่ยนผ่าน — ถ้าเครื่องนี้ต่อ Oracle ไม่ได้แล้ว ให้ตั้งเป็น False)
 # STALE_WARN_HOURS: ชุดข้อมูลบน server เก่ากว่านี้ (นับจากเวลาดึง) จะขึ้นคำเตือน — แต่ยังใช้ต่อได้
 # ==========================================
-SERVER_SHARE_DIR = os.environ.get("NRW_SHARE_DIR", r"\\NRW-SERVER\NRW_Share")
+# server ดึงข้อมูล = 172.19.32.165 (ชื่อเครื่อง WLMA-USER) — ใส่ได้หลาย path คั่นด้วย ";" สคริปต์จะใช้ path แรก
+# ที่เจอ rtu\latest.json (path UNC ใช้ได้แม้ Task Scheduler รันแบบไม่ล็อกอิน ส่วน Y: ใช้ได้เฉพาะตอนล็อกอินอยู่)
+DEFAULT_SHARE_DIRS = r"\\172.19.32.165\apps\NRW_Share;Y:\NRW_Share"
+SERVER_SHARE_DIR = os.environ.get("NRW_SHARE_DIR", DEFAULT_SHARE_DIRS)
 FALLBACK_LOCAL_FETCH = True
 STALE_WARN_HOURS = 26
 
@@ -45,6 +48,19 @@ def _copy_verified(src, dest_tmp, expected_bytes=None, retries=3):
             print(f"⚠️ คัดลอก {os.path.basename(src)} รอบที่ {attempt} ไม่สำเร็จ: {e}")
             time.sleep(5 * attempt)
     raise IOError(f"คัดลอก {src} ไม่สำเร็จหลังลอง {retries} ครั้ง: {last_err}")
+
+
+def resolve_share_dir(share_dirs, probe=os.path.join("rtu", "latest.json")):
+    """share_dirs = path เดียว หรือหลาย path คั่นด้วย ";" — คืน path แรกที่มีไฟล์ probe อยู่จริง
+    (ไม่เจอเลย คืน path แรก เพื่อให้ข้อความ error ชี้ path ที่ตั้งใจไว้)"""
+    candidates = [d.strip() for d in str(share_dirs).split(";") if d.strip()]
+    for d in candidates:
+        try:
+            if os.path.exists(os.path.join(d, probe)):
+                return d
+        except OSError:
+            pass
+    return candidates[0] if candidates else ""
 
 
 def pull_from_server(share_dir, dest_csv, dest_parquet, state_path=PULL_STATE_FILE):
@@ -269,8 +285,9 @@ def run_batch_tasks():
         # ==========================================
         # ขั้นตอนที่ 1: หยิบข้อมูลดิบชุดล่าสุดจาก server (แทนการรัน WLMAmeterExport.py ดึง Oracle เองแบบเดิม)
         # ==========================================
-        print(f"--- 1. กำลังหยิบข้อมูลดิบล่าสุดจาก server: {SERVER_SHARE_DIR} ---")
-        status = pull_from_server(SERVER_SHARE_DIR, destination_file1, destination_parquet1)
+        share_dir = resolve_share_dir(SERVER_SHARE_DIR)
+        print(f"--- 1. กำลังหยิบข้อมูลดิบล่าสุดจาก server: {share_dir} ---")
+        status = pull_from_server(share_dir, destination_file1, destination_parquet1)
 
         if status in ("pulled", "unchanged"):
             print("")
