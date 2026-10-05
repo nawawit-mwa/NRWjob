@@ -2,10 +2,128 @@ import subprocess
 import shutil
 import os
 import glob
+import json
+import time
 from datetime import datetime
 
 # สมมติโฟลเดอร์ที่เป็น Git Repository ของคุณ
 git_folder = r"C:\NRWjob"
+
+# ==========================================
+# ส่วนดึงข้อมูลจาก Oracle ย้ายไปอยู่บน server ใหม่แล้ว (Windows Server 2022, อินทราเน็ต) —
+# server รัน server_export_rtu.py ตาม Task Scheduler ของตัวเอง แล้ววางไฟล์ลง shared folder
+# เครื่องนี้แค่ "หยิบ" ไฟล์ชุดล่าสุดจาก share มาใช้ (ไม่ต่อ Oracle เองอีก) แล้วประมวลผล + git push ต่อเหมือนเดิม
+#
+# SERVER_SHARE_DIR: path UNC ของ shared folder บน server (ตั้งทับได้ด้วย env NRW_SHARE_DIR โดยไม่ต้องแก้โค้ด
+#   เช่น  setx NRW_SHARE_DIR \\SERVER-NAME\NRW_Share ) — ไฟล์อยู่ในโฟลเดอร์ย่อย rtu\ ของ share นี้
+# FALLBACK_LOCAL_FETCH: ถ้าต่อ share ไม่ได้/ยังไม่มีข้อมูล ให้กลับไปรัน WLMAmeterExport.py ดึง Oracle จาก
+#   เครื่องนี้แบบเดิม (ใช้ช่วงเปลี่ยนผ่าน — ถ้าเครื่องนี้ต่อ Oracle ไม่ได้แล้ว ให้ตั้งเป็น False)
+# STALE_WARN_HOURS: ชุดข้อมูลบน server เก่ากว่านี้ (นับจากเวลาดึง) จะขึ้นคำเตือน — แต่ยังใช้ต่อได้
+# ==========================================
+SERVER_SHARE_DIR = os.environ.get("NRW_SHARE_DIR", r"\\NRW-SERVER\NRW_Share")
+FALLBACK_LOCAL_FETCH = True
+STALE_WARN_HOURS = 26
+
+# จดว่ารอบล่าสุดหยิบ export_id ไหนมาแล้ว (กันคัดลอกไฟล์ 500MB ซ้ำทุกรอบเมื่อ server ยังไม่มีชุดใหม่)
+PULL_STATE_FILE = r"C:\Users\00100156\Desktop\BI\NRW_Monitoring\server_pull_state.json"
+
+
+def _copy_verified(src, dest_tmp, expected_bytes=None, retries=3):
+    """คัดลอก src -> dest_tmp แล้วเช็คขนาดไฟล์ตรงกับ manifest — ใช้ copyfile (ไม่ใช่ copy2) ให้ mtime ของ
+    ไฟล์ปลายทางเป็น "ตอนนี้" เสมอ เพราะ evaluate_export_rtu_data.py ใช้ mtime ของ rtu_raw_export.csv
+    ตัดสินว่ามีข้อมูลดิบใหม่หรือไม่"""
+    last_err = None
+    for attempt in range(1, retries + 1):
+        try:
+            shutil.copyfile(src, dest_tmp)
+            size = os.path.getsize(dest_tmp)
+            if expected_bytes is not None and size != int(expected_bytes):
+                raise IOError(f"ขนาดไฟล์ไม่ตรง ({size:,} != {int(expected_bytes):,} bytes)")
+            return
+        except Exception as e:
+            last_err = e
+            print(f"⚠️ คัดลอก {os.path.basename(src)} รอบที่ {attempt} ไม่สำเร็จ: {e}")
+            time.sleep(5 * attempt)
+    raise IOError(f"คัดลอก {src} ไม่สำเร็จหลังลอง {retries} ครั้ง: {last_err}")
+
+
+def pull_from_server(share_dir, dest_csv, dest_parquet, state_path=PULL_STATE_FILE):
+    """หยิบชุดข้อมูลล่าสุดที่ server_export_rtu.py วางไว้ใน <share_dir>\\rtu\\ (อ่านจาก latest.json ซึ่ง
+    server เขียนเป็นอย่างสุดท้ายหลังไฟล์ข้อมูลเขียนเสร็จแล้วเท่านั้น)
+
+    คืนค่า:
+      "pulled"      — ได้ชุดใหม่ คัดลอกทับ rtu_raw_export.csv + rtu_hist_cache.parquet แล้ว
+      "unchanged"   — server ยังไม่มีชุดใหม่กว่ารอบก่อน ใช้ไฟล์เดิมในเครื่องต่อ
+      "unavailable" — ต่อ share ไม่ได้ / ไม่มี latest.json / ไฟล์ไม่ครบ / คัดลอกไม่สำเร็จ
+    """
+    rtu_dir = os.path.join(share_dir, "rtu")
+    manifest_path = os.path.join(rtu_dir, "latest.json")
+    try:
+        with open(manifest_path, "r", encoding="utf-8") as f:
+            manifest = json.load(f)
+    except FileNotFoundError:
+        print(f"⚠️ ไม่พบ {manifest_path} (ต่อ share ไม่ได้ หรือ server ยังไม่เคยรัน)")
+        return "unavailable"
+    except Exception as e:
+        print(f"⚠️ อ่าน {manifest_path} ไม่ได้: {e}")
+        return "unavailable"
+
+    export_id = manifest.get("export_id")
+    src_csv = os.path.join(rtu_dir, manifest.get("csv", ""))
+    src_pq = os.path.join(rtu_dir, manifest.get("parquet", ""))
+    print(f"🔎 ชุดล่าสุดบน server: {export_id} (ดึงเมื่อ {manifest.get('fetched_at')}, "
+          f"{manifest.get('rows', 0):,} แถว, ข้อมูลถึง {manifest.get('log_dt_max')})")
+
+    try:
+        fetched_at = datetime.strptime(manifest["fetched_at"], "%Y-%m-%d %H:%M:%S")
+        age_h = (datetime.now() - fetched_at).total_seconds() / 3600
+        if age_h > STALE_WARN_HOURS:
+            print(f"⚠️ ชุดข้อมูลบน server เก่าแล้ว {age_h:.0f} ชม. — ตรวจ Task Scheduler / log บน server")
+    except (KeyError, ValueError):
+        pass
+
+    last_id = None
+    if os.path.exists(state_path):
+        try:
+            with open(state_path, "r", encoding="utf-8") as f:
+                last_id = json.load(f).get("export_id")
+        except Exception:
+            last_id = None
+    if last_id == export_id and os.path.exists(dest_csv) and os.path.exists(dest_parquet):
+        print(f"ℹ️ เคยหยิบชุด {export_id} มาแล้ว — ใช้ไฟล์เดิมในเครื่องต่อ ไม่คัดลอกซ้ำ")
+        return "unchanged"
+
+    if not (os.path.exists(src_csv) and os.path.exists(src_pq)):
+        print(f"⚠️ latest.json ชี้ไฟล์ที่ไม่มีอยู่จริง ({src_csv} / {src_pq})")
+        return "unavailable"
+
+    tmp_csv, tmp_pq = dest_csv + ".tmp", dest_parquet + ".tmp"
+    try:
+        t0 = time.time()
+        _copy_verified(src_pq, tmp_pq, manifest.get("parquet_bytes"))
+        _copy_verified(src_csv, tmp_csv, manifest.get("csv_bytes"))
+        # คัดลอกครบทั้งสองไฟล์แล้วค่อยสลับเข้าที่จริงพร้อมกัน — ไม่มีทางได้ CSV ใหม่คู่กับ parquet เก่า
+        os.replace(tmp_pq, dest_parquet)
+        os.replace(tmp_csv, dest_csv)
+        print(f"✅ คัดลอกจาก server เรียบร้อย ({time.time() - t0:.0f} วินาที) -> "
+              f"{os.path.basename(dest_csv)}, {os.path.basename(dest_parquet)}")
+    except Exception as e:
+        print(f"❌ คัดลอกไฟล์จาก server ไม่สำเร็จ: {e}")
+        for t in (tmp_csv, tmp_pq):
+            if os.path.exists(t):
+                try:
+                    os.remove(t)
+                except OSError:
+                    pass
+        return "unavailable"
+
+    try:
+        with open(state_path, "w", encoding="utf-8") as f:
+            json.dump({"export_id": export_id, "pulled_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                       "source": manifest_path}, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"⚠️ บันทึก {state_path} ไม่ได้ (รอบหน้าจะคัดลอกซ้ำ ไม่กระทบผลลัพธ์): {e}")
+    return "pulled"
 
 def git_push_auto(repo_dir, commit_message=None):
     """ฟังก์ชันสั่ง git add, commit, และ push อัตโนมัติ"""
@@ -79,6 +197,36 @@ def get_latest_csv(folder_path, exclude_files=None, pattern="*.csv"):
     latest_file = max(csv_files, key=os.path.getmtime)
     return latest_file
 
+def fetch_locally_legacy(dir_script1, script1_path, dir_raw, destination_file1):
+    """ทางสำรอง (FALLBACK_LOCAL_FETCH) — ขั้นตอนที่ 1-2 แบบเดิมก่อนย้ายไป server: รัน WLMAmeterExport.py
+    ดึง Oracle จากเครื่องนี้ แล้วคัดลอก VIEW_METER_HIST_RTU_*.csv ล่าสุดเป็น rtu_raw_export.csv
+    คืน True ถ้าไปต่อได้, False ถ้าต้องหยุด
+
+    ต่างจากเดิมจุดเดียว: คัดลอกเฉพาะเมื่อไฟล์ VIEW_METER_HIST_RTU_*.csv ล่าสุด "ใหม่กว่า" rtu_raw_export.csv
+    ที่มีอยู่ — เพราะตอนนี้ rtu_raw_export.csv ปกติมาจาก server แล้ว ถ้า WLMAmeterExport.py ข้ามการดึง (cache
+    ยังไม่เก่า) ไฟล์ VIEW_METER_HIST_RTU_*.csv ที่เหลือในเครื่องอาจเป็นชุดเก่าก่อนย้าย ห้ามเอาไปทับข้อมูลใหม่
+    """
+    print(f"--- 1b. กำลังรัน WLMAmeterExport.py ใน {dir_script1} ---")
+    subprocess.run(["python", script1_path], cwd=dir_script1, check=True)
+    print("✅ รัน WLMAmeterExport.py เสร็จสิ้น\n")
+
+    print("--- 2b. กำลังค้นหาไฟล์ CSV ดิบล่าสุด ---")
+    latest_csv = get_latest_csv(
+        dir_raw, exclude_files=[destination_file1], pattern="VIEW_METER_HIST_RTU_*.csv"
+    )
+    dest_exists = os.path.exists(destination_file1)
+    if latest_csv and (not dest_exists or os.path.getmtime(latest_csv) > os.path.getmtime(destination_file1)):
+        print(f"🔎 พบไฟล์ CSV ล่าสุด: {os.path.basename(latest_csv)}")
+        os.makedirs(os.path.dirname(destination_file1), exist_ok=True)
+        shutil.copy(latest_csv, destination_file1)
+        print(f"✅ คัดลอก '{latest_csv}' ไปยัง '{destination_file1}' เรียบร้อย\n")
+        return True
+    if dest_exists:
+        print(f"ℹ️ ไม่มีไฟล์ CSV ดิบที่ใหม่กว่าเดิม — ใช้ไฟล์ปัจจุบันต่อ: '{destination_file1}'\n")
+        return True
+    print(f"❌ ไม่พบไฟล์ .csv ในโฟลเดอร์ '{dir_raw}' และไม่มีไฟล์ปลายทางเดิม การทำงานหยุดลง")
+    return False
+
 def run_batch_tasks():
     # ==========================================
     # กำหนดตัวแปรที่อยู่ไฟล์ (Path) ต่างๆ
@@ -113,48 +261,28 @@ def run_batch_tasks():
     source_file2_4 = r"C:\Users\00100156\Desktop\BI\NRW_Monitoring\dma_hourly_envelope.csv"
     destination_file2_4 = r"C:\NRWjob\static\data\dma_hourly_envelope.csv"
 
+    # rtu_hist_cache.parquet: compute_weekly_trend.py (NRW_MediumTerm) อ่านไฟล์นี้ — ตอนนี้ได้มาจาก server
+    # พร้อมกับ CSV ในชุดเดียวกัน (เดิม WLMAmeterExport.py ในเครื่องนี้เป็นคนเขียน)
+    destination_parquet1 = r"C:\Users\00100156\Desktop\BI\NRW_Monitoring\rtu_hist_cache.parquet"
+
     try:
         # ==========================================
-        # ขั้นตอนที่ 1: รัน script1.py ใน folder_a
+        # ขั้นตอนที่ 1: หยิบข้อมูลดิบชุดล่าสุดจาก server (แทนการรัน WLMAmeterExport.py ดึง Oracle เองแบบเดิม)
         # ==========================================
-        print(f"--- 1. กำลังรัน script1.py ใน {dir_script1} ---")
-        # cwd=dir_script1 จะจำลองการ cd (change directory) เข้าไปใน folder_a ก่อนรันสคริปต์
-        subprocess.run(["python", script1_path], cwd=dir_script1, check=True)
-        print("✅ รัน script1.py เสร็จสิ้น\n")
+        print(f"--- 1. กำลังหยิบข้อมูลดิบล่าสุดจาก server: {SERVER_SHARE_DIR} ---")
+        status = pull_from_server(SERVER_SHARE_DIR, destination_file1, destination_parquet1)
 
-        # ==========================================
-        # ขั้นตอนที่ 2: ค้นหาไฟล์ CSV ดิบล่าสุดที่ WLMAmeterExport.py เพิ่งสร้างขึ้นมา (ยกเว้นไฟล์ปลายทางเอง)
-        # จำกัด pattern เหลือแค่ VIEW_METER_HIST_RTU_*.csv (ชื่อไฟล์ raw จริงจาก WLMAmeterExport.py บรรทัด
-        # 113) ไม่ใช่ "*.csv" กว้างๆ เหมือนเดิม — กันไม่ให้ไปหยิบไฟล์ output ของ pipeline เอง
-        # (dma_status_summary.csv, dma_hourly_envelope.csv ฯลฯ ที่อยู่โฟลเดอร์เดียวกัน) มาเข้าใจผิดว่าเป็น
-        # ไฟล์ raw ใหม่ ตอนที่ WLMAmeterExport.py ข้ามการดึง Oracle เพราะ cache ยังไม่เก่า (ดู docstring
-        # ของ get_latest_csv ด้านบนสำหรับรายละเอียดบั๊กเดิม)
-        # ==========================================
-        print("--- 2. กำลังค้นหาไฟล์ CSV ดิบล่าสุด ---")
-        latest_csv = get_latest_csv(
-            dir_script2, exclude_files=[destination_file1], pattern="VIEW_METER_HIST_RTU_*.csv"
-        )
-
-        if latest_csv:
-            print(f"🔎 พบไฟล์ CSV ล่าสุด: {os.path.basename(latest_csv)}")
-
-            # ตรวจสอบและสร้างโฟลเดอร์ปลายทางถ้ายังไม่มี
-            dest_dir = os.path.dirname(destination_file1)
-            if not os.path.exists(dest_dir):
-                os.makedirs(dest_dir)
-
-            # คัดลอกและเปลี่ยนชื่อไฟล์ไปยังปลายทาง
-            shutil.copy(latest_csv, destination_file1)
-            print(f"✅ คัดลอก '{latest_csv}' ไปยัง '{destination_file1}' เรียบร้อย\n")
+        if status in ("pulled", "unchanged"):
+            print("")
+        elif FALLBACK_LOCAL_FETCH:
+            print("🟡 ใช้ข้อมูลจาก server ไม่ได้รอบนี้ — fallback: ดึง Oracle จากเครื่องนี้แบบเดิม\n")
+            if not fetch_locally_legacy(dir_script1, script1_path, dir_script2, destination_file1):
+                return
         elif os.path.exists(destination_file1):
-            # ไม่มีไฟล์ CSV ใหม่ (เช่น script1.py ข้ามการดึงจาก ORACLE เพราะ cache ยังไม่เก่า)
-            # แต่ไฟล์ปลายทางจากรอบก่อนยังอยู่ ใช้ต่อได้เลยโดยไม่ต้อง copy ทับ
-            print(
-                f"ℹ️ ไม่พบไฟล์ CSV ใหม่ในโฟลเดอร์ '{dir_script2}' (อาจข้ามการดึงจาก ORACLE รอบนี้) "
-                f"— ใช้ไฟล์ปัจจุบันต่อ: '{destination_file1}'\n"
-            )
+            print(f"⚠️ ใช้ข้อมูลจาก server ไม่ได้ และปิด fallback ไว้ — ประมวลผลต่อด้วยไฟล์เดิม "
+                  f"'{destination_file1}'\n")
         else:
-            print(f"❌ ไม่พบไฟล์ .csv ในโฟลเดอร์ '{dir_script2}' และไม่มีไฟล์ปลายทางเดิม การทำงานหยุดลง")
+            print("❌ ใช้ข้อมูลจาก server ไม่ได้ และไม่มีไฟล์ข้อมูลดิบเดิมในเครื่อง การทำงานหยุดลง")
             return
 
         # ==========================================
@@ -251,4 +379,4 @@ def run_batch_tasks():
     git_push_auto(repo_dir=git_folder)
 
 if __name__ == "__main__":
-    run_batch_tasks()
+    run_batch_tasks()
