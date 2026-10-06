@@ -234,7 +234,9 @@ def get_alert_status_for_rtu(rtu_id: str) -> dict:
     """เช็คสถานะแจ้งเตือนของ RTU นี้ (ใช้แสดงใน popup ของ Monitoring) คืน dict เสมอ:
     - saved: มีแถว active อยู่ไหม (บันทึกไว้แล้ว ไม่ว่าจะแปลงเป็นเหตุการณ์หรือยัง)
     - alert_id / saved_at: ข้อมูลของแถว active ล่าสุด (ถ้า saved=True)
-    - linked / incident_id: แถวนั้นถูกแปลงเป็นเหตุการณ์แล้วหรือยัง"""
+    - note: หมายเหตุที่กรอกไว้ตอนบันทึก (ค่าว่างถ้าไม่ได้กรอก)
+    - linked / incident_id: แถวนั้นถูกแปลงเป็นเหตุการณ์แล้วหรือยัง
+    - incident_due_date / incident_status: กำหนดเสร็จ + สถานะของเหตุการณ์ที่ผูกไว้ (ถ้า linked=True)"""
     active = get_active_alert_for_rtu(rtu_id)
     if not active:
         return {"saved": False, "linked": False}
@@ -243,8 +245,18 @@ def get_alert_status_for_rtu(rtu_id: str) -> dict:
         "saved": True,
         "alert_id": active["AlertID"],
         "saved_at": active.get("SavedAt", ""),
+        "note": str(active.get("Note", "") or ""),
         "linked": bool(active.get("LinkedIncidentID")),
     }
     if result["linked"]:
         result["incident_id"] = active["LinkedIncidentID"]
+        # อ่านกำหนดเสร็จจาก Incidents (Incident.DueDate = MAX ของ Job ในกลุ่ม) — อ่านไม่ได้ก็ไม่ให้
+        # endpoint ทั้งตัวพัง ส่งค่าว่างไปแทน (popup จะแสดง "ยังไม่กำหนด")
+        try:
+            incident = sc.find_one("Incidents", "IncidentID", active["LinkedIncidentID"]) or {}
+        except Exception as e:
+            print(f"[alert_service] อ่าน Incident {active['LinkedIncidentID']} ไม่สำเร็จ: {e}")
+            incident = {}
+        result["incident_due_date"] = str(incident.get("DueDate", "") or "")
+        result["incident_status"] = str(incident.get("Status", "") or "")
     return result
