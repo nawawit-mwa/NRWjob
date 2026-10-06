@@ -23,7 +23,7 @@ import sheets_client as sc
 import trend_remark_service
 from constants import (
     ROLE_ADMIN, ROLE_DEPUTY_GOVERNOR, ROLE_ASSISTANT_GOVERNOR, ASSIGNER_ROLES,
-    ROLE_ENGINEER, ROLE_LEVELS,
+    ROLE_ENGINEER, ROLE_LEVELS, ROLE_FIELD_TECH, ROLE_CONTRACTOR,
 )
 from schema_setup import SHEET_SCHEMAS
 
@@ -376,80 +376,10 @@ def logout():
 @app.route("/dashboard")
 @login_required
 def dashboard():
-    user = request.current_user
-    jobs = dashboard_service.get_dashboard_jobs(user)
-    incidents = dashboard_service.get_dashboard_incidents(user)
-
-    # filter: ภาค (กลุ่มสาขา) + สาขา + DMA (โซน) — ทำงานร่วมกับ view ได้ ไม่รีเซ็ตกัน
-    branch_group_filter = request.args.get("branch_group", "")
-    branch_filter = request.args.get("branch", "")
-    zone_filter = request.args.get("zone", "")
-    jobs = dashboard_service.filter_by_branch_group_and_zone(jobs, branch_group_filter, branch_filter, zone_filter)
-    incidents = dashboard_service.filter_by_branch_group_and_zone(incidents, branch_group_filter, branch_filter, zone_filter)
-    incidents = dashboard_service.filter_active_incidents(incidents)  # ซ่อนเหตุการณ์ที่ปิดแล้วออกจากตาราง
-    jobs = dashboard_service.filter_jobs_with_open_incidents(jobs)  # ซ่อน Job ที่เหตุการณ์แม่ปิดแล้วออกด้วย
-
-    # เรียงงานที่ยังไม่จบก่อน (สถานะไม่ใช่ ปิดงาน/ยกเลิกงาน) เพื่อให้เห็นงานที่ต้องติดตามก่อน
-    active_jobs = [j for j in jobs if j.get("Status") not in ("ปิดงาน", "ยกเลิกงาน")]
-    done_jobs = [j for j in jobs if j.get("Status") in ("ปิดงาน", "ยกเลิกงาน")]
-
-    # view: กด card สรุปแล้วกรองว่าจะโชว์ตารางไหน (all = โชว์ครบทุกตารางเหมือนเดิม)
-    view = request.args.get("view", "all")
-    if view not in ("all", "active", "done", "incidents"):
-        view = "all"
-
-    summary = {
-        "total_jobs": len(jobs),
-        "active_jobs": len(active_jobs),
-        "done_jobs": len(done_jobs),
-        "total_incidents": len(incidents),
-    }
-
-    job_permissions = {j["JobID"]: dashboard_service.get_job_permissions(j, user) for j in jobs}
-    lateral_candidates_map = {
-        j["JobID"]: (
-            org_service.get_lateral_transfer_candidates_for_job(j, user)
-            if job_permissions[j["JobID"]]["can_transfer"] else []
-        )
-        for j in jobs
-    }
-    job_type_name_map = {
-        jt["JobTypeID"]: jt["JobTypeName"] for jt in sc.get_all_records("JobTypes")
-    }
-    zone_name_map = {z["ZoneID"]: z["ZoneName"] for z in sc.get_all_records("Zones")}
-    branch_name_map = {b["BranchID"]: b["BranchName"] for b in sc.get_all_records("Branches")}
-    zones = sc.get_all_records("Zones")
-    incident_permissions = {
-        i["IncidentID"]: incident_service.get_incident_permissions(i, user) for i in incidents
-    }
-    branch_group_options = dashboard_service.get_branch_group_options(user)
-    branch_options = dashboard_service.get_branch_options(user, branch_group_filter)
-    zone_options = dashboard_service.get_zone_options(user, branch_group_filter, branch_filter)
-
-    return render_template(
-        "dashboard.html",
-        user=user,
-        active_page="dashboard",
-        active_jobs=active_jobs,
-        done_jobs=done_jobs,
-        incidents=incidents,
-        summary=summary,
-        view=view,
-        branch_group_filter=branch_group_filter,
-        branch_filter=branch_filter,
-        zone_filter=zone_filter,
-        branch_group_options=branch_group_options,
-        branch_options=branch_options,
-        zone_options=zone_options,
-        job_permissions=job_permissions,
-        lateral_candidates_map=lateral_candidates_map,
-        assign_candidates_map=_assign_candidates_map(jobs, job_permissions, user),
-        job_type_name_map=job_type_name_map,
-        zone_name_map=zone_name_map,
-        branch_name_map=branch_name_map,
-        zones=zones,
-        incident_permissions=incident_permissions,
-    )
+    """หน้า 'ติดตามงาน' เดิม — ยุบรวมเข้าหน้า 'ติดตามเหตุการณ์' แล้ว
+    คง route ไว้ให้ลิงก์/บุ๊กมาร์กเก่ายังใช้ได้ (พกตัวกรอง ภาค/สาขา/DMA ไปด้วย)"""
+    args = {k: request.args[k] for k in ("branch_group", "branch", "zone") if request.args.get(k)}
+    return redirect(url_for("incident_tree", **args))
 
 
 def _assign_candidates_map(jobs, job_permissions, user):
@@ -515,7 +445,7 @@ def convert_incident(incident_id):
     incident = sc.find_one("Incidents", "IncidentID", incident_id)
     if not incident:
         flash("ไม่พบเหตุการณ์นี้", "error")
-        return redirect(url_for("dashboard"))
+        return redirect(url_for("incident_tree"))
 
     if request.method == "POST":
         job_type_ids = request.form.getlist("job_type_ids")
@@ -525,7 +455,7 @@ def convert_incident(incident_id):
             try:
                 job_ids = incident_service.convert_incident_to_jobs(incident_id, job_type_ids, user)
                 flash(f"จ่ายงานเรียบร้อย: {', '.join(job_ids)}", "info")
-                return redirect(url_for("dashboard"))
+                return redirect(url_for("incident_tree", incident_id=incident_id))
             except (PermissionError, ValueError) as e:
                 flash(str(e), "error")
 
@@ -557,7 +487,7 @@ def incident_update(incident_id):
         flash(f"บันทึกรายละเอียดเหตุการณ์ {incident_id} แล้ว", "info")
     except (PermissionError, ValueError) as e:
         flash(str(e), "error")
-    return _safe_redirect("dashboard")
+    return _safe_redirect("incident_tree")
 
 
 @app.route("/incidents/<incident_id>/close", methods=["POST"])
@@ -569,7 +499,7 @@ def incident_close(incident_id):
         flash(f"ปิดเหตุการณ์ {incident_id} เรียบร้อยแล้ว", "info")
     except (PermissionError, ValueError) as e:
         flash(str(e), "error")
-    return _safe_redirect("dashboard")
+    return _safe_redirect("incident_tree")
 
 
 @app.route("/remarks/clear", methods=["POST"])
@@ -690,20 +620,54 @@ def alert_status(rtu_id):
 @app.route("/incidents/tree")
 @login_required
 def incident_tree():
+    """หน้าหลัก Job Management: แท็บ 'ผังเหตุการณ์' (ตารางเหตุการณ์ + ผังงาน) และ
+    แท็บ 'งานที่รับผิดชอบ' (งานของฉัน / รอตรวจ / รอปิด / เลยกำหนดในขอบเขต)
+    รวมหน้า ติดตามงาน (/dashboard), มอบหมาย/ติดตามงาน (/jobs/manage), ติดตามงานที่รับผิดชอบ (/my-jobs) ไว้ที่นี่"""
     user = request.current_user
-    all_visible_incidents = dashboard_service.get_dashboard_incidents(user)
-    incident_ids_visible = {i["IncidentID"] for i in all_visible_incidents}  # ใช้เช็คสิทธิ์เข้าดู
-    # รายละเอียด ต้องอิงรายการเต็มไม่กรอง กันลิงก์ตรงไปดูเหตุการณ์ที่ปิดแล้วพัง (เช่นจากหน้า
-    # "แสดง MNF ผิดปกติ")
-    incidents = dashboard_service.filter_active_incidents(all_visible_incidents)  # ตารางด้านบนซ่อนที่ปิดแล้ว
-
+    today = dashboard_service.today_iso()
     selected_id = request.args.get("incident_id", "")
+
+    # แท็บเริ่มต้นตามตำแหน่ง: ผู้ปฏิบัติ (วิศวกร/ช่างสนาม/ผู้รับจ้าง) เห็นงานของตัวเองก่อน
+    tab = request.args.get("tab", "")
+    if tab not in ("tree", "my"):
+        field_first = user.get("Role") in (ROLE_ENGINEER, ROLE_FIELD_TECH, ROLE_CONTRACTOR)
+        tab = "my" if (field_first and not selected_id and "view" not in request.args) else "tree"
+
+    # ---- ตัวกรอง ภาค/สาขา/DMA + มุมมองการ์ดสรุป ----
+    branch_group_filter = request.args.get("branch_group", "")
+    branch_filter = request.args.get("branch", "")
+    zone_filter = request.args.get("zone", "")
+    view = request.args.get("view", "open")
+    if view not in ("open", "waiting", "overdue", "closed"):
+        view = "open"
+    filter_args = {k: v for k, v in (("branch_group", branch_group_filter), ("branch", branch_filter),
+                                     ("zone", zone_filter)) if v}
+
+    all_visible_incidents = dashboard_service.get_dashboard_incidents(user)
+    incident_ids_visible = {i["IncidentID"] for i in all_visible_incidents}  # ใช้เช็คสิทธิ์เข้าดู (รวมที่ปิดแล้ว)
+    scoped_incidents = dashboard_service.filter_by_branch_group_and_zone(
+        all_visible_incidents, branch_group_filter, branch_filter, zone_filter)
+    incident_stats = dashboard_service.get_incident_job_stats(scoped_incidents, today)
+    open_incidents = dashboard_service.filter_active_incidents(scoped_incidents)
+    closed_incidents = [i for i in scoped_incidents if i not in open_incidents]
+    waiting_incidents = [i for i in open_incidents if incident_stats[i["IncidentID"]]["waiting"]]
+    overdue_incidents = [i for i in open_incidents if incident_stats[i["IncidentID"]]["overdue"]]
+    summary = {
+        "open": len(open_incidents),
+        "waiting": len(waiting_incidents),
+        "overdue": len(overdue_incidents),
+        "closed": len(closed_incidents),
+    }
+    incidents = {
+        "open": open_incidents, "waiting": waiting_incidents,
+        "overdue": overdue_incidents, "closed": closed_incidents,
+    }[view]
+    incidents = sorted(incidents, key=lambda i: i.get("IncidentID", ""), reverse=True)  # ใหม่สุดก่อน
+
+    # ---- ผังของเหตุการณ์ที่เลือก ----
     selected_incident = None
     jobs = []
-    job_permissions = {}
-    lateral_candidates_map = {}
     incident_permissions = {}
-
     if selected_id:
         if selected_id not in incident_ids_visible:
             flash("ไม่พบเหตุการณ์นี้ในขอบเขตของคุณ", "error")
@@ -711,36 +675,69 @@ def incident_tree():
             selected_incident = sc.find_one("Incidents", "IncidentID", selected_id)
             incident_permissions = incident_service.get_incident_permissions(selected_incident, user)
             jobs = sc.find_many("Jobs", "SiblingJobGroup", selected_id)
-            job_permissions = {
-                job["JobID"]: dashboard_service.get_job_permissions(job, user) for job in jobs
-            }
-            lateral_candidates_map = {
-                job["JobID"]: (
-                    org_service.get_lateral_transfer_candidates_for_job(job, user)
-                    if job_permissions[job["JobID"]]["can_transfer"] else []
-                )
-                for job in jobs
-            }
+
+    # ---- แท็บงานที่รับผิดชอบ ----
+    action_jobs = dashboard_service.get_my_action_jobs(user)
+    my_assigned = [
+        j for j in action_jobs["assigned_to_me"]
+        if j.get("Status") not in dashboard_service.JOB_FINISHED_STATUSES
+    ]
+    my_lists = {
+        "assigned": my_assigned,
+        "verify": action_jobs["pending_verify"],
+        "close": action_jobs["pending_close"],
+        "overdue": dashboard_service.get_overdue_jobs_in_scope(user, today),
+    }
+    my_count = len({j["JobID"] for lst in my_lists.values() for j in lst})
+
+    # popup ของทุกงานที่โชว์ในหน้านี้ (ไม่ซ้ำ JobID) — คำนวณสิทธิ์ + รายชื่อมอบหมาย/โอน ครั้งเดียว
+    popup_jobs = {}
+    for j in jobs + [j for lst in my_lists.values() for j in lst]:
+        popup_jobs.setdefault(j["JobID"], j)
+    popup_jobs = list(popup_jobs.values())
+    job_permissions = {j["JobID"]: dashboard_service.get_job_permissions(j, user) for j in popup_jobs}
+    lateral_candidates_map = {
+        j["JobID"]: (
+            org_service.get_lateral_transfer_candidates_for_job(j, user)
+            if job_permissions[j["JobID"]]["can_transfer"] else []
+        )
+        for j in popup_jobs
+    }
 
     job_type_name_map = {
         jt["JobTypeID"]: jt["JobTypeName"] for jt in sc.get_all_records("JobTypes")
     }
-    zone_name_map = {z["ZoneID"]: z["ZoneName"] for z in sc.get_all_records("Zones")}
-    branch_name_map = {b["BranchID"]: b["BranchName"] for b in sc.get_all_records("Branches")}
     zones = sc.get_all_records("Zones")
+    zone_name_map = {z["ZoneID"]: z["ZoneName"] for z in zones}
+    branch_name_map = {b["BranchID"]: b["BranchName"] for b in sc.get_all_records("Branches")}
 
     return render_template(
         "incident_tree.html",
         user=user,
         active_page="incident_tree",
+        tab=tab,
+        today=today,
+        view=view,
+        summary=summary,
+        filter_args=filter_args,
+        branch_group_filter=branch_group_filter,
+        branch_filter=branch_filter,
+        zone_filter=zone_filter,
+        branch_group_options=dashboard_service.get_branch_group_options(user),
+        branch_options=dashboard_service.get_branch_options(user, branch_group_filter),
+        zone_options=dashboard_service.get_zone_options(user, branch_group_filter, branch_filter),
         incidents=incidents,
+        incident_stats=incident_stats,
         selected_id=selected_id,
         selected_incident=selected_incident,
         jobs=jobs,
+        my_lists=my_lists,
+        my_count=my_count,
+        popup_jobs=popup_jobs,
         job_type_name_map=job_type_name_map,
         job_permissions=job_permissions,
         lateral_candidates_map=lateral_candidates_map,
-        assign_candidates_map=_assign_candidates_map(jobs, job_permissions, user),
+        assign_candidates_map=_assign_candidates_map(popup_jobs, job_permissions, user),
         zone_name_map=zone_name_map,
         branch_name_map=branch_name_map,
         zones=zones,
@@ -751,25 +748,8 @@ def incident_tree():
 @app.route("/my-jobs")
 @login_required
 def my_jobs():
-    user = request.current_user
-    action_jobs = dashboard_service.get_my_action_jobs(user)
-    job_type_name_map = {
-        jt["JobTypeID"]: jt["JobTypeName"] for jt in sc.get_all_records("JobTypes")
-    }
-    lateral_candidates_map = {
-        job["JobID"]: org_service.get_lateral_transfer_candidates_for_job(job, user)
-        for job in action_jobs["assigned_to_me"]
-    }
-    return render_template(
-        "my_jobs.html",
-        user=user,
-        active_page="my_jobs",
-        assigned_to_me=action_jobs["assigned_to_me"],
-        pending_verify=action_jobs["pending_verify"],
-        pending_close=action_jobs["pending_close"],
-        job_type_name_map=job_type_name_map,
-        lateral_candidates_map=lateral_candidates_map,
-    )
+    """หน้า 'ติดตามงานที่รับผิดชอบ' เดิม — ย้ายเป็นแท็บในหน้า 'ติดตามเหตุการณ์' แล้ว"""
+    return redirect(url_for("incident_tree", tab="my"))
 
 
 def _safe_redirect(default_endpoint):
@@ -790,7 +770,7 @@ def job_accept(job_id):
         flash(f"รับงาน {job_id} เรียบร้อยแล้ว", "info")
     except (PermissionError, ValueError) as e:
         flash(str(e), "error")
-    return _safe_redirect("my_jobs")
+    return _safe_redirect("incident_tree")
 
 
 @app.route("/jobs/<job_id>/reject", methods=["POST"])
@@ -803,7 +783,7 @@ def job_reject(job_id):
         flash(f"ปฏิเสธงาน {job_id} แล้ว", "info")
     except (PermissionError, ValueError) as e:
         flash(str(e), "error")
-    return _safe_redirect("my_jobs")
+    return _safe_redirect("incident_tree")
 
 
 @app.route("/jobs/<job_id>/submit-completion", methods=["POST"])
@@ -816,7 +796,7 @@ def job_submit_completion(job_id):
         flash(f"ส่งงาน {job_id} เสร็จแล้ว รอตรวจสอบ", "info")
     except (PermissionError, ValueError) as e:
         flash(str(e), "error")
-    return _safe_redirect("my_jobs")
+    return _safe_redirect("incident_tree")
 
 
 @app.route("/jobs/<job_id>/verify", methods=["POST"])
@@ -830,7 +810,7 @@ def job_verify(job_id):
         flash(f"บันทึกผลตรวจสอบงาน {job_id} แล้ว ({'ผ่าน' if passed else 'ไม่ผ่าน - ตีกลับ'})", "info")
     except (PermissionError, ValueError) as e:
         flash(str(e), "error")
-    return _safe_redirect("my_jobs")
+    return _safe_redirect("incident_tree")
 
 
 @app.route("/jobs/<job_id>/close", methods=["POST"])
@@ -842,7 +822,7 @@ def job_close(job_id):
         flash(f"ปิดงาน {job_id} เรียบร้อยแล้ว", "info")
     except (PermissionError, ValueError) as e:
         flash(str(e), "error")
-    return _safe_redirect("my_jobs")
+    return _safe_redirect("incident_tree")
 
 
 @app.route("/jobs/<job_id>/transfer", methods=["POST"])
@@ -852,57 +832,20 @@ def job_transfer(job_id):
     to_user_id = request.form.get("to_user_id", "")
     if not to_user_id:
         flash("กรุณาเลือกผู้รับโอนงาน", "error")
-        return _safe_redirect("my_jobs")
+        return _safe_redirect("incident_tree")
     try:
         job_service.lateral_transfer(job_id, to_user_id, user)
         flash(f"โอนงาน {job_id} เรียบร้อยแล้ว", "info")
     except (PermissionError, ValueError) as e:
         flash(str(e), "error")
-    return _safe_redirect("my_jobs")
+    return _safe_redirect("incident_tree")
 
 
 @app.route("/jobs/manage")
 @login_required
 def manage_jobs():
-    user = request.current_user
-    if user.get("Role") not in ASSIGNER_ROLES and user.get("Role") != ROLE_ADMIN:
-        flash("Role นี้ไม่มีสิทธิ์เข้าหน้ามอบหมายงาน", "error")
-        return redirect(url_for("dashboard"))
-
-    job_type_name_map = {
-        jt["JobTypeID"]: jt["JobTypeName"] for jt in sc.get_all_records("JobTypes")
-    }
-
-    pending_jobs = dashboard_service.get_assignable_jobs(user)
-    job_candidates = {
-        job["JobID"]: org_service.get_assignable_users_for_job(job, user)
-        for job in pending_jobs
-    }
-
-    tracking_jobs = dashboard_service.get_dashboard_jobs(user)
-    tracking_permissions = {
-        j["JobID"]: dashboard_service.get_job_permissions(j, user) for j in tracking_jobs
-    }
-    lateral_candidates_map = {
-        j["JobID"]: (
-            org_service.get_lateral_transfer_candidates_for_job(j, user)
-            if tracking_permissions[j["JobID"]]["can_transfer"] else []
-        )
-        for j in tracking_jobs
-    }
-
-    return render_template(
-        "manage_jobs.html",
-        user=user,
-        active_page="manage_jobs",
-        pending_jobs=pending_jobs,
-        job_candidates=job_candidates,
-        tracking_jobs=tracking_jobs,
-        tracking_permissions=tracking_permissions,
-        lateral_candidates_map=lateral_candidates_map,
-        assign_candidates_map=_assign_candidates_map(tracking_jobs, tracking_permissions, user),
-        job_type_name_map=job_type_name_map,
-    )
+    """หน้า 'มอบหมาย/ติดตามงาน' เดิม — มอบหมายได้จาก popup ในผังเหตุการณ์แล้ว"""
+    return redirect(url_for("incident_tree"))
 
 
 @app.route("/jobs/<job_id>/assign", methods=["POST"])
@@ -912,13 +855,13 @@ def job_assign(job_id):
     to_user_id = request.form.get("to_user_id", "")
     if not to_user_id:
         flash("กรุณาเลือกผู้รับมอบหมาย", "error")
-        return _safe_redirect("manage_jobs")
+        return _safe_redirect("incident_tree")
     try:
         job_service.assign_job(job_id, to_user_id, user)
         flash(f"มอบหมายงาน {job_id} เรียบร้อยแล้ว", "info")
     except (PermissionError, ValueError) as e:
         flash(str(e), "error")
-    return _safe_redirect("manage_jobs")
+    return _safe_redirect("incident_tree")
 
 
 if __name__ == "__main__":

@@ -89,6 +89,56 @@ def filter_jobs_with_open_incidents(jobs: list) -> list:
     return [j for j in jobs if j.get("SiblingJobGroup") not in closed_incident_ids]
 
 
+# ---------------------------------------------------------------------------
+# หน้า "ติดตามเหตุการณ์" (หน้าหลัก Job Management): สถิติงานต่อเหตุการณ์ + งานเลยกำหนด
+# ---------------------------------------------------------------------------
+JOB_FINISHED_STATUSES = ("ปิดงาน", "ยกเลิกงาน")
+
+
+def today_iso() -> str:
+    """วันที่ปัจจุบันตามเวลาไทย (UTC+7) รูปแบบ yyyy-mm-dd — เซิร์ฟเวอร์ Render ใช้ UTC
+    ถ้าใช้ date.today() ตรงๆ ช่วง 00:00-07:00 น. จะนับวันผิดไป 1 วัน"""
+    import datetime
+    bkk = datetime.timezone(datetime.timedelta(hours=7))
+    return datetime.datetime.now(bkk).date().isoformat()
+
+
+def is_job_overdue(job: dict, today: str) -> bool:
+    """เลยกำหนด = มี DueDate, DueDate < วันนี้ และงานยังไม่จบ (ไม่ใช่ ปิดงาน/ยกเลิกงาน)"""
+    due = str(job.get("DueDate") or "")[:10]
+    return bool(due) and due < today and job.get("Status") not in JOB_FINISHED_STATUSES
+
+
+def get_incident_job_stats(incidents: list, today: str) -> dict:
+    """คืน {IncidentID: {total, done, waiting, overdue}} สำหรับคอลัมน์ความคืบหน้าในตารางเหตุการณ์
+    นับจากงานทุกใบของเหตุการณ์นั้น (ผูกด้วย SiblingJobGroup) เหมือนที่ผังแสดง"""
+    from constants import STATUS_PENDING_ASSIGNMENT
+
+    wanted = {i["IncidentID"] for i in incidents}
+    stats = {iid: {"total": 0, "done": 0, "waiting": 0, "overdue": 0} for iid in wanted}
+    for j in sc.get_all_records("Jobs"):
+        iid = j.get("SiblingJobGroup")
+        if iid not in stats:
+            continue
+        st = stats[iid]
+        st["total"] += 1
+        if j.get("Status") in JOB_FINISHED_STATUSES:
+            st["done"] += 1
+        if j.get("Status") == STATUS_PENDING_ASSIGNMENT:
+            st["waiting"] += 1
+        if is_job_overdue(j, today):
+            st["overdue"] += 1
+    return stats
+
+
+def get_overdue_jobs_in_scope(user: dict, today: str) -> list:
+    """งานเลยกำหนดทั้งหมดในขอบเขตของ user (ข้ามทุกเหตุการณ์) เรียงจากเลยนานสุดก่อน
+    ไม่รวมงานที่เหตุการณ์แม่ปิดไปแล้ว"""
+    jobs = filter_jobs_with_open_incidents(get_dashboard_jobs(user))
+    overdue = [j for j in jobs if is_job_overdue(j, today)]
+    return sorted(overdue, key=lambda j: str(j.get("DueDate") or ""))
+
+
 def get_my_action_jobs(user: dict) -> dict:
     """รวมงานที่ user คนนี้ต้อง 'ลงมือทำอะไรบางอย่าง' ต่อ แบ่งเป็น 3 กลุ่ม:
     - assigned_to_me: งานที่มอบหมายมาถึงตัวเอง (รอรับ/ปฏิเสธ/กำลังดำเนินการ)

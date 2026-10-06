@@ -3,7 +3,7 @@
 {% block title %}แปลงเหตุการณ์เป็นงาน — Smart NRW{% endblock %}
 {% block content %}
 <div class="container" style="max-width: 640px;">
-  <a href="{{ url_for('dashboard') }}">&larr; กลับไป Dashboard</a>
+  <a href="{{ url_for('incident_tree', incident_id=incident.IncidentID) }}">&larr; กลับไปติดตามเหตุการณ์</a>
 
   {% with messages = get_flashed_messages(with_categories=true) %}
     {% if messages %}
