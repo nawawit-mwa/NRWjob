@@ -161,6 +161,61 @@
   color:var(--mwa-navy-deep)}
 .pbc-page #helpBody p{margin:4px 0 8px;font-size:.85rem}
 .pbc-page .loading{color:var(--ink-soft);padding:26px;text-align:center}
+
+/* ---------- กราฟอัตราน้ำสูญเสียฐานและเป้าหมาย ---------- */
+.pbc-page .plan-head{display:flex;flex-wrap:wrap;justify-content:space-between;
+  gap:10px;align-items:flex-start}
+.pbc-page .plan-chips{display:flex;flex-wrap:wrap;gap:8px}
+.pbc-page .plan-chip{border:1px solid var(--line);border-radius:999px;
+  padding:4px 12px;font-size:.8rem;background:var(--pbc-panel-alt);color:var(--ink)}
+.pbc-page .plan-chip b{color:var(--mwa-navy-deep);font-size:.92rem}
+.pbc-page .plan-legend{display:flex;flex-wrap:wrap;gap:6px 18px;margin:12px 0 10px;
+  font-size:.78rem;color:var(--ink)}
+.pbc-page .plan-legend .lg{display:inline-flex;align-items:center;gap:7px;
+  cursor:pointer;user-select:none}
+.pbc-page .plan-legend .lg.off{opacity:.38;text-decoration:line-through}
+.pbc-page .plan-legend .lg-note{color:var(--ink-soft)}
+.pbc-page .sw{display:inline-block;flex:0 0 auto}
+.pbc-page .sw-line{width:22px;height:0;border-top:2.5px solid}
+.pbc-page .sw-dash{width:22px;height:0;border-top:2px dashed}
+.pbc-page .sw-dot{width:11px;height:11px;border-radius:50%;
+  box-shadow:0 0 0 2px #fff,0 0 0 3px rgba(0,0,0,.12)}
+.pbc-page .sw-bar{width:12px;height:12px;border-radius:2px}
+.pbc-page .sw-box{width:12px;height:12px;border-radius:2px;
+  border:1.5px solid var(--ink-soft);background:#fff}
+.pbc-page .plan-scroll{overflow-x:auto;border:1px solid var(--line);
+  border-radius:8px;background:#fff}
+.pbc-page .plan-chart{position:relative}
+.pbc-page .plan-cv{position:absolute;inset:0}
+.pbc-page .plan-yfix{position:sticky;left:0;z-index:2;width:230px;height:100%;
+  background:#fff;box-shadow:1px 0 0 var(--line);pointer-events:none}
+.pbc-page .plan-yfix canvas{display:block;width:100%;height:100%}
+.pbc-page .plan-chart.rate{height:310px}
+.pbc-page .plan-chart.vol{height:170px;border-top:1px dashed var(--line)}
+.pbc-page table.plan-table{table-layout:fixed;width:auto;font-size:.74rem;
+  border-top:1px solid var(--line)}
+.pbc-page .plan-table th,.pbc-page .plan-table td{padding:5px 5px;text-align:right;
+  border-bottom:1px solid var(--line);border-left:1px solid #eef3f8;overflow:hidden;
+  font-variant-numeric:tabular-nums}
+.pbc-page .plan-table th{position:static;font-size:.7rem;line-height:1.25;
+  text-align:center;background:#e4f2fc}
+.pbc-page .plan-table th small{display:block;font-weight:400;color:var(--ink-soft);
+  font-size:.64rem}
+.pbc-page .plan-table .rl{position:sticky;left:0;z-index:2;background:#fff;
+  text-align:left;font-weight:600;border-left:0;box-shadow:1px 0 0 var(--line)}
+.pbc-page .plan-table .rl .sw{margin-right:7px;vertical-align:middle}
+.pbc-page .plan-table .rl .sw-bar,.pbc-page .plan-table .rl .sw-box{margin:0 12px 0 5px}
+.pbc-page .plan-table .rl .sw-none{width:22px}
+.pbc-page .plan-table th.rl{background:#e4f2fc;z-index:3}
+.pbc-page .plan-table tbody tr{cursor:default}
+.pbc-page .plan-table tbody tr:hover td{background:#f5faff}
+.pbc-page .plan-table .msc{background:#fff7e8}
+.pbc-page .plan-table th.msc{background:#fbe6bf;color:#7a4a00}
+.pbc-page .plan-table td.pf-pass{background:#e0f4de;color:#0a5b06;font-weight:700}
+.pbc-page .plan-table td.pf-fail{background:#fbe9e4;color:var(--danger);font-weight:700}
+.pbc-page .plan-table td.fut{color:var(--ink-soft)}
+.pbc-page .plan-empty{display:none;padding:30px;text-align:center;color:var(--ink-soft);
+  border:1px dashed var(--line);border-radius:8px}
 </style>
 {% endblock %}
 
@@ -205,9 +260,34 @@
     </div>
   </div>
 
-  <div class="pbc-panel">
-    <h2>เส้นทางสู่เป้าหมายตามสัญญา</h2>
-    <div class="chart-box"><canvas id="trajectoryChart"></canvas></div>
+  <!-- กราฟอัตราน้ำสูญเสียฐานและเป้าหมาย (แทนกราฟ "เส้นทางสู่เป้าหมาย" เดิม)
+       กราฟอัตรา / กราฟปริมาณ / ตารางตัวเลข อยู่ในกล่องเลื่อนแนวนอนเดียวกัน
+       และใช้ความกว้างคอลัมน์ต่อเดือนเท่ากันทั้งหมด ทำให้แต่ละเดือนตรงกันเป็นแนวดิ่ง -->
+  <div class="pbc-panel" id="planPanel">
+    <div class="plan-head">
+      <div>
+        <h2>กราฟแสดงอัตราน้ำสูญเสียฐานและเป้าหมาย</h2>
+        <div class="hint" id="planSub" style="margin-bottom:0"></div>
+      </div>
+      <div class="plan-chips" id="planChips"></div>
+    </div>
+    <div class="plan-legend" id="planLegend"></div>
+    <div class="plan-scroll" id="planScroll">
+      <div class="plan-inner" id="planInner">
+        <!-- plan-yfix = สำเนาแกน y ที่ตรึงไว้ซ้ายสุด ให้ยังเห็นสเกลตอนเลื่อนดูเดือนอื่น -->
+        <div class="plan-chart rate">
+          <div class="plan-yfix"><canvas></canvas></div>
+          <div class="plan-cv"><canvas id="planRateChart"></canvas></div>
+        </div>
+        <div class="plan-chart vol">
+          <div class="plan-yfix"><canvas></canvas></div>
+          <div class="plan-cv"><canvas id="planVolChart"></canvas></div>
+        </div>
+        <table class="plan-table" id="planTable"></table>
+      </div>
+    </div>
+    <div class="plan-empty" id="planEmpty"></div>
+    <div class="hint" id="planNote" style="margin:10px 0 0"></div>
   </div>
 
   <div class="pbc-panel">
@@ -523,7 +603,7 @@ function render(){
   renderContractInfo();
   renderMilestones();
   renderWork();
-  renderTrajectory();
+  renderPlan();
   renderDmaTable();
   renderBarChart();
   renderTargets();
@@ -746,126 +826,432 @@ function renderCards(){
   }).join("");
 }
 
-function renderTrajectory(){
-  var targets = DATA.targets || [];
+// ---------------------------------------------------------------- กราฟอัตราน้ำสูญเสียฐานและเป้าหมาย
+// แบ่งเป็น 2 กราฟซ้อนกันแทนกราฟเดียวที่มี 2 แกน y (ปริมาณ + อัตรา)
+//   บน  = อัตราน้ำสูญเสีย (%) — เส้นจริงรายเดือน / เฉลี่ย 3 เดือน / เป้าหมาย / จุดวัดผล
+//   ล่าง = ปริมาณน้ำรายเดือน (ลบ.ม.) — แท่งซ้อน น้ำจำหน่าย + น้ำสูญเสีย = น้ำเข้า
+//   ใต้สุด = ตารางตัวเลขรายเดือน
+// ทั้งสามส่วนใช้ความกว้างคอลัมน์ต่อเดือนเท่ากัน (แกน y ตรึงความกว้างไว้เท่าคอลัมน์ชื่อแถว)
+// เดือนเดียวกันจึงตรงกันเป็นแนวดิ่งตลอดทั้งกราฟและตาราง
+var PLAN_LABEL_W = 230;     // ความกว้างแกน y = คอลัมน์ชื่อแถวของตาราง
+var PLAN_RIGHT_W = 14;      // ระยะเผื่อขวาสุด
+var PLAN_MIN_COL = 66;      // ความกว้างต่ำสุดต่อเดือน (ให้ตัวเลข 7 หลักพอดีช่อง)
+var PLAN_COLOR = {
+  rolling:C.teal, target:C.amber, monthly:"#7a5cc2", base:"rgba(92,116,136,.7)",
+  sales:"#4a94d8", loss:"#e0704f", band:"rgba(181,121,15,.09)"
+};
+var PLAN_RESIZE_TIMER = null;
+
+// วาดแถบสีจางในเดือนที่เป็นจุดวัดผล + เส้นประแบ่งข้อมูลจริงกับเดือนในอนาคต
+var planBandPlugin = {
+  id:"planBand",
+  beforeDatasetsDraw:function(chart, args, opts){
+    var a = chart.chartArea, x = chart.scales.x, ctx = chart.ctx;
+    var n = chart.data.labels.length;
+    if(!n) return;
+    var w = (a.right - a.left) / n;
+    ctx.save();
+    ctx.fillStyle = PLAN_COLOR.band;
+    (opts.idx || []).forEach(function(i){
+      ctx.fillRect(x.getPixelForValue(i) - w/2, a.top, w, a.bottom - a.top);
+    });
+    if(opts.lastIdx != null && opts.lastIdx < n - 1){
+      var px = Math.round(x.getPixelForValue(opts.lastIdx) + w/2) + .5;
+      ctx.strokeStyle = "rgba(92,116,136,.55)";
+      ctx.setLineDash([4,4]);
+      ctx.beginPath(); ctx.moveTo(px, a.top); ctx.lineTo(px, a.bottom); ctx.stroke();
+      if(opts.caption){
+        ctx.setLineDash([]);
+        ctx.fillStyle = "#5c7488";
+        ctx.font = "11px " + getComputedStyle(document.body).fontFamily;
+        ctx.textAlign = "left";
+        ctx.fillText(opts.caption, px + 5, a.top + 12);
+      }
+    }
+    ctx.restore();
+  }
+};
+
+// คัดลอกส่วนแกน y ของกราฟไปวางในกล่องที่ตรึงไว้ซ้ายสุด (เหมือน freeze panes ใน Excel)
+var planYFixPlugin = {
+  id:"planYFix",
+  afterRender:function(chart){
+    var box = chart.canvas.parentNode.parentNode.querySelector(".plan-yfix canvas");
+    if(!box || !chart.width) return;
+    var dpr = chart.currentDevicePixelRatio || 1;
+    var w = Math.round(PLAN_LABEL_W * dpr), h = Math.round(chart.height * dpr);
+    if(box.width !== w || box.height !== h){ box.width = w; box.height = h; }
+    var ctx = box.getContext("2d");
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, w, h);
+    ctx.drawImage(chart.canvas, 0, 0, w, h, 0, 0, w, h);
+  }
+};
+
+function planDaysOf(ym){
+  var p = String(ym || "").split("-");
+  return new Date(parseInt(p[0],10), parseInt(p[1],10), 0).getDate() || 30;
+}
+
+function renderPlan(){
+  var c = DATA.contract || {};
+  var monthly = DATA.monthly || [];
   var rolling = DATA.rolling || [];
   var interim = DATA.interim_line || [];
+  var targets = DATA.targets || [];
   var fc = (DATA.forecast && DATA.forecast.points) || [];
-  var x = DATA.contract.baseline_rate_x;
+  var x = c.baseline_rate_x;
 
-  var maxNo = 1;
-  [targets, rolling, interim, fc].forEach(function(arr){
-    arr.forEach(function(p){ maxNo = Math.max(maxNo, p.month_no); });
+  $("planSub").textContent =
+    "งานจ้างบริหารจัดการน้ำสูญเสียรายพื้นที่ " + (c.area_name || "") +
+    (c.branch_name ? " · " + c.branch_name : "") +
+    (c.contract_no ? " · สัญญาเลขที่ " + c.contract_no : "");
+
+  ["planRate","planVol"].forEach(function(k){
+    if(CHARTS[k]){ CHARTS[k].destroy(); delete CHARTS[k]; }
   });
-  var labels = [];
-  for(var i=1;i<=maxNo;i++) labels.push(i);
-  function at(arr, key){
-    var map = {};
-    arr.forEach(function(p){ map[p.month_no] = p[key]; });
-    return labels.map(function(n){ return map[n]===undefined ? null : map[n]; });
-  }
 
-  var lastActual = rolling.length ? rolling[rolling.length-1] : null;
-  var fcLine = at(fc, "rate");
-  if(lastActual){  // ต่อเส้นพยากรณ์จากจุดจริงล่าสุด ไม่ให้ลอย
-    var idx = labels.indexOf(lastActual.month_no);
-    if(idx >= 0) fcLine[idx] = lastActual.loss_rate;
+  if(!monthly.length && !interim.length){
+    $("planScroll").style.display = "none";
+    $("planLegend").innerHTML = "";
+    $("planChips").innerHTML = "";
+    $("planNote").textContent = "";
+    $("planEmpty").style.display = "block";
+    $("planEmpty").textContent = DATA.setup_error ||
+      "ยังไม่มีข้อมูลรายเดือนและเป้าหมายของสัญญานี้";
+    return;
   }
+  $("planScroll").style.display = "";
+  $("planEmpty").style.display = "none";
 
-  var ds = [];
-  if(x != null){
-    ds.push({label:"อัตราฐาน X", data: labels.map(function(){ return x; }),
-      borderColor:"rgba(92,116,136,.55)", borderDash:[3,4], borderWidth:1.2,
-      pointRadius:0, fill:false});
-  }
-  ds.push({label:"_เป้าระหว่างทาง", data: at(interim,"rate"),
-    borderColor:"rgba(181,121,15,.45)", borderDash:[2,3], borderWidth:1.2,
-    pointRadius:0, fill:false});
-  ds.push({label:"เป้าตามสัญญา", data: at(targets,"target_rate"),
-    borderColor:C.amber, borderWidth:2.2, stepped:"after",
-    pointRadius:3, pointHoverRadius:5, pointBackgroundColor:C.amber,
-    spanGaps:true, fill:false});
-  var showBand = fc.some(function(p){ return p.conclusive; });
-  if(fc.length){
-    // วาดแถบความเชื่อมั่นเฉพาะตอนที่แคบพอจะสื่อความหมาย
-    // ถ้าช่วงกว้างมาก (ข้อมูลน้อย) แถบจะกินพื้นที่จนกราฟอ่านไม่ออก
-    if(showBand){
-      ds.push({label:"ช่วงพยากรณ์", data: at(fc,"hi"), borderColor:"transparent",
-        pointRadius:0, fill:"+1", backgroundColor:C.band, spanGaps:true});
-      ds.push({label:"_lo", data: at(fc,"lo"), borderColor:"transparent",
-        pointRadius:0, fill:false, spanGaps:true});
-    }
-    // วาดเส้นพยากรณ์เฉพาะตอนที่สรุปได้
-    // เส้นที่มาจากข้อมูลไม่กี่จุดจะดูเป็นทางการทั้งที่เชื่อถือไม่ได้
-    if(showBand){
-      ds.push({label:"คาดการณ์", data: fcLine, borderColor:C.teal,
-        borderDash:[5,4], borderWidth:2, pointRadius:0, spanGaps:true, fill:false});
-    }
-  }
-  ds.push({label:"อัตราจริง ณ เดือนที่วัดผล", data: at(rolling,"loss_rate"),
-    borderColor:C.teal, borderWidth:2.6, pointRadius:2.5, pointHoverRadius:5,
-    pointBackgroundColor:C.teal, spanGaps:true, fill:false});
-
-  // ช่วงแกน y คำนวณจากค่าที่ต้องอ่านจริงเท่านั้น
-  // ไม่รวมขอบแถบพยากรณ์ตอนที่ยังสรุปไม่ได้ เพราะจะดึงแกนจนข้อมูลจริงแบนติดกัน
-  var vals = [];
-  function collect(arr, key){
+  // ---------- แกนเดือน: ตั้งแต่เดือนแรกที่มีข้อมูล (อาจก่อนเริ่มสัญญา) ถึงเดือนสุดท้ายของสัญญา
+  var minNo = 1, maxNo = 1;
+  [monthly, rolling, interim, targets, fc].forEach(function(arr){
     arr.forEach(function(p){
-      if(p[key] !== null && p[key] !== undefined) vals.push(p[key]);
+      minNo = Math.min(minNo, p.month_no);
+      maxNo = Math.max(maxNo, p.month_no);
     });
+  });
+  var nos = [];
+  for(var n = minNo; n <= maxNo; n++) nos.push(n);
+  function byNo(arr, key){
+    var m = {};
+    arr.forEach(function(p){ m[p.month_no] = p[key]; });
+    return nos.map(function(k){ return m[k] === undefined ? null : m[k]; });
   }
-  collect(targets, "target_rate");
-  collect(rolling, "loss_rate");
-  collect(interim, "rate");
-  collect(fc, "rate");
-  if(showBand){ collect(fc, "lo"); collect(fc, "hi"); }
+  var msMap = {};
+  (DATA.milestones || []).forEach(function(m){ msMap[m.month_no] = m; });
+  var msIdx = [];
+  nos.forEach(function(k, i){ if(msMap[k]) msIdx.push(i); });
+  var lastNo = monthly.length ? monthly[monthly.length-1].month_no : null;
+  var lastIdx = lastNo == null ? null : nos.indexOf(lastNo);
+
+  // ---------- ข้อมูลแต่ละชุด
+  var vInflow = byNo(monthly, "inflow_m3");
+  var vSales = byNo(monthly, "sales_m3");
+  var vLoss = byNo(monthly, "loss_m3");
+  var vRate = byNo(monthly, "loss_rate");
+  var vRoll = byNo(rolling, "loss_rate");
+  var vTarget = byNo(interim, "rate");
+  var vMs = nos.map(function(k){ return msMap[k] ? msMap[k].target_rate : null; });
+  // น้ำสูญเสียต่อวัน คิดจากรอบ 3 เดือนเดียวกับอัตราเฉลี่ย 3 เดือน (ปริมาณรวม ÷ จำนวนวันจริง)
+  var dailyMap = {};
+  rolling.forEach(function(r){
+    var days = (r.window || []).reduce(function(s, ym){ return s + planDaysOf(ym); }, 0);
+    dailyMap[r.month_no] = days ? r.loss_m3 / days : null;
+  });
+  var vDaily = nos.map(function(k){ return dailyMap[k] === undefined ? null : dailyMap[k]; });
+
+  // พยากรณ์: แสดงเฉพาะตอนที่สรุปได้ (เหตุผลเดียวกับกราฟเดิม — เส้นจากข้อมูลไม่กี่จุด
+  // จะดูเป็นทางการทั้งที่เชื่อถือไม่ได้)
+  var showFc = fc.some(function(p){ return p.conclusive; });
+  var vFc = byNo(fc, "rate"), vFcLo = byNo(fc, "lo"), vFcHi = byNo(fc, "hi");
+  if(showFc && rolling.length){   // ต่อเส้นพยากรณ์จากจุดจริงล่าสุด ไม่ให้ลอย
+    var lr = rolling[rolling.length-1], li = nos.indexOf(lr.month_no);
+    if(li >= 0){ vFc[li] = lr.loss_rate; vFcLo[li] = lr.loss_rate; vFcHi[li] = lr.loss_rate; }
+  }
+
+  // ---------- ขนาด: ถ้าจอกว้างพอให้ยืดเต็มกล่อง ไม่พอก็เลื่อนแนวนอน
+  var avail = $("planScroll").clientWidth - PLAN_LABEL_W - PLAN_RIGHT_W - 2;
+  var colW = Math.max(PLAN_MIN_COL, Math.floor(avail / nos.length));
+  var innerW = PLAN_LABEL_W + colW * nos.length + PLAN_RIGHT_W;
+  $("planInner").style.width = innerW + "px";
+
+  // ---------- legend (HTML ไม่เลื่อนตามกราฟ คลิกเพื่อซ่อน/แสดงเส้นได้)
+  var legend = [
+    {key:"roll", chart:"planRate", sw:"line", color:PLAN_COLOR.rolling,
+     label:"อัตราน้ำสูญเสีย (เฉลี่ย 3 เดือน) ใช้วัดผลตามสัญญา"},
+    {key:"rate", chart:"planRate", sw:"dash", color:PLAN_COLOR.monthly,
+     label:"อัตราน้ำสูญเสีย (ที่เกิดขึ้นจริงรายเดือน)"},
+    {key:"target", chart:"planRate", sw:"line", color:PLAN_COLOR.target,
+     label:"อัตราน้ำสูญเสีย (เป้าหมาย)"},
+    {key:"ms", chart:"planRate", sw:"dot", color:PLAN_COLOR.target,
+     label:"เป้า ณ จุดวัดผลตามสัญญา"}
+  ];
+  if(x != null) legend.push({key:"base", chart:"planRate", sw:"dash",
+    color:PLAN_COLOR.base, label:"อัตราฐาน X " + num(x, 2) + "%"});
+  if(showFc) legend.push({key:"fc", chart:"planRate", sw:"dash",
+    color:PLAN_COLOR.rolling, label:"คาดการณ์ (แถบจาง = ช่วงความเชื่อมั่น)"});
+  legend.push({key:"sales", chart:"planVol", sw:"bar", color:PLAN_COLOR.sales,
+    label:"น้ำจำหน่าย"});
+  legend.push({key:"loss", chart:"planVol", sw:"bar", color:PLAN_COLOR.loss,
+    label:"น้ำสูญเสีย"});
+  $("planLegend").innerHTML = legend.map(function(l){
+    var st = l.sw === "bar" || l.sw === "dot"
+      ? "background:" + l.color : "border-top-color:" + l.color;
+    return '<span class="lg" data-key="' + l.key + '" data-chart="' + l.chart + '">' +
+      '<span class="sw sw-' + l.sw + '" style="' + st + '"></span>' +
+      esc(l.label) + '</span>';
+  }).join("") +
+    '<span class="lg-note">ความสูงรวมของแท่ง = น้ำเข้า · แถบสีเหลือง = เดือนที่วัดผลตามสัญญา</span>';
+  Array.prototype.forEach.call($("planLegend").querySelectorAll(".lg"), function(el){
+    el.addEventListener("click", function(){
+      var ch = CHARTS[el.getAttribute("data-chart")];
+      if(!ch) return;
+      var key = el.getAttribute("data-key"), visible = null;
+      ch.data.datasets.forEach(function(ds, i){
+        if(ds._key !== key) return;
+        if(visible === null) visible = !ch.isDatasetVisible(i);
+        ch.setDatasetVisibility(i, visible);
+      });
+      el.classList.toggle("off", visible === false);
+      ch.update();
+    });
+  });
+
+  // ---------- ตัวช่วยที่ใช้ร่วมกันทั้งสองกราฟ
+  var monthTitle = function(items){
+    var k = nos[items[0].dataIndex];
+    return monthLabelForNo(k) + " · เดือนที่ " + k;
+  };
+  var xAxis = { offset:true, ticks:{ display:false }, border:{ display:false },
+                grid:{ offset:true, color:"#eef3f8", drawTicks:false } };
+  var fixWidth = function(scale){ scale.width = PLAN_LABEL_W; };
+  var bandOpts = { idx: msIdx, lastIdx: lastIdx };
+
+  // ---------- กราฟอัตรา
+  var vals = [];
+  [vRate, vRoll, vTarget, vMs].forEach(function(arr){
+    arr.forEach(function(v){ if(v != null) vals.push(v); });
+  });
+  // ช่วงแกน y ไม่รวมขอบแถบพยากรณ์ — แถบที่กว้างจะดึงแกนจนเส้นข้อมูลจริงแบนติดกัน
+  // ส่วนของแถบที่เกินขอบกราฟจะถูกตัดทิ้งเอง
+  if(showFc) vFc.forEach(function(v){ if(v != null) vals.push(v); });
   if(x != null) vals.push(x);
+  var lo = Math.min.apply(null, vals), hi = Math.max.apply(null, vals);
+  var pad = Math.max((hi - lo) * 0.12, 1);
+  var step = (hi - lo) > 30 ? 10 : ((hi - lo) > 12 ? 5 : ((hi - lo) > 5 ? 2 : 1));
+  var yMin = Math.max(0, Math.floor((lo - pad) / step) * step);
+  var yMax = Math.ceil((hi + pad) / step) * step;
 
-  var yRange = { min: 0, max: 60, step: 10 };
-  if(vals.length){
-    var lo = Math.min.apply(null, vals), hi = Math.max.apply(null, vals);
-    var pad = Math.max((hi - lo) * 0.15, 2);
-    var step = (hi - lo) > 30 ? 10 : ((hi - lo) > 12 ? 5 : 2);
-    yRange.min = Math.max(0, Math.floor((lo - pad) / step) * step);
-    yRange.max = Math.ceil((hi + pad) / step) * step;
-    yRange.step = step;
+  var rateDs = [];
+  if(x != null){
+    rateDs.push({ _key:"base", label:"อัตราฐาน X", data: nos.map(function(){ return x; }),
+      borderColor:PLAN_COLOR.base, borderDash:[3,4], borderWidth:1.2, pointRadius:0,
+      pointHoverRadius:0, fill:false, order:5 });
   }
+  if(showFc){
+    rateDs.push({ _key:"fc", label:"_hi", data:vFcHi, borderColor:"transparent",
+      pointRadius:0, pointHoverRadius:0, fill:"+1", backgroundColor:C.band,
+      spanGaps:true, order:6 });
+    rateDs.push({ _key:"fc", label:"_lo", data:vFcLo, borderColor:"transparent",
+      pointRadius:0, pointHoverRadius:0, fill:false, spanGaps:true, order:6 });
+    rateDs.push({ _key:"fc", label:"คาดการณ์", data:vFc, borderColor:PLAN_COLOR.rolling,
+      borderDash:[5,4], borderWidth:2, pointRadius:0, spanGaps:true, fill:false, order:4 });
+  }
+  rateDs.push({ _key:"target", label:"เป้าหมาย", data:vTarget,
+    borderColor:PLAN_COLOR.target, borderWidth:2, pointRadius:0, pointHoverRadius:4,
+    fill:false, spanGaps:true, order:3 });
+  rateDs.push({ _key:"ms", label:"เป้า ณ จุดวัดผล", data:vMs, showLine:false,
+    pointRadius:6.5, pointHoverRadius:8, pointBackgroundColor:PLAN_COLOR.target,
+    pointBorderColor:"#fff", pointBorderWidth:2, order:1 });
+  rateDs.push({ _key:"rate", label:"จริงรายเดือน", data:vRate,
+    borderColor:PLAN_COLOR.monthly, borderDash:[4,3], borderWidth:1.6,
+    pointRadius:2.5, pointBackgroundColor:PLAN_COLOR.monthly, pointHoverRadius:5,
+    fill:false, spanGaps:false, order:2 });
+  rateDs.push({ _key:"roll", label:"เฉลี่ย 3 เดือน", data:vRoll,
+    borderColor:PLAN_COLOR.rolling, borderWidth:2.8, pointRadius:3.5,
+    pointBackgroundColor:PLAN_COLOR.rolling, pointBorderColor:"#fff",
+    pointBorderWidth:1.5, pointHoverRadius:6, fill:false, spanGaps:false, order:0 });
 
-  if(CHARTS.traj) CHARTS.traj.destroy();
-  CHARTS.traj = new Chart($("trajectoryChart"), {
+  CHARTS.planRate = new Chart($("planRateChart"), {
     type:"line",
-    data:{ labels: labels.map(function(n){
-             // สองบรรทัด: ชื่อเดือนจริงไว้บน เลขเดือนของสัญญาไว้ล่าง
-             return [monthLabelForNo(n), "เดือนที่ " + n];
-           }), datasets: ds },
+    data:{ labels: nos, datasets: rateDs },
+    plugins:[planBandPlugin, planYFixPlugin],
     options:{
-      responsive:true, maintainAspectRatio:false,
+      responsive:true, maintainAspectRatio:false, animation:false,
+      layout:{ padding:{ left:0, right:PLAN_RIGHT_W, top:10, bottom:2 } },
       interaction:{ mode:"index", intersect:false },
       plugins:{
-        legend:{ labels:{ color:C.muted, boxWidth:14,
-          filter:function(item){ return item.text.charAt(0) !== "_"; } } },
-        tooltip:{ filter:function(item){ return item.dataset.label.charAt(0) !== "_"; },
+        legend:{ display:false },
+        planBand: { idx: msIdx, lastIdx: lastIdx,
+                    caption: lastIdx != null && lastIdx < nos.length - 1
+                      ? "ข้อมูลล่าสุด " + monthLabelForNo(lastNo) : "" },
+        tooltip:{
+          filter:function(item){
+            return item.dataset.label.charAt(0) !== "_" && item.parsed.y != null;
+          },
           callbacks:{
-            title:function(items){
-              var n = labels[items[0].dataIndex];
-              return monthLabelForNo(n) + " (เดือนที่ " + n + ")";
-            },
+            title: monthTitle,
             label:function(ctx){
-              if(ctx.parsed.y===null) return null;
-              return ctx.dataset.label + ": " + ctx.parsed.y.toFixed(2) + "%"; } } }
+              return ctx.dataset.label + ": " + ctx.parsed.y.toFixed(2) + "%";
+            },
+            footer:function(items){
+              var m = msMap[nos[items[0].dataIndex]];
+              if(!m) return "";
+              if(m.status === "pending") return "จุดวัดผลตามสัญญา · ยังไม่ถึงกำหนด";
+              return "จุดวัดผลตามสัญญา · " + (m.status === "pass"
+                ? "ผ่านเป้า (ต่ำกว่า " + num(-m.diff, 2) + " จุด)"
+                : "ไม่ผ่าน (สูงกว่า " + num(m.diff, 2) + " จุด)");
+            }
+          }
+        }
       },
       scales:{
-        x:{ ticks:{ color:C.muted, maxRotation:0, autoSkipPadding:14,
-                    font:{size:10} },
-            grid:{ color:C.line } },
-        y:{ min:yRange.min, max:yRange.max, ticks:{ color:C.muted, stepSize:yRange.step,
-              callback:function(v){ return v + "%"; } },
-            grid:{ color:C.line }, title:{ display:true, color:C.muted,
-              text:"อัตราน้ำสูญเสีย" } }
+        x: xAxis,
+        y:{ min:yMin, max:yMax, afterFit: fixWidth,
+            ticks:{ color:C.muted, stepSize:step, font:{size:11},
+                    callback:function(v){ return v + "%"; } },
+            grid:{ color:C.line }, border:{ display:false },
+            title:{ display:true, color:C.muted, text:"อัตราน้ำสูญเสีย (%)" } }
       }
     }
   });
 
+  // ---------- กราฟปริมาณ (แท่งซ้อน น้ำจำหน่าย + น้ำสูญเสีย = น้ำเข้า)
+  var vMax = Math.max.apply(null, vInflow.filter(function(v){ return v != null; })
+                                         .concat([0]));
+  var vStep = vMax > 8e6 ? 2e6 : (vMax > 3e6 ? 1e6 : 5e5);
+  CHARTS.planVol = new Chart($("planVolChart"), {
+    type:"bar",
+    data:{ labels: nos, datasets:[
+      { _key:"sales", label:"น้ำจำหน่าย", data:vSales, backgroundColor:PLAN_COLOR.sales,
+        hoverBackgroundColor:"#2f7fc8",
+        borderColor:"#fff", borderWidth:{ top:1 }, borderSkipped:false,
+        stack:"v", barPercentage:.66, categoryPercentage:.9 },
+      { _key:"loss", label:"น้ำสูญเสีย", data:vLoss, backgroundColor:PLAN_COLOR.loss,
+        hoverBackgroundColor:"#cc5a39",
+        borderRadius:{ topLeft:3, topRight:3 }, borderSkipped:"bottom",
+        stack:"v", barPercentage:.66, categoryPercentage:.9 }
+    ]},
+    plugins:[planBandPlugin, planYFixPlugin],
+    options:{
+      responsive:true, maintainAspectRatio:false, animation:false,
+      layout:{ padding:{ left:0, right:PLAN_RIGHT_W, top:8, bottom:0 } },
+      interaction:{ mode:"index", intersect:false },
+      plugins:{
+        legend:{ display:false },
+        planBand: bandOpts,
+        tooltip:{
+          filter:function(item){ return item.parsed.y != null; },
+          callbacks:{
+            title: monthTitle,
+            label:function(ctx){
+              return ctx.dataset.label + ": " +
+                Math.round(ctx.parsed.y).toLocaleString() + " ลบ.ม.";
+            },
+            footer:function(items){
+              var v = vInflow[items[0].dataIndex];
+              return v == null ? "" : "น้ำเข้า: " + Math.round(v).toLocaleString() + " ลบ.ม.";
+            }
+          }
+        }
+      },
+      scales:{
+        x: Object.assign({}, xAxis, { stacked:true }),
+        y:{ stacked:true, min:0, afterFit: fixWidth,
+            ticks:{ color:C.muted, stepSize:vStep, font:{size:11},
+                    callback:function(v){ return (v/1e6).toFixed(1); } },
+            grid:{ color:C.line }, border:{ display:false },
+            title:{ display:true, color:C.muted, text:"ปริมาณน้ำ (ล้าน ลบ.ม.)" } }
+      }
+    }
+  });
+
+  // ---------- ตารางตัวเลขใต้กราฟ
+  var msSet = {};
+  msIdx.forEach(function(i){ msSet[i] = true; });
+  var col = '<col style="width:' + PLAN_LABEL_W + 'px">' +
+    nos.map(function(){ return '<col style="width:' + colW + 'px">'; }).join("") +
+    '<col style="width:' + PLAN_RIGHT_W + 'px">';
+  var head = '<tr><th class="rl">เดือน</th>' + nos.map(function(k, i){
+      var m = msMap[k];
+      return '<th class="' + (msSet[i] ? "msc" : "") + '"' +
+        (m ? ' title="จุดวัดผลตามสัญญา เดือนที่ ' + k + '"' : "") + '>' +
+        esc(monthLabelForNo(k)) + '<small>' + (m ? "◆ " : "") +
+        (k >= 1 ? "เดือนที่ " + k : "ก่อนสัญญา") + '</small></th>';
+    }).join("") + '<th></th></tr>';
+
+  function swatch(kind, color){
+    if(!kind) return '<span class="sw sw-none"></span>';
+    var st = kind === "bar" || kind === "dot"
+      ? "background:" + color : "border-top-color:" + color;
+    return '<span class="sw sw-' + kind + '" style="' + st + '"></span>';
+  }
+  var rowDefs = [
+    { label:"น้ำเข้า (ลบ.ม.)", sw:"box", vals:vInflow, d:0 },
+    { label:"น้ำจำหน่าย (ลบ.ม.)", sw:"bar", color:PLAN_COLOR.sales, vals:vSales, d:0 },
+    { label:"น้ำสูญเสีย (ลบ.ม.)", sw:"bar", color:PLAN_COLOR.loss, vals:vLoss, d:0 },
+    { label:"อัตราน้ำสูญเสีย (รายเดือน)", sw:"dash", color:PLAN_COLOR.monthly,
+      vals:vRate, d:2, pct:true },
+    { label:"อัตราน้ำสูญเสีย (เป้าหมาย)", sw:"line", color:PLAN_COLOR.target,
+      vals:vTarget, d:2, pct:true, future:true },
+    { label:"อัตราน้ำสูญเสีย (เฉลี่ย 3 เดือน)", sw:"line", color:PLAN_COLOR.rolling,
+      vals:vRoll, d:2, pct:true, judge:true },
+    { label:"น้ำสูญเสียเฉลี่ย (ลบ.ม./วัน)", vals:vDaily, d:0 }
+  ];
+  var body = rowDefs.map(function(r){
+    return '<tr><td class="rl">' +
+      (r.sw === "box" ? '<span class="sw sw-box"></span>' : swatch(r.sw, r.color)) +
+      esc(r.label) + '</td>' +
+      r.vals.map(function(v, i){
+        var cls = [];
+        if(msSet[i]) cls.push("msc");
+        if(r.future && lastIdx != null && i > lastIdx) cls.push("fut");
+        if(r.judge && msSet[i] && v != null){
+          var m = msMap[nos[i]];
+          if(m && m.status === "pass") cls.push("pf-pass");
+          if(m && m.status === "fail") cls.push("pf-fail");
+        }
+        var txt = v == null ? "" : num(v, r.d) + (r.pct ? "%" : "");
+        return '<td class="' + cls.join(" ") + '">' + txt + '</td>';
+      }).join("") + '<td></td></tr>';
+  }).join("");
+  $("planTable").innerHTML = '<colgroup>' + col + '</colgroup><thead>' + head +
+    '</thead><tbody>' + body + '</tbody>';
+  $("planTable").style.width = innerW + "px";
+
+  // ---------- ตัวเลขสรุปมุมขวาบน
+  var chips = [];
+  var bd = DATA.breakdown, s = bd && bd.summary;
+  if(s && s.total_reduction_m3 != null){
+    var measure = null;
+    targets.forEach(function(t){ if(t.month_no === bd.measure_month_no) measure = t; });
+    chips.push('<span class="plan-chip">ต้องลดน้ำสูญเสียอีก ≈ <b>' +
+      num(s.total_reduction_m3 / denomOf(), 0) + '</b> ลบ.ม./ชม.' +
+      (measure ? ' <span class="dim">ให้ถึงเป้าเดือนที่ ' + measure.month_no +
+        ' (' + num(measure.target_rate, 2) + '%)</span>' : '') + '</span>');
+  }
+  var lastRoll = rolling.length ? rolling[rolling.length-1] : null;
+  if(lastRoll){
+    chips.push('<span class="plan-chip">เฉลี่ย 3 เดือนล่าสุด <b>' +
+      num(lastRoll.loss_rate, 2) + '%</b> <span class="dim">' +
+      esc(lastRoll.label) + '</span></span>');
+  }
+  $("planChips").innerHTML = chips.join("");
+
+  $("planNote").innerHTML =
+    "เส้นเป้าหมายรายเดือนลากเชิงเส้นระหว่างจุดวัดผลตามสัญญา ใช้เป็นแนวทางระหว่างทาง " +
+    "(ผูกพันเฉพาะจุดวัดผล ◆) · สัญญาวัดผลด้วยอัตราเฉลี่ย 3 เดือน " +
+    "(รวมปริมาณ 3 เดือนแล้วหารครั้งเดียว) · น้ำสูญเสียต่อวันคิดจากรอบ 3 เดือนเดียวกัน";
+
+  // เลื่อนให้เห็นเดือนล่าสุดที่มีข้อมูล (วางไว้ราวสองในสามของจอ เห็นเป้าข้างหน้าด้วย)
+  var sc = $("planScroll");
+  if(lastIdx != null && innerW > sc.clientWidth){
+    var target = PLAN_LABEL_W + (lastIdx + 1) * colW - sc.clientWidth * 0.66;
+    sc.scrollLeft = Math.max(0, target);
+  }
 }
 
 function renderDmaTable(){
@@ -1407,6 +1793,11 @@ function bindEvents(){
   });
 
   $("btnReload").addEventListener("click", load);
+  // กราฟอัตราน้ำสูญเสียคำนวณความกว้างคอลัมน์จากขนาดกล่อง ต้องวาดใหม่เมื่อหน้าจอเปลี่ยนขนาด
+  window.addEventListener("resize", function(){
+    clearTimeout(PLAN_RESIZE_TIMER);
+    PLAN_RESIZE_TIMER = setTimeout(function(){ if(DATA) renderPlan(); }, 200);
+  });
   // สองช่องบนแถบควบคุมเป็นค่าเดียวกันคนละหน่วย แก้ช่องไหนอีกช่องตามทันที
   $("totalReduction").addEventListener("input", function(){
     var v = parseFloat($("totalReduction").value);
