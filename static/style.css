@@ -619,6 +619,23 @@ tr:last-child td { border-bottom: none; }
 .btn-sm.fail { background: var(--danger); color: #fff; }
 .btn-sm.close { background: var(--mwa-navy-deep); color: #fff; }
 .btn-sm.transfer { background: var(--mwa-purple); color: #fff; }
+.btn-sm.assign { background: var(--mwa-sky); color: #fff; }
+
+.job-popup-box .pp-section-label {
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--mwa-navy-deep);
+  margin-bottom: -4px;
+}
+.job-popup-box .pp-warn {
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: #8a5a00;
+  background: #fff7e6;
+  border: 1px solid #f0c36d;
+  border-radius: 8px;
+  padding: 8px 10px;
+}
 
 .btn-edit-trigger {
   text-decoration: none;

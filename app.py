@@ -443,12 +443,24 @@ def dashboard():
         zone_options=zone_options,
         job_permissions=job_permissions,
         lateral_candidates_map=lateral_candidates_map,
+        assign_candidates_map=_assign_candidates_map(jobs, job_permissions, user),
         job_type_name_map=job_type_name_map,
         zone_name_map=zone_name_map,
         branch_name_map=branch_name_map,
         zones=zones,
         incident_permissions=incident_permissions,
     )
+
+
+def _assign_candidates_map(jobs, job_permissions, user):
+    """รายชื่อผู้ที่มอบหมายงานให้ได้ (dropdown ใน popup) — คำนวณเฉพาะงานที่ user มีสิทธิ์มอบหมาย"""
+    return {
+        j["JobID"]: (
+            org_service.get_assignable_users_for_job(j, user)
+            if job_permissions.get(j["JobID"], {}).get("can_assign") else []
+        )
+        for j in jobs
+    }
 
 
 def _branches_visible_to(user):
@@ -728,6 +740,7 @@ def incident_tree():
         job_type_name_map=job_type_name_map,
         job_permissions=job_permissions,
         lateral_candidates_map=lateral_candidates_map,
+        assign_candidates_map=_assign_candidates_map(jobs, job_permissions, user),
         zone_name_map=zone_name_map,
         branch_name_map=branch_name_map,
         zones=zones,
@@ -887,6 +900,7 @@ def manage_jobs():
         tracking_jobs=tracking_jobs,
         tracking_permissions=tracking_permissions,
         lateral_candidates_map=lateral_candidates_map,
+        assign_candidates_map=_assign_candidates_map(tracking_jobs, tracking_permissions, user),
         job_type_name_map=job_type_name_map,
     )
 
@@ -898,13 +912,13 @@ def job_assign(job_id):
     to_user_id = request.form.get("to_user_id", "")
     if not to_user_id:
         flash("กรุณาเลือกผู้รับมอบหมาย", "error")
-        return redirect(url_for("manage_jobs"))
+        return _safe_redirect("manage_jobs")
     try:
         job_service.assign_job(job_id, to_user_id, user)
         flash(f"มอบหมายงาน {job_id} เรียบร้อยแล้ว", "info")
     except (PermissionError, ValueError) as e:
         flash(str(e), "error")
-    return redirect(url_for("manage_jobs"))
+    return _safe_redirect("manage_jobs")
 
 
 if __name__ == "__main__":

@@ -92,6 +92,34 @@
   .tree-node.clickable:hover {
     box-shadow: 0 4px 14px rgba(0, 156, 255, 0.18);
   }
+
+  /* การ์ดงาน: กว้างเท่ากัน + ตัดรายละเอียดยาว (ซ้ำกับเหตุการณ์แม่) เหลือ 2 บรรทัด ชี้เมาส์ดูเต็ม */
+  .tree ul .tree-node { width: 250px; min-width: 0; }
+  .tree-node .tn-desc {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .tree-node.needs-assign { border: 1px dashed var(--mwa-sky); background: #f5fbff; }
+  .tn-assign-cta {
+    display: inline-block;
+    margin-top: 8px;
+    padding: 4px 12px;
+    border-radius: 6px;
+    background: var(--mwa-sky);
+    color: #fff;
+    font-size: 0.74rem;
+    font-weight: 600;
+  }
+  .tree-summary {
+    display: flex; gap: 8px; flex-wrap: wrap;
+    padding: 12px 16px 0; font-size: 0.8rem; color: var(--ink-soft);
+  }
+  .tree-summary .ts-chip {
+    padding: 3px 10px; border-radius: 999px; background: var(--bg, #f1f5f9); border: 1px solid var(--line);
+  }
+  .tree-summary .ts-chip.warn { border-color: #f0c36d; background: #fff7e6; color: #8a5a00; }
 </style>
 {% endblock %}
 
@@ -151,6 +179,15 @@
   {% set back_url = url_for('incident_tree', incident_id=selected_id) %}
   <div class="section-title">ผังเหตุการณ์: {{ selected_incident.IncidentID }}</div>
   <div class="panel" style="padding: 4px;">
+    {% if jobs %}
+    {% set n_wait = jobs|selectattr('Status', 'equalto', 'รอมอบหมาย')|list|length %}
+    {% set n_done = jobs|selectattr('Status', 'equalto', 'ปิดงาน')|list|length %}
+    <div class="tree-summary">
+      <span class="ts-chip">งานทั้งหมด {{ jobs|length }}</span>
+      {% if n_wait %}<span class="ts-chip warn">รอมอบหมาย {{ n_wait }}</span>{% endif %}
+      <span class="ts-chip">ปิดงานแล้ว {{ n_done }}</span>
+    </div>
+    {% endif %}
     <ul class="tree">
       <li>
         {% if incident_permissions.any %}
@@ -179,23 +216,26 @@
           {% set perms = job_permissions.get(job.JobID, {}) %}
           <li>
             {% if perms.any %}
-            <div class="tree-node clickable" onclick="document.getElementById('popup-{{ job.JobID }}').classList.add('open')">
+            <div class="tree-node clickable {{ 'needs-assign' if perms.can_assign and job.Status == 'รอมอบหมาย' }}"
+                 onclick="document.getElementById('popup-{{ job.JobID }}').classList.add('open')">
             {% else %}
             <div class="tree-node">
             {% endif %}
               <div class="tn-id">{{ job.JobID }}</div>
               <div class="tn-row">ประเภทงาน: {{ job_type_name_map.get(job.JobType, job.JobType) }}</div>
-              <div class="tn-row">รายละเอียด: {{ job.Description or '—' }}</div>
+              <div class="tn-row tn-desc" title="{{ job.Description or '' }}">รายละเอียด: {{ job.Description or '—' }}</div>
               <div class="tn-row">โซน / DMA: {{ zone_name_map.get(job.ZoneID) or 'ไม่ระบุ DMA' }}</div>
               <div class="tn-row">
                 <span class="badge {{ job.Status|status_class }}">{{ job.Status }}</span>
               </div>
-              <div class="tn-row">ผู้รับผิดชอบ: {{ job.CurrentAssigneeRole or '—' }}</div>
+              <div class="tn-row">ผู้รับผิดชอบ: {{ job.CurrentAssigneeUserID|user_short if job.CurrentAssigneeUserID else '—' }}</div>
               <div class="tn-row">กำหนดเสร็จ: {{ job.DueDate|date_display or '—' }}</div>
               {% if job.IsSlowestInGroup == True or job.IsSlowestInGroup == 'True' %}
               <span class="tn-slowest">ตัวกำหนด DueDate ของเหตุการณ์</span>
               {% endif %}
-              {% if perms.any %}
+              {% if perms.can_assign %}
+              <span class="tn-assign-cta">มอบหมายงาน</span>
+              {% elif perms.any %}
               <span class="tn-editable-badge">แก้ไขได้</span>
               {% endif %}
             </div>
@@ -212,7 +252,7 @@
   </div>
 
   {% for job in jobs %}
-  {{ jp.job_popup(job, job_permissions.get(job.JobID, {}), lateral_candidates_map.get(job.JobID, []), back_url, job_type_name_map.get(job.JobType, job.JobType)) }}
+  {{ jp.job_popup(job, job_permissions.get(job.JobID, {}), lateral_candidates_map.get(job.JobID, []), back_url, job_type_name_map.get(job.JobType, job.JobType), assign_candidates_map.get(job.JobID, [])) }}
   {% endfor %}
 
   {% else %}

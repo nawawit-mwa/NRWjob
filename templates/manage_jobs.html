@@ -126,7 +126,7 @@
           <td>{{ job.DueDate|date_display or '—' }}</td>
           <td>
             {% if perms.any %}{{ jp.edit_trigger(job) }}{% endif %}
-            {{ jp.job_popup(job, perms, lateral_candidates_map.get(job.JobID, []), url_for('manage_jobs'), job_type_name_map.get(job.JobType, job.JobType)) }}
+            {{ jp.job_popup(job, perms, lateral_candidates_map.get(job.JobID, []), url_for('manage_jobs'), job_type_name_map.get(job.JobType, job.JobType), assign_candidates_map.get(job.JobID, [])) }}
           </td>
         </tr>
         {% endfor %}
