@@ -380,10 +380,12 @@
     <div id="tabJob" class="mtab-panel">
       <div id="mAlertLinkedPanel" style="display:none;margin-bottom:12px;padding:10px 14px;border-radius:10px;background:rgba(7,156,0,.14);border:1px solid var(--green);color:var(--green);font-size:12.5px;font-weight:600;">
         ✅ เปิดเป็นเหตุการณ์แล้ว: <span id="mAlertLinkedIncident" class="mono"></span>
+        <div id="mAlertLinkedDue"></div>
       </div>
 
       <div id="mAlertSavedPanel" style="display:none;margin-bottom:12px;padding:10px 14px;border-radius:10px;background:rgba(0,156,255,.10);border:1px solid var(--mwa-sky, #009cff);color:var(--mwa-sky, #009cff);font-size:12.5px;font-weight:600;">
         📌 บันทึกข้อมูลแล้ว (<span id="mAlertSavedId" class="mono"></span>) เมื่อ <span id="mAlertSavedDate" class="mono"></span>
+        <div id="mAlertSavedNote"></div>
       </div>
 
       <div id="mAlertSavePanel" style="display:none;margin-bottom:12px;padding:12px 14px;border-radius:10px;background:var(--panel-2);border:1px solid var(--border);">
@@ -1833,6 +1835,33 @@ function formatDateDDMM(isoString){
   return `${day.padStart(2,'0')}/${month.padStart(2,'0')}`;
 }
 
+/** บรรทัด "💬 หมายเหตุ" ที่กรอกไว้ตอนบันทึกแจ้งเตือน (ALT) — คืน '' ถ้าไม่ได้กรอกหมายเหตุ */
+function alertNoteLineHtml(note){
+  const t = String(note || '').trim();
+  if(!t) return '';
+  return `<div style="margin-top:6px;font-weight:400;white-space:pre-wrap;">💬 หมายเหตุ: ${escapeHtml(t)}</div>`;
+}
+
+/** บรรทัด "📅 กำหนดเสร็จ" ของเหตุการณ์ที่ผูกไว้ (Incident.DueDate) + ป้ายเลยกำหนด/ปิดแล้ว */
+function incidentDueLineHtml(dueDate, incidentStatus){
+  const closed = incidentStatus === 'ปิดแล้ว';
+  let html;
+  if(!dueDate){
+    html = 'ยังไม่กำหนด';
+  } else {
+    html = escapeHtml(formatDateDDMMYYYY(dueDate));
+    const m = String(dueDate).trim().match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if(m && !closed){
+      const now = new Date();
+      const todayKey = now.getFullYear()*10000 + (now.getMonth()+1)*100 + now.getDate();
+      const dueKey = (+m[1])*10000 + (+m[2])*100 + (+m[3]);
+      if(dueKey < todayKey) html += ' <span style="color:var(--red);">(เลยกำหนดแล้ว)</span>';
+    }
+  }
+  if(closed) html += ' · ปิดเหตุการณ์แล้ว';
+  return `<div style="margin-top:6px;">📅 กำหนดเสร็จ: <span class="mono">${html}</span></div>`;
+}
+
 /**
  * เช็คสถานะแจ้งเตือน MNF ของ RTU นี้แล้วอัปเดตแผงทั้ง 3 (บันทึกใหม่/บันทึกแล้ว/เปิดเป็นเหตุการณ์แล้ว)
  * ให้ตรงกันเสมอ — เรียกทั้งตอนเปิด modal และหลังบันทึกสำเร็จ (ไม่ต้องปิดเปิด popup ใหม่)
@@ -1863,12 +1892,15 @@ async function refreshAlertStatusPanel(rtuId){
         statusBadge.style.background = 'rgba(7,156,0,.14)';
         statusBadge.style.border = '1px solid var(--green)';
         statusBadge.style.color = 'var(--green)';
-        statusBadge.innerHTML = `✅ เปิดเป็นเหตุการณ์แล้ว: ${incidentLinkHtml(json.incident_id)} (บันทึก ${alertLinkHtml(json.alert_id)} เมื่อ ${escapeHtml(formatDateDDMMYYYY(json.saved_at))})`;
+        statusBadge.innerHTML = `✅ เปิดเป็นเหตุการณ์แล้ว: ${incidentLinkHtml(json.incident_id)} (บันทึก ${alertLinkHtml(json.alert_id)} เมื่อ ${escapeHtml(formatDateDDMMYYYY(json.saved_at))})`
+          + incidentDueLineHtml(json.incident_due_date, json.incident_status)
+          + alertNoteLineHtml(json.note);
       } else {
         statusBadge.style.background = 'rgba(0,156,255,.10)';
         statusBadge.style.border = '1px solid var(--mwa-sky, #009cff)';
         statusBadge.style.color = 'var(--mwa-sky, #009cff)';
-        statusBadge.innerHTML = `📌 บันทึกการแจ้งเตือนไว้แล้ว: ${alertLinkHtml(json.alert_id)} เมื่อ ${escapeHtml(formatDateDDMMYYYY(json.saved_at))}`;
+        statusBadge.innerHTML = `📌 บันทึกการแจ้งเตือนไว้แล้ว: ${alertLinkHtml(json.alert_id)} เมื่อ ${escapeHtml(formatDateDDMMYYYY(json.saved_at))}`
+          + alertNoteLineHtml(json.note);
       }
     }
 
@@ -1879,9 +1911,11 @@ async function refreshAlertStatusPanel(rtuId){
       savedPanel.style.display = 'block';
       document.getElementById('mAlertSavedId').innerHTML = alertLinkHtml(json.alert_id);
       document.getElementById('mAlertSavedDate').textContent = formatDateDDMMYYYY(json.saved_at);
+      document.getElementById('mAlertSavedNote').innerHTML = alertNoteLineHtml(json.note);
       if(json.linked){
         linkedPanel.style.display = 'block';
         document.getElementById('mAlertLinkedIncident').innerHTML = incidentLinkHtml(json.incident_id);
+        document.getElementById('mAlertLinkedDue').innerHTML = incidentDueLineHtml(json.incident_due_date, json.incident_status);
       }
     } else {
       // ยังไม่เคยบันทึก (หรือบันทึกเดิมถูกยกเลิกไปแล้ว) — โชว์ฟอร์มบันทึกใหม่ได้ตามปกติ
