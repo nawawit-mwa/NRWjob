@@ -829,7 +829,7 @@ function renderCards(){
 // ---------------------------------------------------------------- กราฟอัตราน้ำสูญเสียฐานและเป้าหมาย
 // แบ่งเป็น 2 กราฟซ้อนกันแทนกราฟเดียวที่มี 2 แกน y (ปริมาณ + อัตรา)
 //   บน  = อัตราน้ำสูญเสีย (%) — เส้นจริงรายเดือน / เฉลี่ย 3 เดือน / เป้าหมาย / จุดวัดผล
-//   ล่าง = ปริมาณน้ำรายเดือน (ลบ.ม.) — แท่งซ้อน น้ำจำหน่าย + น้ำสูญเสีย = น้ำเข้า
+//   ล่าง = ปริมาณน้ำรายเดือน (ลบ.ม.) — แท่งเรียงกัน น้ำเข้า / น้ำจำหน่าย / น้ำสูญเสีย
 //   ใต้สุด = ตารางตัวเลขรายเดือน
 // ทั้งสามส่วนใช้ความกว้างคอลัมน์ต่อเดือนเท่ากัน (แกน y ตรึงความกว้างไว้เท่าคอลัมน์ชื่อแถว)
 // เดือนเดียวกันจึงตรงกันเป็นแนวดิ่งตลอดทั้งกราฟและตาราง
@@ -838,7 +838,7 @@ var PLAN_RIGHT_W = 14;      // ระยะเผื่อขวาสุด
 var PLAN_MIN_COL = 66;      // ความกว้างต่ำสุดต่อเดือน (ให้ตัวเลข 7 หลักพอดีช่อง)
 var PLAN_COLOR = {
   rolling:C.teal, target:C.amber, monthly:"#7a5cc2", base:"rgba(92,116,136,.7)",
-  sales:"#4a94d8", loss:"#e0704f", band:"rgba(181,121,15,.09)"
+  inflow:"#2f6db5", sales:"#3aa88c", loss:"#e0704f", band:"rgba(181,121,15,.09)"
 };
 var PLAN_RESIZE_TIMER = null;
 
@@ -993,6 +993,8 @@ function renderPlan(){
     color:PLAN_COLOR.base, label:"อัตราฐาน X " + num(x, 2) + "%"});
   if(showFc) legend.push({key:"fc", chart:"planRate", sw:"dash",
     color:PLAN_COLOR.rolling, label:"คาดการณ์ (แถบจาง = ช่วงความเชื่อมั่น)"});
+  legend.push({key:"inflow", chart:"planVol", sw:"bar", color:PLAN_COLOR.inflow,
+    label:"น้ำเข้า"});
   legend.push({key:"sales", chart:"planVol", sw:"bar", color:PLAN_COLOR.sales,
     label:"น้ำจำหน่าย"});
   legend.push({key:"loss", chart:"planVol", sw:"bar", color:PLAN_COLOR.loss,
@@ -1004,7 +1006,7 @@ function renderPlan(){
       '<span class="sw sw-' + l.sw + '" style="' + st + '"></span>' +
       esc(l.label) + '</span>';
   }).join("") +
-    '<span class="lg-note">ความสูงรวมของแท่ง = น้ำเข้า · แถบสีเหลือง = เดือนที่วัดผลตามสัญญา</span>';
+    '<span class="lg-note">แถบสีเหลือง = เดือนที่วัดผลตามสัญญา</span>';
   Array.prototype.forEach.call($("planLegend").querySelectorAll(".lg"), function(el){
     el.addEventListener("click", function(){
       var ch = CHARTS[el.getAttribute("data-chart")];
@@ -1119,21 +1121,23 @@ function renderPlan(){
     }
   });
 
-  // ---------- กราฟปริมาณ (แท่งซ้อน น้ำจำหน่าย + น้ำสูญเสีย = น้ำเข้า)
+  // ---------- กราฟปริมาณ (แท่งเรียงกัน น้ำเข้า / น้ำจำหน่าย / น้ำสูญเสีย)
   var vMax = Math.max.apply(null, vInflow.filter(function(v){ return v != null; })
                                          .concat([0]));
   var vStep = vMax > 8e6 ? 2e6 : (vMax > 3e6 ? 1e6 : 5e5);
+  function volBar(key, label, data, color, hover){
+    // เส้นขอบสีพื้นหลังเว้นช่องไฟ 1px ระหว่างแท่งที่ติดกัน
+    return { _key:key, label:label, data:data, backgroundColor:color,
+      hoverBackgroundColor:hover, borderColor:"#fff", borderWidth:1,
+      borderSkipped:"bottom", borderRadius:{ topLeft:2, topRight:2 },
+      barPercentage:.94, categoryPercentage:.84 };
+  }
   CHARTS.planVol = new Chart($("planVolChart"), {
     type:"bar",
     data:{ labels: nos, datasets:[
-      { _key:"sales", label:"น้ำจำหน่าย", data:vSales, backgroundColor:PLAN_COLOR.sales,
-        hoverBackgroundColor:"#2f7fc8",
-        borderColor:"#fff", borderWidth:{ top:1 }, borderSkipped:false,
-        stack:"v", barPercentage:.66, categoryPercentage:.9 },
-      { _key:"loss", label:"น้ำสูญเสีย", data:vLoss, backgroundColor:PLAN_COLOR.loss,
-        hoverBackgroundColor:"#cc5a39",
-        borderRadius:{ topLeft:3, topRight:3 }, borderSkipped:"bottom",
-        stack:"v", barPercentage:.66, categoryPercentage:.9 }
+      volBar("inflow", "น้ำเข้า", vInflow, PLAN_COLOR.inflow, "#24589a"),
+      volBar("sales", "น้ำจำหน่าย", vSales, PLAN_COLOR.sales, "#2d8c74"),
+      volBar("loss", "น้ำสูญเสีย", vLoss, PLAN_COLOR.loss, "#cc5a39")
     ]},
     plugins:[planBandPlugin, planYFixPlugin],
     options:{
@@ -1150,17 +1154,13 @@ function renderPlan(){
             label:function(ctx){
               return ctx.dataset.label + ": " +
                 Math.round(ctx.parsed.y).toLocaleString() + " ลบ.ม.";
-            },
-            footer:function(items){
-              var v = vInflow[items[0].dataIndex];
-              return v == null ? "" : "น้ำเข้า: " + Math.round(v).toLocaleString() + " ลบ.ม.";
             }
           }
         }
       },
       scales:{
-        x: Object.assign({}, xAxis, { stacked:true }),
-        y:{ stacked:true, min:0, afterFit: fixWidth,
+        x: xAxis,
+        y:{ min:0, afterFit: fixWidth,
             ticks:{ color:C.muted, stepSize:vStep, font:{size:11},
                     callback:function(v){ return (v/1e6).toFixed(1); } },
             grid:{ color:C.line }, border:{ display:false },
@@ -1190,7 +1190,7 @@ function renderPlan(){
     return '<span class="sw sw-' + kind + '" style="' + st + '"></span>';
   }
   var rowDefs = [
-    { label:"น้ำเข้า (ลบ.ม.)", sw:"box", vals:vInflow, d:0 },
+    { label:"น้ำเข้า (ลบ.ม.)", sw:"bar", color:PLAN_COLOR.inflow, vals:vInflow, d:0 },
     { label:"น้ำจำหน่าย (ลบ.ม.)", sw:"bar", color:PLAN_COLOR.sales, vals:vSales, d:0 },
     { label:"น้ำสูญเสีย (ลบ.ม.)", sw:"bar", color:PLAN_COLOR.loss, vals:vLoss, d:0 },
     { label:"อัตราน้ำสูญเสีย (รายเดือน)", sw:"dash", color:PLAN_COLOR.monthly,
@@ -1203,7 +1203,7 @@ function renderPlan(){
   ];
   var body = rowDefs.map(function(r){
     return '<tr><td class="rl">' +
-      (r.sw === "box" ? '<span class="sw sw-box"></span>' : swatch(r.sw, r.color)) +
+      swatch(r.sw, r.color) +
       esc(r.label) + '</td>' +
       r.vals.map(function(v, i){
         var cls = [];
