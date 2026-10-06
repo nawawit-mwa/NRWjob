@@ -594,6 +594,13 @@ def alerts_linked_map():
     return jsonify(alert_service.get_all_linked_rtu_ids())
 
 
+@app.route("/alerts/saved-map")
+def alerts_saved_map():
+    # public endpoint (ไม่บังคับ login) เหมือน /alerts/status — {RTUID: AlertID} ของ RTU ที่บันทึกแจ้งเตือนไว้
+    # ใช้แสดงเครื่องหมาย "บันทึกแล้ว" ในตาราง Monitoring (ส่งแค่เลข ALT ไม่มีหมายเหตุหรือเลขเหตุการณ์)
+    return jsonify(alert_service.get_all_saved_rtu_ids())
+
+
 @app.route("/alerts/save", methods=["POST"])
 @login_required
 def alert_save():

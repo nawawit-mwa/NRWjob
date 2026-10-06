@@ -991,15 +991,18 @@ function renderAll(){
 async function refreshFromCsv(isFirstLoad){
   document.getElementById('csvPathLabel').textContent = `${ENVELOPE_CSV_URL}, ${SERIES_CSV_URL}, ${SUMMARY_CSV_URL}`;
   try{
-    const [envelopeRows, seriesRows, summaryRows, ignoreSet, remarksByDma, linkedMap] = await Promise.all([
+    const [envelopeRows, seriesRows, summaryRows, ignoreSet, remarksByDma, linkedMap, savedMap] = await Promise.all([
       loadCsv(ENVELOPE_CSV_URL), loadCsv(SERIES_CSV_URL), loadCsv(SUMMARY_CSV_URL), loadIgnoreList(IGNORE_CSV_URL),
       loadRemarksMap(REMARK_CSV_URL),   // "มีหมายเหตุ" กลับมาอ่านจากชีท remark เดิมแทน job_log ตามที่สั่ง
       // (loadRemarksMapFromJobLog() ยังเก็บไว้เหมือนเดิม ไม่ได้ลบ — สลับกลับมาใช้ได้ทันทีถ้าต้องการในอนาคต)
       IS_LOGGED_IN
         ? fetch('/alerts/linked-map').then(res => res.json()).catch(() => ({}))
         : Promise.resolve({}),   // ไม่ login ไม่ต้องยิงเลย (endpoint บังคับ login_required อยู่แล้วด้วย)
+      // RTU ที่บันทึกแจ้งเตือนไว้แล้ว (public) — ใช้แสดงเครื่องหมาย "บันทึกแล้ว" ในตาราง; พังก็แค่ไม่โชว์
+      fetch('/alerts/saved-map').then(res => res.ok ? res.json() : {}).catch(() => ({})),
     ]);
     linkedIncidentMap = linkedMap || {};
+    savedAlertMap = savedMap || {};
     const envelopeByDma = envelopeFromCsv(envelopeRows);
     const seriesByDma = seriesFromCsv(seriesRows);
     const summaryByDma = summaryFromCsv(summaryRows);
@@ -1066,6 +1069,7 @@ if(AUTO_REFRESH_ENABLED){
 
 let activeStatusFilter = null;   // null = แสดงทุกสถานะ, ไม่ก็เป็น 'alert'/'watch'/'ok'/'no_data'/'remark'
 let activeIncidentFilter = false;   // true = กรองเฉพาะ RTU ที่เปิดเป็นเหตุการณ์แล้ว (ทำงานร่วมกับ activeStatusFilter แบบ AND)
+let savedAlertMap = {};             // {RTUID: AlertID} ของ RTU ที่บันทึกแจ้งเตือนไว้แล้ว (ยังไม่ยกเลิก)
 let linkedIncidentMap = {};         // {RTUID: IncidentID} ของ RTU ที่เปิดเป็นเหตุการณ์แล้ว — เห็นเฉพาะ login แล้ว
 let searchQuery = '';            // ค้นหาจากรหัส/ชื่อ RTU — ทำงานร่วมกับ activeStatusFilter แบบ AND
 
@@ -1293,6 +1297,13 @@ function updateSortIndicators(){
   });
 }
 
+/** เครื่องหมายเล็ก "บันทึกแล้ว" ต่อท้ายสถานะในตาราง — เฉพาะ RTU ที่มีการบันทึกแจ้งเตือน (ALT) ค้างอยู่ */
+function savedMarkHtml(code){
+  const altId = savedAlertMap[code];
+  if(!altId) return '';
+  return ` <span class="mono" style="font-size:10.5px;color:var(--teal);" title="บันทึกการแจ้งเตือนไว้แล้ว (${escapeHtml(altId)})">✔บันทึกแล้ว</span>`;
+}
+
 function renderPriority(){
   const cmp = {
     status: (a,b)=> STATUS_ORDER[dStatus(a)]-STATUS_ORDER[dStatus(b)] || (b.a.excessPerHour-a.a.excessPerHour),
@@ -1327,7 +1338,7 @@ function renderPriority(){
     if(d.a.status==='no_data'){
       const daysTxt = d.a.noDataDays!=null? `${d.a.noDataDays.toFixed(1)} วัน` : '—';
       return `<tr onclick="openModal('${d.code}')">
-        <td><span class="badge no_data"><span class="bdot"></span>${CASE_META.N.icon} ${STATUS_LABEL.no_data}</span></td>
+        <td><span class="badge no_data"><span class="bdot"></span>${CASE_META.N.icon} ${STATUS_LABEL.no_data}</span>${savedMarkHtml(d.code)}</td>
         <td><b>${d.code}</b></td>
         <td class="mono" colspan="4" style="color:var(--gray);">ไม่มีข้อมูลมา ${daysTxt} — สงสัย RTU เสีย/สื่อสารขาด</td>
         <td></td>
@@ -1338,7 +1349,7 @@ function renderPriority(){
     const deltaTxt = d.a.status==='ok' ? '—' : `+${d.a.excessPerHour.toFixed(1)} m³/hr`;
     const pctTxt = d.a.status==='ok' ? '—' : `+${displayPct(d).toFixed(1)}%`;
     return `<tr onclick="openModal('${d.code}')">
-      <td><span class="badge ${d.a.status}"><span class="bdot"></span>${(CASE_META[d.a.case]||CASE_META.C).icon} ${(CASE_META[d.a.case]||CASE_META.C).label}</span>${d.a.hardThresholdBreached?' <span class="mono" style="font-size:10.5px;color:#e5484d;" title="เกิน Hard Flow Threshold ตรงๆ เตือนทันที">⚡hard</span>':''}${d.a.mk.significant?' <span class="mono" style="font-size:10.5px;color:#e8a33d;" title="Mann-Kendall: แนวโน้มเพิ่มขึ้นมีนัยสำคัญ">▲trend</span>':''}${d.a.cusumRecentBreach?' <span class="mono" style="font-size:10.5px;color:#e5484d;" title="CUSUM: ฐานการไหลขยับขึ้นถาวรในช่วงล่าสุด">⚑cusum</span>':''}${d.a.hasRemark?` <span class="mono" style="font-size:10.5px;color:var(--remark);" title="${(d.a.remark.text||d.a.remark.category||'').replace(/"/g,'&quot;')}">📌 remark</span>`:''}</td>
+      <td><span class="badge ${d.a.status}"><span class="bdot"></span>${(CASE_META[d.a.case]||CASE_META.C).icon} ${(CASE_META[d.a.case]||CASE_META.C).label}</span>${d.a.hardThresholdBreached?' <span class="mono" style="font-size:10.5px;color:#e5484d;" title="เกิน Hard Flow Threshold ตรงๆ เตือนทันที">⚡hard</span>':''}${d.a.mk.significant?' <span class="mono" style="font-size:10.5px;color:#e8a33d;" title="Mann-Kendall: แนวโน้มเพิ่มขึ้นมีนัยสำคัญ">▲trend</span>':''}${d.a.cusumRecentBreach?' <span class="mono" style="font-size:10.5px;color:#e5484d;" title="CUSUM: ฐานการไหลขยับขึ้นถาวรในช่วงล่าสุด">⚑cusum</span>':''}${savedMarkHtml(d.code)}${d.a.hasRemark?` <span class="mono" style="font-size:10.5px;color:var(--remark);" title="${(d.a.remark.text||d.a.remark.category||'').replace(/"/g,'&quot;')}">📌 remark</span>`:''}</td>
       <td><b>${d.code}</b> <!--· ${d.name}--></td>
       <td class="mono">${d.a.currentMnf.toFixed(1)} m³/hr</td>
       <td class="mono">${d.a.mean.toFixed(1)} ± ${(2*d.a.sd).toFixed(1)}</td>
@@ -2029,6 +2040,9 @@ async function saveCurrentAlert(){
     const json = await res.json();
     if(json && json.success){
       // บันทึกสำเร็จ -> สลับไปโชว์แผง "บันทึกแล้ว" ทันที ไม่ต้องปิดเปิด popup ใหม่ (ข้อ 2)
+      // + ใส่เครื่องหมาย "บันทึกแล้ว" ในตารางด้านหลังทันที ไม่ต้องรอรีเฟรชรอบถัดไป
+      savedAlertMap[d.code] = json.alert_id || savedAlertMap[d.code] || 'ALT';
+      renderPriority();
       await refreshAlertStatusPanel(d.code);
     } else {
       throw new Error((json && json.error) || 'บันทึกไม่สำเร็จ');

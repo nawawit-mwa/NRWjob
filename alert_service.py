@@ -230,6 +230,20 @@ def get_all_linked_rtu_ids() -> dict:
     }
 
 
+def get_all_saved_rtu_ids() -> dict:
+    """คืน {RTUID: AlertID} ของ RTU ที่มีการบันทึกแจ้งเตือนไว้ (ยัง active = ไม่ใช่ 'ยกเลิกแล้ว') ทั้งระบบ
+    ใช้แสดงเครื่องหมาย "บันทึกแล้ว" ในตารางหน้า Monitoring — ดึงครั้งเดียวทั้งหมด แทนยิง /alerts/status
+    ทีละ RTU (ถ้า RTU เดียวมีหลายแถว active ใช้แถวล่าสุด เหมือน get_active_alert_for_rtu)"""
+    latest = {}
+    for a in sc.get_all_records("SavedAlerts"):
+        rtu_id = a.get("RTUID")
+        if not rtu_id or a.get("Status") == ALERT_STATUS_CANCELLED:
+            continue
+        if rtu_id not in latest or a.get("SavedAt", "") > latest[rtu_id].get("SavedAt", ""):
+            latest[rtu_id] = a
+    return {rtu_id: a.get("AlertID", "") for rtu_id, a in latest.items()}
+
+
 def get_alert_status_for_rtu(rtu_id: str) -> dict:
     """เช็คสถานะแจ้งเตือนของ RTU นี้ (ใช้แสดงใน popup ของ Monitoring) คืน dict เสมอ:
     - saved: มีแถว active อยู่ไหม (บันทึกไว้แล้ว ไม่ว่าจะแปลงเป็นเหตุการณ์หรือยัง)
