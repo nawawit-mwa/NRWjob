@@ -387,7 +387,7 @@
       </div>
 
       <div id="mAlertSavePanel" style="display:none;margin-bottom:12px;padding:12px 14px;border-radius:10px;background:var(--panel-2);border:1px solid var(--border);">
-        <div style="font-weight:600;font-size:12.5px;margin-bottom:8px;">📝 บันทึกการแจ้งเตือนนี้ไว้ดูภายหลัง / แปลงเป็นเหตุการณ์จ่ายงานได้</div>
+        <div style="font-weight:600;font-size:12.5px;margin-bottom:8px;">📝 บันทึกการแจ้งเตือนนี้ไว้ดูภายหลัง / สามารถแปลงเป็น "เหตุการณ์" เพื่อจ่ายงานต่อส่วน Job Management ได้</div>
         <textarea id="mAlertNote" rows="2" placeholder="หมายเหตุเพิ่มเติม (ถ้ามี)"
                   style="width:100%;font-family:inherit;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--panel);color:var(--text);font-size:12.5px;margin-bottom:8px;"></textarea>
         <button type="button" id="mAlertSaveBtn" class="theme-toggle" onclick="saveCurrentAlert()"
@@ -395,6 +395,9 @@
         <span id="mAlertSaveStatus" style="font-size:11.5px;margin-left:8px;"></span>
       </div>
 
+      <!-- [ปิดชั่วคราว 2026-10-06] ฟอร์มลงข้อมูลหมายเหตุ/งาน (Apps Script job_log) + ตาราง Audit Log
+           ใช้ "บันทึกการแจ้งเตือน" ด้านบน → แปลงเป็นเหตุการณ์ใน Job Management แทน
+           ถ้าจะเปิดกลับ: ลบ comment นี้ + เปิด comment ใน openModal() (populateJobFormOptions/fetchJobLogs) ด้วย
       <div class="job-log-note" id="jobModeNote">⚠️ ยังไม่ได้ตั้งค่า Apps Script URL (<code class="mono">JOB_API_URL</code>) — ตอนนี้ทำงานใน <b>โหมดจำลอง</b>: บันทึกไว้ในหน่วยความจำเบราว์เซอร์ชั่วคราวเท่านั้น (หายเมื่อรีเฟรชหน้า ไม่ถูกแชร์กับผู้ใช้อื่น) ดูวิธีตั้งค่าใน <code class="mono">Code.gs</code> ที่แนบมา</div>
 
       <div class="job-form">
@@ -436,6 +439,7 @@
         <tbody id="jobLogBody"></tbody>
       </table>
       <div class="job-log-empty" id="jobLogEmpty" style="display:none;">ยังไม่มีประวัติงานสำหรับ RTU นี้</div>
+      [/ปิดชั่วคราว] -->
     </div>
   </div>
 </div>
@@ -1232,7 +1236,7 @@ function renderKpis(){
     {label:'สถานะแจ้งเตือน', val:alertCount, cls:'alert', status:'alert'},
     {label:'สถานะเฝ้าระวัง', val:watchCount, cls:'watch', status:'watch'},
     {label:'สถานะปกติ', val:okCount, cls:'ok', status:'ok'},
-    {label:'มีหมายเหตุ', val:remarkCount, cls:'remark', status:'remark'},
+    // {label:'มีหมายเหตุ', val:remarkCount, cls:'remark', status:'remark'},   // [ปิดชั่วคราว 2026-10-06]
     // {label:'ปริมาณจ่ายรวมวันนี้', val:Math.round(totalToday).toLocaleString(), unit:'m³', cls:''},
     // {label:'สูญเสียประเมินรวม/วัน', val:Math.round(totalLoss).toLocaleString(), unit:'m³', cls: totalLoss>0?'alert':''},
   ];
@@ -1448,11 +1452,12 @@ function openModal(code){
   currentJobRtuId = d.code;
   updateModalNavButtons();
   switchModalTab('analysis');
-  populateJobFormOptions();
-  document.getElementById('jobAssignee').value = '';
-  document.getElementById('jobStatus').value = '';
-  document.getElementById('jobStep').value = '';
-  document.getElementById('jobRemark').value = '';
+  // [ปิดชั่วคราว 2026-10-06] ฟอร์มลงหมายเหตุ/งาน (job_log) ถูก comment ออกจาก HTML แล้ว — element ไม่มีอยู่ในหน้า
+  // populateJobFormOptions();
+  // document.getElementById('jobAssignee').value = '';
+  // document.getElementById('jobStatus').value = '';
+  // document.getElementById('jobStep').value = '';
+  // document.getElementById('jobRemark').value = '';
   // แผงหมายเหตุใน popup ใช้แหล่งข้อมูลเดียวกับ badge 📌/ตัวกรอง/ตัวนับ KPI เสมอ (d.a.remark)
   // ไม่ดึงจาก job_log แยกต่างหากอีกต่อไป — ถ้าวันหลังสลับแหล่ง badge ไปที่อื่น แผงนี้จะตามไปเองอัตโนมัติ
   // เพราะอ่านจากตัวแปรเดียวกัน ไม่ต้องแก้ 2 จุด
@@ -1464,7 +1469,7 @@ function openModal(code){
   } else {
     remarkPanel.style.display = 'none';
   }
-  fetchJobLogs(d.code);
+  // fetchJobLogs(d.code);   // [ปิดชั่วคราว 2026-10-06] ตาราง Audit Log ถูก comment ออกจาก HTML แล้ว
 
   // แผงบันทึก/สถานะแจ้งเตือน MNF — ดึงสถานะจาก /alerts/status ครั้งเดียว ใช้ตัดสินใจว่าจะโชว์
   // "ฟอร์มบันทึกใหม่" หรือ "บันทึกแล้ว" หรือ "เปิดเป็นเหตุการณ์แล้ว" (ไม่ใช่แยก 2 ที่เหมือนเดิม)
