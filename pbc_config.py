@@ -163,6 +163,8 @@ SHEET_SCHEMAS = {
         "event_id", "contract_id", "event_type", "month", "title", "items",
         "reduction_m3h", "status", "note", "linked_incident_id", "deleted",
         "updated_by", "updated_at",
+        # ปริมาณที่ลดได้แยกราย DMA รูปแบบ "17-01-02=93;17-01-05=22" (เพิ่มภายหลัง ต่อท้ายเสมอ)
+        "dma_alloc",
     ],
 }
 

@@ -77,18 +77,53 @@ def get_spreadsheet():
 _AUTO_CREATE_TABS = {CFG.TAB_EVENTS}
 
 
+_HEADER_CHECKED = set()
+
+
+def _ensure_header(ws, tab):
+    """
+    tab ที่สร้างอัตโนมัติ: ถ้าหัวตารางใน Sheet สั้นกว่า schema (เพิ่มคอลัมน์ใหม่ภายหลัง)
+    ให้เติมหัวคอลัมน์ที่ขาดต่อท้าย ไม่งั้นค่าในคอลัมน์ใหม่จะถูกเขียนแต่อ่านกลับไม่ได้
+    """
+    if tab in _HEADER_CHECKED:
+        return
+    header = CFG.SHEET_SCHEMAS[tab]
+    current = [h.strip() for h in ws.row_values(1)]
+    _HEADER_CHECKED.add(tab)
+    if current != header[:len(current)]:
+        # มีคนแก้หัวตารางใน Sheet เอง — ไม่เขียนทับ แจ้งใน log แทน
+        print("[pbc] หัวตาราง %s ใน Sheet ไม่ตรงกับ schema ข้ามการเติมคอลัมน์" % tab)
+        return
+    if len(current) < len(header):
+        ws.update(values=[header], range_name="A1:%s1" % _col_letter(len(header)),
+                  value_input_option="RAW")
+        print("[pbc] เติมหัวคอลัมน์ %s ให้ tab %s" % (", ".join(header[len(current):]), tab))
+
+
+def _col_letter(n):
+    letters = ""
+    while n > 0:
+        n, rem = divmod(n - 1, 26)
+        letters = chr(65 + rem) + letters
+    return letters
+
+
 def _worksheet(tab):
     sheet = get_spreadsheet()
     try:
-        return sheet.worksheet(tab)
+        ws = sheet.worksheet(tab)
+        if tab in _AUTO_CREATE_TABS:
+            _ensure_header(ws, tab)
+        return ws
     except Exception as exc:
         not_found = gspread is not None and isinstance(
             exc, gspread.exceptions.WorksheetNotFound)
         if not (not_found and tab in _AUTO_CREATE_TABS):
             raise
         header = CFG.SHEET_SCHEMAS[tab]
-        ws = sheet.add_worksheet(title=tab, rows=1000, cols=max(len(header), 12))
+        ws = sheet.add_worksheet(title=tab, rows=1000, cols=max(len(header), 16))
         ws.append_row(header, value_input_option="RAW")
+        _HEADER_CHECKED.add(tab)
         return ws
 
 
@@ -837,6 +872,24 @@ def save_remark(contract_id, dma_code, event_date, category, text, user):
 
 # ------------------------------------------------------------------ แผนงาน/เหตุการณ์บนกราฟ
 
+def parse_dma_alloc(text):
+    """'17-01-02=93;17-01-05=22' -> {'17-01-02': 93.0, '17-01-05': 22.0}"""
+    out = {}
+    for part in str(text or "").replace("\n", ";").split(";"):
+        if "=" not in part:
+            continue
+        code, val = part.split("=", 1)
+        code, num = code.strip(), to_float(val)
+        if code and num is not None:
+            out[code] = out.get(code, 0.0) + num
+    return out
+
+
+def format_dma_alloc(alloc):
+    return ";".join("%s=%g" % (k, v) for k, v in sorted((alloc or {}).items())
+                    if v is not None)
+
+
 def _event_from_row(r):
     etype = (r.get("event_type") or "").strip()
     if etype not in CFG.EVENT_TYPES:
@@ -861,6 +914,7 @@ def _event_from_row(r):
         "status_label": CFG.EVENT_STATUS[status],
         "note": (r.get("note") or "").strip(),
         "linked_incident_id": (r.get("linked_incident_id") or "").strip(),
+        "dma_alloc": parse_dma_alloc(r.get("dma_alloc")),
         "updated_by": r.get("updated_by", ""),
         "updated_at": r.get("updated_at", ""),
     }
@@ -926,6 +980,7 @@ def save_event(contract_id, data, user, event_id=None, deleted=False):
         "status": pick("status", "plan"),
         "note": (pick("note") or "").strip(),
         "linked_incident_id": pick("linked_incident_id", ""),
+        "dma_alloc": format_dma_alloc(pick("dma_alloc", {})),
         "deleted": 1 if deleted else "",
         "updated_by": user,
         "updated_at": now_str(),

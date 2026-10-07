@@ -257,6 +257,41 @@
 .pbc-page .ev-dot.box{background:#fff3a6;border:1px solid #e3c84a}
 .pbc-page .ev-dot.arrow{background:#1f8a3a;border-radius:50%}
 
+/* ---------- แบ่งปริมาณราย DMA ในฟอร์มแผนงาน ---------- */
+.pbc-page .ev-dma-grid{flex:1;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));
+  gap:6px 10px;max-height:210px;overflow:auto;padding:2px}
+.pbc-page .ev-dma{display:flex;align-items:center;gap:6px;font-size:.78rem;color:var(--ink)}
+.pbc-page .ev-dma span{min-width:64px;font-variant-numeric:tabular-nums}
+.pbc-page .ev-dma input{width:80px;min-width:0;padding:5px 7px;text-align:right}
+.pbc-page .ev-dma.has input{border-color:var(--mwa-sky);background:#f2f9ff}
+.pbc-page #evTable .ev-alloc{font-size:.76rem;color:var(--ink-soft);margin-top:3px}
+
+/* ---------- ตารางแผนกิจกรรมราย DMA ---------- */
+.pbc-page .ap-wrap{max-height:640px}
+.pbc-page #apTable{font-size:.76rem}
+.pbc-page #apTable th,.pbc-page #apTable td{padding:6px 8px;border-left:1px solid #eef3f8}
+.pbc-page #apTable th{text-align:center;white-space:normal;line-height:1.3;vertical-align:bottom}
+.pbc-page #apTable thead tr:first-child th{top:0}
+.pbc-page #apTable th small{display:block;font-weight:400;color:var(--ink-soft)}
+.pbc-page #apTable .ap-dma{position:sticky;left:0;z-index:2;background:#fff;text-align:left;
+  font-weight:600;box-shadow:1px 0 0 var(--line)}
+.pbc-page #apTable th.ap-dma{z-index:4;background:#e4f2fc;vertical-align:middle}
+.pbc-page #apTable th.ap-base{background:#d6e6f5}
+.pbc-page #apTable th.ap-g0{background:#e4f2fc}
+.pbc-page #apTable th.ap-g1{background:#eef0fb}
+.pbc-page #apTable th.ap-act{background:#fbd9b4;color:#7a3d00}
+.pbc-page #apTable th.ap-tgt{background:#fff09a;color:#6b5600}
+.pbc-page #apTable td.ap-act{background:#fff7ee}
+.pbc-page #apTable td.ap-tgt{background:#fffbd9;font-weight:600}
+.pbc-page #apTable tbody tr{cursor:default}
+.pbc-page #apTable tr.ap-un td{color:var(--ink-soft);font-style:italic}
+.pbc-page #apTable tfoot td{position:sticky;bottom:0;background:#eef4fa;font-weight:700;
+  border-top:2px solid var(--line)}
+.pbc-page #apTable tfoot td.ap-dma{z-index:3;background:#eef4fa}
+.pbc-page #apTable tfoot td.ap-act{background:#fbe8d2}
+.pbc-page #apTable tfoot td.ap-tgt{background:#fff3b0}
+.pbc-page #apNote{margin-top:10px;line-height:1.7}
+
 .pbc-page .plan-empty{display:none;padding:30px;text-align:center;color:var(--ink-soft);
   border:1px dashed var(--line);border-radius:8px}
 </style>
@@ -343,6 +378,7 @@
     <div class="tabs">
       <div class="tab active" data-pane="paneTable">สถานะราย DMA</div>
       <div class="tab" data-pane="paneEvents">แผนงานลดน้ำสูญเสีย</div>
+      <div class="tab" data-pane="paneActPlan">ตารางแผนกิจกรรมราย DMA</div>
       <div class="tab" data-pane="paneTargets">เป้าหมายย่อยราย DMA</div>
       <div class="tab" data-pane="paneWork">ผลงานภาคสนาม</div>
       {% if enable_upload %}
@@ -400,7 +436,11 @@
         <div class="formrow" id="evRedRow">
           <label>คาดว่าลดได้</label>
           <input type="number" id="evRed" min="0" step="1" style="max-width:140px;flex:0 0 auto">
-          <span class="dim">ลบ.ม./ชม. (ใช้รวมยอดเทียบกับเป้าที่ต้องลด)</span>
+          <span class="dim" id="evRedNote">ลบ.ม./ชม. (ใช้รวมยอดเทียบกับเป้าที่ต้องลด)</span>
+        </div>
+        <div class="formrow" id="evDmaRow" style="align-items:flex-start">
+          <label>แยกราย DMA<br><span class="dim">ลบ.ม./ชม. ไม่บังคับ<br>ใช้ในตารางแผนกิจกรรม</span></label>
+          <div class="ev-dma-grid" id="evDmaGrid"></div>
         </div>
         <div class="formrow">
           <label>หมายเหตุ</label>
@@ -421,6 +461,22 @@
           <tbody></tbody>
         </table>
       </div>
+    </div>
+
+    <!-- ------------------ ตารางแผนกิจกรรมราย DMA ------------------ -->
+    <div class="tabpane" id="paneActPlan">
+      <div class="formrow">
+        <label style="min-width:auto">ฐาน (ตรึงค่า ณ เดือนวัดผล)</label>
+        <select id="apBase" style="flex:0 1 330px"></select>
+        <span class="dim" id="apBaseNote"></span>
+      </div>
+      <div class="hint">
+        กิจกรรมปรับปรุง/สำรวจ มาจากแท็บ "แผนงานลดน้ำสูญเสีย" (กรอกปริมาณแยกราย DMA ในฟอร์ม) ·
+        เป้าลดน้ำเข้าสะสม (สีเหลือง) คำนวณจากเป้าตามสัญญาของแต่ละจุดวัดผล
+      </div>
+      <div class="msg" id="apMsg"></div>
+      <div class="tablewrap ap-wrap"><table id="apTable"></table></div>
+      <div class="hint" id="apNote"></div>
     </div>
 
     <!-- ------------------ เป้าหมายย่อย ------------------ -->
@@ -710,6 +766,8 @@ function render(){
   renderWork();
   renderPlan();
   renderEvents();
+  AP_FOR = null;                      // ข้อมูลเปลี่ยน ตารางแผนกิจกรรมต้องคำนวณใหม่
+  if(apActive()) loadActivityPlan(true);
   renderDmaTable();
   renderBarChart();
   renderTargets();
@@ -1550,6 +1608,13 @@ function renderEvents(){
   }
   if(EV_CID !== SELECTED){   // เปลี่ยนสัญญา: ล้างฟอร์มและตั้งเดือนเริ่มต้นใหม่
     EV_CID = SELECTED;
+    $("evDmaGrid").innerHTML = (DATA.dma_rows || []).map(function(r){
+      return '<label class="ev-dma"><span>' + esc(r.dma_code) + '</span>' +
+        '<input type="number" min="0" step="0.01" data-dma="' + esc(r.dma_code) + '"></label>';
+    }).join("") || '<span class="dim">ยังไม่มีรายชื่อ DMA ของสัญญานี้</span>';
+    Array.prototype.forEach.call($("evDmaGrid").querySelectorAll("input"), function(inp){
+      inp.addEventListener("input", evAllocChanged);
+    });
     $("evMonth").value = "";
     resetEventForm();
   }
@@ -1617,7 +1682,10 @@ function renderEvents(){
       '<td class="ev-desc"><b>' + esc(ev.title) + "</b>" +
         (ev.items.length ? "<ol>" + ev.items.map(function(x){
           return "<li>" + esc(x) + "</li>"; }).join("") + "</ol>" : "") +
-        (ev.note ? '<div class="dim">' + esc(ev.note) + "</div>" : "") + "</td>" +
+        (ev.note ? '<div class="dim">' + esc(ev.note) + "</div>" : "") +
+        (Object.keys(ev.dma_alloc || {}).length ? '<div class="ev-alloc">แยกราย DMA: ' +
+          Object.keys(ev.dma_alloc).sort().map(function(k){
+            return esc(k) + " " + num(ev.dma_alloc[k], 2); }).join(" · ") + "</div>" : "") + "</td>" +
       "<td>" + (ev.reduction_m3h == null ? '<span class="dim">-</span>' : num(ev.reduction_m3h)) + "</td>" +
       "<td>" + esc(ev.status_label) + "</td>" +
       '<td class="ev-job">' + job + "</td>" +
@@ -1639,9 +1707,40 @@ function evTypeChanged(){
   var isBox = $("evType").value !== "milestone";
   $("evItemsRow").style.display = isBox ? "" : "none";
   $("evRedRow").style.display = isBox ? "" : "none";
+  $("evDmaRow").style.display = isBox ? "" : "none";
   $("evTitle").placeholder = isBox
     ? "เช่น งานปรับปรุงท่อ ซ.ศรีบุญเรือง 1"
     : "เช่น เปิด PR, เริ่มทยอยส่งของ";
+}
+
+// ปริมาณแยกราย DMA: ถ้ากรอกอย่างน้อย 1 ช่อง ยอดรวมจะคำนวณให้เองและแก้ตรงๆ ไม่ได้
+function evGetAlloc(){
+  var out = {};
+  Array.prototype.forEach.call($("evDmaGrid").querySelectorAll("input"), function(inp){
+    var v = parseFloat(inp.value);
+    if(!isNaN(v) && v > 0) out[inp.getAttribute("data-dma")] = v;
+  });
+  return out;
+}
+function evSetAlloc(alloc){
+  Array.prototype.forEach.call($("evDmaGrid").querySelectorAll("input"), function(inp){
+    var v = alloc[inp.getAttribute("data-dma")];
+    inp.value = v == null ? "" : v;
+  });
+  evAllocChanged();
+}
+function evAllocChanged(){
+  var alloc = evGetAlloc(), keys = Object.keys(alloc), total = 0;
+  keys.forEach(function(k){ total += alloc[k]; });
+  Array.prototype.forEach.call($("evDmaGrid").querySelectorAll(".ev-dma"), function(lb){
+    var inp = lb.querySelector("input");
+    lb.classList.toggle("has", !!(inp && parseFloat(inp.value) > 0));
+  });
+  $("evRed").readOnly = keys.length > 0;
+  if(keys.length) $("evRed").value = Math.round(total * 100) / 100;
+  $("evRedNote").textContent = keys.length
+    ? "ลบ.ม./ชม. = ผลรวมจาก " + keys.length + " DMA ด้านล่าง"
+    : "ลบ.ม./ชม. (ใช้รวมยอดเทียบกับเป้าที่ต้องลด)";
 }
 
 function resetEventForm(){
@@ -1650,6 +1749,7 @@ function resetEventForm(){
   $("btnEvCancel").style.display = "none";
   $("evTitle").value = ""; $("evItems").value = ""; $("evRed").value = "";
   $("evNote").value = ""; $("evStatus").value = "plan";
+  evSetAlloc({});
   if(!$("evMonth").value){
     var lastNo = (DATA.monthly || []).length
       ? DATA.monthly[DATA.monthly.length - 1].month_no : 1;
@@ -1679,6 +1779,7 @@ function openEventEditor(id){
   $("evItems").value = (ev.items || []).join("\n");
   $("evRed").value = ev.reduction_m3h == null ? "" : ev.reduction_m3h;
   $("evNote").value = ev.note || "";
+  evSetAlloc(ev.dma_alloc || {});
   hideMsg($("evMsg"));
   $("evForm").scrollIntoView({behavior:"smooth", block:"center"});
 }
@@ -1688,7 +1789,8 @@ function saveEvent(){
     contract_id: SELECTED, event_id: EV_EDIT_ID || "",
     event_type: $("evType").value, month: $("evMonth").value,
     status: $("evStatus").value, title: $("evTitle").value,
-    items: $("evItems").value, reduction_m3h: $("evRed").value, note: $("evNote").value
+    items: $("evItems").value, reduction_m3h: $("evRed").value, note: $("evNote").value,
+    dma_alloc: evGetAlloc()
   };
   $("btnEvSave").disabled = true;
   fetch(API + "/events", { method:"POST", headers:{"Content-Type":"application/json"},
@@ -1743,6 +1845,178 @@ function sendEventToJob(id, btn){
     if(btn) btn.disabled = false;
     showMsg($("evMsg"), "สร้างเหตุการณ์ไม่สำเร็จ: " + esc(e), "err");
   });
+}
+
+// ---------------------------------------------------------------- ตารางแผนกิจกรรมราย DMA
+// รูปแบบเดียวกับตาราง Excel ที่ใช้ติดตาม PBC: ฐาน (ตรึง ณ เดือนวัดผล) + ชุดคอลัมน์ต่อจุดวัดผลถัดไป
+// คำนวณที่หลังบ้าน /api/activity-plan — หน้านี้แค่จัดตาราง
+var AP_DATA = null;
+var AP_FOR = null;          // "contract|base" ที่โหลดไว้ล่าสุด กันโหลดซ้ำ
+var AP_CID = null;          // สัญญาของ AP_DATA (ตัวเลือกฐานเป็นของสัญญานั้น)
+
+function apActive(){ return $("paneActPlan").classList.contains("active"); }
+
+function loadActivityPlan(force){
+  // ตัวเลือกฐานใช้ได้เฉพาะสัญญาเดิม เปลี่ยนสัญญาแล้วให้หลังบ้านเลือกค่าเริ่มต้นใหม่
+  var base = (AP_CID === SELECTED && $("apBase").value) || "";
+  var key = SELECTED + "|" + base;
+  if(!force && AP_FOR === key && AP_DATA) return;
+  AP_FOR = key;
+  showMsg($("apMsg"), "กำลังคำนวณ...", "info");
+  fetch(API + "/activity-plan?contract_id=" + encodeURIComponent(SELECTED || "") +
+        (base ? "&base_no=" + encodeURIComponent(base) : ""))
+    .then(function(r){ return r.json(); })
+    .then(function(j){
+      if(!j.ok){
+        AP_DATA = null;
+        $("apTable").innerHTML = "";
+        $("apNote").innerHTML = "";
+        showMsg($("apMsg"), esc(j.error || "โหลดไม่สำเร็จ"), "err");
+        return;
+      }
+      hideMsg($("apMsg"));
+      AP_DATA = j.data;
+      AP_CID = SELECTED;
+      AP_FOR = SELECTED + "|" + AP_DATA.base.month_no;
+      renderActivityPlan();
+    })
+    .catch(function(e){ showMsg($("apMsg"), "เชื่อมต่อไม่สำเร็จ: " + esc(e), "err"); });
+}
+
+function renderActivityPlan(){
+  var d = AP_DATA;
+  var sel = $("apBase");
+  sel.innerHTML = d.options.map(function(o){
+    return '<option value="' + o.month_no + '"' +
+      (o.month_no === d.base.month_no ? " selected" : "") + ">" + esc(o.label) + "</option>";
+  }).join("");
+  $("apBaseNote").textContent = "รอบ 3 เดือน " + d.base.window.map(thaiMonth).join(", ") +
+    " รวม " + d.base.days + " วัน · อัตรารวม " + num(d.base.loss_rate, 2) + "%";
+
+  function n2(v){ return v == null ? '<span class="dim">-</span>' : num(v, 2); }
+  function sum(list){
+    var s = 0, any = false;
+    list.forEach(function(v){ if(v != null){ s += v; any = true; } });
+    return any ? s : null;
+  }
+
+  var G = d.groups;
+  var head1 = '<tr><th rowspan="2" class="ap-dma">DMA</th>' +
+    '<th colspan="5" class="ap-base">ฐาน: ข้อมูล ณ ' + esc(d.base.label) +
+    ' (เดือนที่ ' + d.base.month_no + ')</th>' +
+    G.map(function(g, i){
+      return '<th colspan="9" class="ap-g' + (i % 2) + '">เป้าหมายเดือนที่ ' + g.month_no +
+        " (" + num(g.target_rate, 2) + "% @" + esc(g.label) + ")</th>";
+    }).join("") + "</tr>";
+  var u = "<small>ลบ.ม./วัน</small>", uh = "<small>ลบ.ม./ชม.</small>";
+  var head2 = "<tr>" +
+    '<th class="ap-base">น้ำเข้าฐาน' + u + '</th><th class="ap-base">น้ำสูญเสีย' + u +
+    '</th><th class="ap-base">น้ำสูญเสีย<small>%</small></th><th class="ap-base">น้ำเข้า' + uh +
+    '</th><th class="ap-base">NF ปัจจุบัน' + uh + "</th>" +
+    G.map(function(){
+      return '<th class="ap-act">กิจกรรม<br>ปรับปรุง' + uh + '</th>' +
+        '<th class="ap-act">กิจกรรม<br>สำรวจ/ALC' + uh + '</th>' +
+        "<th>ต้องเพิ่ม<br>กิจกรรม" + uh + "</th>" +
+        '<th class="ap-tgt">เป้าลดน้ำเข้า<br>สะสม' + uh + "</th>" +
+        "<th>ลดน้ำเข้า" + u + "</th>" +
+        "<th>NF ตาม<br>กิจกรรม" + uh + "</th>" +
+        "<th>น้ำเข้า<br>เป้าหมาย" + u + "</th>" +
+        "<th>น้ำสูญเสีย" + u + "</th>" +
+        "<th>น้ำสูญเสีย<small>%</small></th>";
+    }).join("") + "</tr>";
+
+  function gapCell(v){
+    if(v == null) return '<td><span class="dim">-</span></td>';
+    if(Math.abs(v) < 0.005) return "<td>0.00</td>";
+    return '<td class="' + (v > 0 ? "num-warn" : "num-good") + '" title="' +
+      (v > 0 ? "ยังต้องหากิจกรรมเพิ่ม" : "กิจกรรมเกินเป้าที่จัดสรรไว้") + '">' +
+      (v > 0 ? "" : "−") + num(Math.abs(v), 2) + "</td>";
+  }
+  function groupCells(c, g){
+    if(!c) return '<td colspan="9"></td>';
+    var rateCls = "";
+    return '<td class="ap-act">' + n2(c.pipe) + '</td><td class="ap-act">' + n2(c.alc) + "</td>" +
+      gapCell(c.gap) + '<td class="ap-tgt">' + n2(c.target_cum) + "</td>" +
+      "<td>" + n2(c.cut_d) + "</td><td>" + n2(c.nf_target) + "</td>" +
+      "<td>" + n2(c.inflow_d) + "</td><td>" + n2(c.loss_d) + "</td>" +
+      '<td class="' + rateCls + '">' + n2(c.loss_rate) + "</td>";
+  }
+
+  var body = d.rows.map(function(r){
+    return '<tr><td class="ap-dma">' + esc(r.dma_code) + "</td>" +
+      "<td>" + n2(r.inflow_d) + "</td><td>" + n2(r.loss_d) + "</td><td>" + n2(r.loss_rate) +
+      "</td><td>" + n2(r.inflow_h) + "</td><td>" + n2(r.nf_current) + "</td>" +
+      G.map(function(g){ return groupCells(g.cells[r.dma_code], g); }).join("") + "</tr>";
+  }).join("");
+
+  // แผนงานที่ไม่ได้แยกราย DMA — แสดงเป็นแถวแยก ให้ยอดรวมกิจกรรมยังครบ
+  var UN = d.unassigned_label;
+  if(G.some(function(g){ return g.cells[UN]; })){
+    body += '<tr class="ap-un"><td class="ap-dma">' + esc(UN) + '</td><td colspan="5" class="dim">' +
+      "แผนงานที่ยังไม่ได้แบ่งปริมาณราย DMA</td>" +
+      G.map(function(g){
+        var c = g.cells[UN];
+        return '<td class="ap-act">' + n2(c && c.pipe) + '</td><td class="ap-act">' +
+          n2(c && c.alc) + '</td><td colspan="7"></td>';
+      }).join("") + "</tr>";
+  }
+
+  // แถวรวม
+  var R = d.rows;
+  var tIn = sum(R.map(function(r){ return r.inflow_d; }));
+  var tLoss = sum(R.map(function(r){ return r.loss_d; }));
+  var tNf = sum(R.map(function(r){ return r.nf_current; }));
+  var foot = '<tr class="ap-total"><td class="ap-dma">รวม</td><td>' + n2(tIn) + "</td><td>" + n2(tLoss) +
+    "</td><td>" + n2(tIn ? tLoss / tIn * 100 : null) + "</td><td>" +
+    n2(tIn != null ? tIn / d.hours : null) + "</td><td>" + n2(tNf) + "</td>";
+  var cumAll = 0;
+  G.forEach(function(g){
+    var cells = Object.keys(g.cells).map(function(k){ return g.cells[k]; });
+    var pipe = sum(cells.map(function(c){ return c.pipe; }));
+    var alc = sum(cells.map(function(c){ return c.alc; }));
+    cumAll += (pipe || 0) + (alc || 0);
+    var tgt = sum(R.map(function(r){ var c = g.cells[r.dma_code]; return c && c.target_cum; }));
+    var cut = sum(R.map(function(r){ var c = g.cells[r.dma_code]; return c && c.cut_d; }));
+    var inT = sum(R.map(function(r){ var c = g.cells[r.dma_code]; return c && c.inflow_d; }));
+    var lossT = sum(R.map(function(r){ var c = g.cells[r.dma_code]; return c && c.loss_d; }));
+    var rate = inT ? lossT / inT * 100 : null;
+    var ok = rate != null && rate <= g.target_rate + 0.005;
+    foot += '<td class="ap-act">' + n2(pipe) + '</td><td class="ap-act">' + n2(alc) + "</td>" +
+      gapCell(tgt != null ? tgt - cumAll : null) + '<td class="ap-tgt">' + n2(tgt) + "</td>" +
+      "<td>" + n2(cut) + "</td><td>" + n2(tNf != null ? tNf - cumAll : null) + "</td>" +
+      "<td>" + n2(inT) + "</td><td>" + n2(lossT) + "</td>" +
+      '<td class="' + (rate == null ? "" : (ok ? "num-good" : "num-bad")) + '">' + n2(rate) + "</td>";
+  });
+  foot += "</tr>";
+
+  $("apTable").innerHTML = "<thead>" + head1 + head2 + "</thead><tbody>" + body +
+    "</tbody><tfoot>" + foot + "</tfoot>";
+  // หัวตาราง 2 แถวตรึงด้านบนทั้งคู่ แถวที่สองต้องเลื่อนลงเท่าความสูงแถวแรก
+  var hr = $("apTable").tHead.rows;
+  Array.prototype.forEach.call(hr[1].cells, function(th){
+    th.style.top = hr[0].offsetHeight + "px";
+  });
+
+  var notes = [];
+  if(!G.length) notes.push("ไม่มีจุดวัดผลหลังเดือนฐานแล้ว");
+  G.forEach(function(g){
+    if(g.unallocated_h > 0.01){
+      notes.push('<span class="num-warn">เดือนที่ ' + g.month_no + ": กระจายเป้าไม่ครบ " +
+        num(g.unallocated_h, 2) + " ลบ.ม./ชม. (บาง DMA ลดได้ไม่ถึง)</span>");
+    }
+  });
+  if(d.skipped_events.length){
+    notes.push("แผนงานที่ไม่นับในตาราง (เสร็จก่อนหรือตรงเดือนฐาน ผลรวมอยู่ในค่าฐานแล้ว " +
+      "หรือหลังเป้าสุดท้าย): " + d.skipped_events.map(function(e){
+        return esc(e.title) + " (" + esc(e.month_label) + ")"; }).join(", "));
+  }
+  notes.push("เป้าลดน้ำเข้าสะสม = ปริมาณที่ต้องลดจากค่าฐานให้ถึงอัตราเป้า กระจายราย DMA " +
+    "ตามศักยภาพ MNF (เหมือนแท็บเป้าหมายย่อย ถ้าล็อกเป้า DMA ไว้ในแท็บนั้นจะใช้ค่าที่ล็อก) · " +
+    "ต้องเพิ่มกิจกรรม = เป้าสะสม − กิจกรรมสะสม (ค่าบวก = ยังขาด) · " +
+    "ลดน้ำเข้า/วัน = เป้าสะสม × " + d.hours + " ชม. · NF ตามกิจกรรม = NF ปัจจุบัน − กิจกรรมสะสม · " +
+    "กิจกรรมนับเข้าจุดวัดผลแรกที่ถึงหลังเดือนที่แผนงานแล้วเสร็จ · " +
+    "น้ำเข้า/น้ำสูญเสียเป้าหมาย = ค่าฐาน − ลดน้ำเข้า (สมมติน้ำจำหน่ายคงที่)");
+  $("apNote").innerHTML = notes.map(function(t){ return "<div>• " + t + "</div>"; }).join("");
 }
 
 function renderDmaTable(){
@@ -2349,6 +2623,10 @@ function bindEvents(){
   if($("mRemarkSave")) $("mRemarkSave").addEventListener("click", saveRemark);
   $("btnSaveWork").addEventListener("click", saveWork);
   $("evType").addEventListener("change", evTypeChanged);
+  document.querySelector('.tab[data-pane="paneActPlan"]').addEventListener("click", function(){
+    loadActivityPlan(false);
+  });
+  $("apBase").addEventListener("change", function(){ loadActivityPlan(true); });
   $("btnPlanEvents").addEventListener("click", function(){
     document.querySelector('.tab[data-pane="paneEvents"]').click();
     var target = (DATA && DATA.event_meta && DATA.event_meta.can_edit) ? $("evForm") : $("paneEvents");

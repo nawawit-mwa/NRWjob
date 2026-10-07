@@ -944,7 +944,7 @@ def create_pbc_blueprint(login_required=None, current_user_fn=None,
             },
         }
 
-    def _event_input(data):
+    def _event_input(data, contract_id):
         """ตรวจค่าจากฟอร์ม คืน (dict, ข้อความผิดพลาด)"""
         etype = (data.get("event_type") or "").strip()
         if etype not in CFG.EVENT_TYPES:
@@ -968,10 +968,29 @@ def create_pbc_blueprint(login_required=None, current_user_fn=None,
         if isinstance(items, str):
             items = items.splitlines()
         items = [str(x).strip() for x in items if str(x).strip()]
+
+        # ปริมาณแยกราย DMA (เฉพาะกล่องเหลือง) — ถ้ากรอกมา ยอดรวมต้องเท่าผลรวมราย DMA
+        alloc = {}
+        raw_alloc = data.get("dma_alloc") or {}
+        if CFG.EVENT_TYPES[etype]["mark"] == "box" and isinstance(raw_alloc, dict):
+            valid = {d["dma_code"] for d in SVC.get_contract_dmas(contract_id)}
+            for code, val in raw_alloc.items():
+                code = str(code).strip()
+                if val in (None, ""):
+                    continue
+                num = SVC.to_float(val)
+                if num is None or num < 0:
+                    return None, "ปริมาณราย DMA (%s) ต้องเป็นตัวเลขไม่ติดลบ" % code
+                if code not in valid:
+                    return None, "DMA %s ไม่อยู่ในสัญญานี้" % code
+                if num > 0:
+                    alloc[code] = num
+        if alloc:
+            red_val = round(sum(alloc.values()), 2)
         return {
             "event_type": etype, "month": month, "title": title,
             "items": items, "reduction_m3h": red_val, "status": status,
-            "note": (data.get("note") or "").strip(),
+            "note": (data.get("note") or "").strip(), "dma_alloc": alloc,
         }, ""
 
     def _need_editor():
@@ -980,6 +999,174 @@ def create_pbc_blueprint(login_required=None, current_user_fn=None,
             return None, (jsonify({"ok": False,
                                    "error": "กรุณาเข้าสู่ระบบก่อนแก้ไขแผนงาน"}), 401)
         return name, None
+
+    # -------------------------------------------------------------- ตารางแผนกิจกรรมราย DMA
+
+    def _activity_plan(contract, base_no=None):
+        """
+        ตารางแผนกิจกรรมลดน้ำสูญเสียราย DMA (รูปแบบตาราง Excel ที่ใช้ติดตาม PBC เดิม)
+
+        ฐาน   = ยอดรอบ 3 เดือน ณ เดือนวัดผลที่เลือก (ตรึงค่า) แปลงเป็นต่อวัน
+        ต่อจุดวัดผลถัดไปแต่ละจุด:
+          เป้าสะสม (ลบ.ม./ชม.)   = ปริมาณที่ต้องลดจากฐานให้ถึงอัตราเป้า กระจายราย DMA
+                                    ด้วยวิธีเดียวกับแท็บเป้าหมายย่อย (ศักยภาพ MNF)
+          กิจกรรมปรับปรุง/สำรวจ  = แผนงานที่แล้วเสร็จหลังจุดวัดผลก่อนหน้า ถึงจุดวัดผลนี้
+          ต้องเพิ่มกิจกรรม       = เป้าสะสม − กิจกรรมสะสม (บวก = ยังขาด)
+          ลดน้ำเข้า/วัน          = เป้าสะสม × ชม./วัน
+          NF ตามกิจกรรม          = NF ปัจจุบัน − กิจกรรมสะสม
+          น้ำเข้า/สูญเสียเป้าหมาย = ค่าฐาน − ลดน้ำเข้า/วัน (สมมติน้ำจำหน่ายคงที่)
+        """
+        cid = contract["contract_id"]
+        start = contract["start_month"]
+        hours = contract["mnf_hours_per_day"] or CFG.DEFAULT_MNF_HOURS_PER_DAY
+        if not start:
+            return {"error": "ยังไม่ได้กรอกเดือนเริ่มสัญญา"}
+        dmas = [d["dma_code"] for d in SVC.get_contract_dmas(cid)]
+        dma_set = set(dmas)
+        monthly = SVC.get_monthly_effective(cid)
+        targets = SVC.get_targets(cid)
+        rtu = SVC.get_dma_rtu_status(dma_set)
+        rolling = SVC.rolling_series(monthly, start, dma_set)
+        if not rolling:
+            return {"error": "ยังไม่มีข้อมูลครบรอบ 3 เดือน"}
+        roll_by_no = {r["month_no"]: r for r in rolling}
+
+        # ตัวเลือกฐาน: จุดวัดผลที่มีข้อมูลแล้ว + เดือนล่าสุดที่มีข้อมูล
+        options = []
+        for t in targets:
+            if t["month_no"] in roll_by_no:
+                options.append({"month_no": t["month_no"], "kind": "milestone",
+                                "label": "จุดวัดผลเดือนที่ %d (%s)" % (
+                                    t["month_no"], roll_by_no[t["month_no"]]["label"])})
+        latest = rolling[-1]
+        if not options or options[-1]["month_no"] != latest["month_no"]:
+            options.append({"month_no": latest["month_no"], "kind": "latest",
+                            "label": "ข้อมูลล่าสุด (%s)" % latest["label"]})
+        valid_nos = [o["month_no"] for o in options]
+        if base_no not in valid_nos:
+            # ค่าเริ่มต้น = จุดวัดผลล่าสุดที่วัดได้แล้ว (ถ้ายังไม่มี ใช้ข้อมูลล่าสุด)
+            ms = [o["month_no"] for o in options if o["kind"] == "milestone"]
+            base_no = ms[-1] if ms else latest["month_no"]
+        base = roll_by_no[base_no]
+        window = base["window"]
+        days = 0
+        for ym in window:
+            y, m = int(ym[:4]), int(ym[5:7])
+            days += (datetime(y + (m == 12), m % 12 + 1, 1) - datetime(y, m, 1)).days
+
+        # ---- ฐานราย DMA (ต่อวัน)
+        rows = []
+        for code in dmas:
+            agg = SVC.aggregate(monthly, set(window), {code})
+            if not agg["n_records"]:
+                inflow = sales = loss = None
+            else:
+                inflow = agg["inflow_m3"] / days
+                sales = agg["sales_m3"] / days
+                loss = agg["loss_m3"] / days
+            info = rtu.get(code, {})
+            rows.append({
+                "dma_code": code,
+                "inflow_d": inflow, "sales_d": sales, "loss_d": loss,
+                "loss_rate": (loss / inflow * 100.0) if inflow else None,
+                "inflow_h": inflow / hours if inflow is not None else None,
+                "nf_current": info.get("mnf_current"),
+                "mnf_floor": info.get("mnf_floor"),
+            })
+        basis = [{
+            "dma_code": r["dma_code"], "inflow_m3": r["inflow_d"],
+            "sales_m3": r["sales_d"], "loss_m3": r["loss_d"],
+            "mnf_current": r["nf_current"], "mnf_floor": r["mnf_floor"],
+        } for r in rows if r["loss_d"] is not None]
+        sales_total = sum(b["sales_m3"] for b in basis)
+
+        # ---- แผนงาน (เฉพาะกล่องเหลือง ที่ยังไม่ยกเลิก และเสร็จหลังเดือนฐาน)
+        base_month = base["month"]
+        events = [e for e in SVC.get_events(cid)
+                  if e["mark"] == "box" and e["status"] != "cancelled"]
+        future = [t for t in targets if t["month_no"] > base_no]
+        UNASSIGNED = "ไม่ระบุ DMA"
+
+        groups = []
+        prev_month = base_month
+        cum_act = {}            # DMA -> กิจกรรมสะสม (ลบ.ม./ชม.)
+        used_events = set()
+        for t in future:
+            ms_month = SVC.month_from_no(start, t["month_no"])
+            # เป้าราย DMA: ใช้ค่าที่ผู้ใช้ล็อกไว้ในแท็บเป้าหมายย่อย (ถ้ามี) แปลงเป็นต่อวัน
+            saved = SVC.get_dma_targets(cid, t["month_no"])
+            manual = {c: v["target_loss_m3"] / CFG.DAYS_PER_MONTH
+                      for c, v in saved.items()
+                      if v["is_manual"] and v["target_loss_m3"] is not None}
+            alloc, summary = FC.build_dma_targets(
+                basis, sales_total, t["target_rate"] / 100.0, hours, 1, manual=manual)
+            target_h = {a["dma_code"]: a["reduction_m3"] / hours for a in alloc}
+
+            pipe, alc = {}, {}
+            for e in events:
+                if not (prev_month < e["month"] <= ms_month):
+                    continue
+                used_events.add(e["event_id"])
+                bucket = pipe if e["event_type"] == "pipe" else alc
+                parts = e["dma_alloc"] or (
+                    {UNASSIGNED: e["reduction_m3h"]} if e["reduction_m3h"] else {})
+                for code, val in parts.items():
+                    bucket[code] = bucket.get(code, 0.0) + val
+                    cum_act[code] = cum_act.get(code, 0.0) + val
+
+            cells = {}
+            for r in rows:
+                code = r["dma_code"]
+                tgt = target_h.get(code)
+                act = cum_act.get(code, 0.0)
+                cut_d = tgt * hours if tgt is not None else None
+                inflow_t = r["inflow_d"] - cut_d if cut_d is not None else None
+                loss_t = r["loss_d"] - cut_d if cut_d is not None else None
+                cells[code] = {
+                    "pipe": pipe.get(code), "alc": alc.get(code),
+                    "gap": (tgt - act) if tgt is not None else None,
+                    "target_cum": tgt, "cut_d": cut_d,
+                    "nf_target": (r["nf_current"] - act)
+                    if r["nf_current"] is not None else None,
+                    "inflow_d": inflow_t, "loss_d": loss_t,
+                    "loss_rate": (loss_t / inflow_t * 100.0) if inflow_t else None,
+                }
+            if UNASSIGNED in cum_act:
+                cells[UNASSIGNED] = {"pipe": pipe.get(UNASSIGNED), "alc": alc.get(UNASSIGNED),
+                                     "cum_act": cum_act[UNASSIGNED]}
+            groups.append({
+                "month_no": t["month_no"], "month": ms_month,
+                "label": SVC.month_label_th(ms_month),
+                "target_rate": t["target_rate"],
+                "unallocated_h": summary["unallocated_m3"] / hours,
+                "cells": cells,
+            })
+            prev_month = ms_month
+
+        # แผนงานที่แล้วเสร็จก่อนเดือนฐาน (ผลควรอยู่ในค่าฐานแล้ว) หรือหลังเป้าสุดท้าย
+        skipped = [{"event_id": e["event_id"], "title": e["title"], "month_label": e["month_label"]}
+                   for e in events if e["event_id"] not in used_events]
+        return {
+            "base": {"month_no": base_no, "month": base_month, "label": base["label"],
+                     "window": window, "days": days, "loss_rate": base["loss_rate"]},
+            "options": options,
+            "hours": hours,
+            "rows": rows,
+            "groups": groups,
+            "unassigned_label": UNASSIGNED,
+            "skipped_events": skipped,
+        }
+
+    @bp.route("/api/activity-plan")
+    @guard
+    def api_activity_plan():
+        contract, _ = _resolve_contract(request.args.get("contract_id"))
+        if not contract:
+            return jsonify({"ok": False, "error": "ไม่พบสัญญา"}), 404
+        data = _activity_plan(contract, SVC.to_int(request.args.get("base_no")))
+        if data.get("error"):
+            return jsonify({"ok": False, "error": data["error"]})
+        return jsonify({"ok": True, "data": data})
 
     @bp.route("/api/events", methods=["POST"])
     @guard
@@ -991,7 +1178,7 @@ def create_pbc_blueprint(login_required=None, current_user_fn=None,
         name, err = _need_editor()
         if err:
             return err
-        rec, msg = _event_input(data)
+        rec, msg = _event_input(data, contract["contract_id"])
         if msg:
             return jsonify({"ok": False, "error": msg}), 400
         try:
@@ -1071,6 +1258,9 @@ def create_pbc_blueprint(login_required=None, current_user_fn=None,
                                             contract.get("area_name", ""),
                                             ev["type_label"], ev["title"])]
         lines += ["- " + it for it in ev["items"]]
+        if ev["dma_alloc"]:
+            lines.append("แยกราย DMA (ลบ.ม./ชม.): " + ", ".join(
+                "%s ≈ %g" % (k, v) for k, v in sorted(ev["dma_alloc"].items())))
         detail = "กำหนดแล้วเสร็จ " + ev["month_label"]
         if ev["reduction_m3h"] is not None:
             detail = ("คาดว่าลดน้ำสูญเสียได้ ≈ %s ลบ.ม./ชม. · " %
