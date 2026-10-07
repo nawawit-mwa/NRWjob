@@ -74,7 +74,7 @@ def get_spreadsheet():
 
 # tab ที่เพิ่มภายหลัง สร้างให้อัตโนมัติถ้ายังไม่มีใน Sheet
 # ไม่ต้องรัน pbc_schema_setup.py ก่อนใช้งานฟีเจอร์ใหม่
-_AUTO_CREATE_TABS = {CFG.TAB_EVENTS}
+_AUTO_CREATE_TABS = {CFG.TAB_EVENTS, CFG.TAB_PLAN_CELLS}
 
 
 _HEADER_CHECKED = set()
@@ -989,6 +989,55 @@ def save_event(contract_id, data, user, event_id=None, deleted=False):
         rec["reduction_m3h"] = ""
     append_rows(CFG.TAB_EVENTS, [rec])
     return rec["event_id"]
+
+
+PLAN_CELL_FIELDS = ("pipe", "alc", "target")
+
+
+def get_plan_cells(contract_id, base_month_no):
+    """
+    ค่าที่กรอกเองในตารางแผนกิจกรรม คืน dict {(measure_month_no, dma_code, field): value}
+    pipe/alc ไม่ผูกกับฐาน ส่วน target ใช้เฉพาะที่บันทึกกับฐานเดียวกัน
+    ค่าว่าง (ยกเลิก) จะไม่อยู่ในผลลัพธ์
+    """
+    rows = [r for r in read_tab(CFG.TAB_PLAN_CELLS)
+            if (r.get("contract_id") or "").strip() == contract_id]
+    latest = _latest_by_key(
+        rows,
+        lambda r: (to_int(r.get("measure_month_no")), (r.get("dma_code") or "").strip(),
+                   (r.get("field") or "").strip(),
+                   to_int(r.get("base_month_no")) if (r.get("field") or "").strip() == "target"
+                   else None),
+        lambda r: r.get("updated_at", ""),
+    )
+    out = {}
+    for (ms, code, field, base), r in latest.items():
+        if field not in PLAN_CELL_FIELDS or ms is None or not code:
+            continue
+        if field == "target" and base != int(base_month_no):
+            continue
+        val = to_float(r.get("value"))
+        if val is not None:
+            out[(ms, code, field)] = val
+    return out
+
+
+def save_plan_cells(contract_id, base_month_no, cells, user):
+    """cells : list ของ dict {measure_month_no, dma_code, field, value(None=ยกเลิก)}"""
+    stamp = now_str()
+    payload = []
+    for c in cells:
+        payload.append({
+            "contract_id": contract_id,
+            "base_month_no": int(base_month_no) if c["field"] == "target" else "",
+            "measure_month_no": int(c["measure_month_no"]),
+            "dma_code": c["dma_code"],
+            "field": c["field"],
+            "value": "" if c.get("value") is None else round(float(c["value"]), 4),
+            "updated_by": user,
+            "updated_at": stamp,
+        })
+    return append_rows(CFG.TAB_PLAN_CELLS, payload)
 
 
 def summarize_events(events):

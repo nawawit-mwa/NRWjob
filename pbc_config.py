@@ -105,6 +105,7 @@ TAB_UPLOAD_LOG = "UploadLog"
 TAB_MONTHLY_WORK = "MonthlyWork"
 TAB_PROCUREMENT = "ProcurementSteps"
 TAB_EVENTS = "ContractEvents"
+TAB_PLAN_CELLS = "ActivityPlanCells"
 
 # โครงคอลัมน์ของแต่ละ tab — ใช้ทั้งตอนสร้าง Sheet และตอนอ่าน/เขียน
 SHEET_SCHEMAS = {
@@ -165,6 +166,14 @@ SHEET_SCHEMAS = {
         "updated_by", "updated_at",
         # ปริมาณที่ลดได้แยกราย DMA รูปแบบ "17-01-02=93;17-01-05=22" (เพิ่มภายหลัง ต่อท้ายเสมอ)
         "dma_alloc",
+    ],
+    # ค่าที่กรอกเองในตารางแผนกิจกรรมราย DMA (โหมดแก้ไข) — append-only แถวล่างสุดชนะ
+    #   field = pipe / alc : กิจกรรมปรับปรุง / สำรวจ (ลบ.ม./ชม.) ใช้แทนผลรวมจากแผนงาน
+    #   field = target     : เป้าลดน้ำเข้าสะสม (ลบ.ม./ชม.) เทียบกับฐาน base_month_no
+    #   value ว่าง = ยกเลิกค่าที่กรอกเอง กลับไปใช้ค่าที่คำนวณ
+    TAB_PLAN_CELLS: [
+        "contract_id", "base_month_no", "measure_month_no", "dma_code", "field",
+        "value", "updated_by", "updated_at",
     ],
 }
 

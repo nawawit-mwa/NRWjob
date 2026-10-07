@@ -291,6 +291,14 @@
 .pbc-page #apTable tfoot td.ap-act{background:#fbe8d2}
 .pbc-page #apTable tfoot td.ap-tgt{background:#fff3b0}
 .pbc-page #apNote{margin-top:10px;line-height:1.7}
+.pbc-page .ap-typed{color:var(--mwa-sky);font-size:.62rem;vertical-align:top}
+.pbc-page #apTable td.ap-incell{padding:3px 4px}
+.pbc-page #apTable input.ap-in{width:76px;min-width:0;padding:4px 6px;text-align:right;
+  font-size:.76rem;border-radius:5px;border:1px solid #e3c79f;background:#fff}
+.pbc-page #apTable td.ap-tgt input.ap-in{border-color:#e3d27a}
+.pbc-page #apTable input.ap-in::placeholder{color:#a8b4bf}
+.pbc-page #apTable input.ap-in.changed{border-color:var(--mwa-sky);background:#eaf6ff;font-weight:700}
+.pbc-page .ap-editing .ap-wrap{outline:2px solid var(--mwa-sky);outline-offset:-1px}
 
 .pbc-page .plan-empty{display:none;padding:30px;text-align:center;color:var(--ink-soft);
   border:1px dashed var(--line);border-radius:8px}
@@ -469,6 +477,12 @@
         <label style="min-width:auto">ฐาน (ตรึงค่า ณ เดือนวัดผล)</label>
         <select id="apBase" style="flex:0 1 330px"></select>
         <span class="dim" id="apBaseNote"></span>
+      </div>
+      <div class="formrow ap-editbar" id="apEditBar" style="display:none">
+        <button id="btnApEdit">✎ แก้ไขตาราง</button>
+        <button class="primary" id="btnApSave" style="display:none">บันทึก</button>
+        <button id="btnApCancel" style="display:none">ยกเลิก</button>
+        <span class="dim" id="apEditHint"></span>
       </div>
       <div class="hint">
         กิจกรรมปรับปรุง/สำรวจ มาจากแท็บ "แผนงานลดน้ำสูญเสีย" (กรอกปริมาณแยกราย DMA ในฟอร์ม) ·
@@ -1849,14 +1863,22 @@ function sendEventToJob(id, btn){
 
 // ---------------------------------------------------------------- ตารางแผนกิจกรรมราย DMA
 // รูปแบบเดียวกับตาราง Excel ที่ใช้ติดตาม PBC: ฐาน (ตรึง ณ เดือนวัดผล) + ชุดคอลัมน์ต่อจุดวัดผลถัดไป
-// คำนวณที่หลังบ้าน /api/activity-plan — หน้านี้แค่จัดตาราง
+// หลังบ้าน (/api/activity-plan) ส่งค่าตั้งต้น: ฐานราย DMA, กิจกรรม (จากแผนงาน/ค่าที่กรอกเอง), เป้าสะสม
+// หน้านี้คำนวณคอลัมน์ที่เหลือเอง (apCompute) เพื่อให้โหมดแก้ไขเห็นผลทันทีขณะพิมพ์
+// โหมดแก้ไข: ช่องกิจกรรมปรับปรุง/สำรวจ/เป้าสะสม เป็นช่องกรอก — เว้นว่าง = ใช้ค่าที่ระบบคำนวณ
 var AP_DATA = null;
 var AP_FOR = null;          // "contract|base" ที่โหลดไว้ล่าสุด กันโหลดซ้ำ
 var AP_CID = null;          // สัญญาของ AP_DATA (ตัวเลือกฐานเป็นของสัญญานั้น)
+var AP_EDIT = false;        // อยู่ในโหมดแก้ไขหรือไม่
+var AP_EDITS = {};          // "ms|dma|field" -> ข้อความในช่องกรอก (เฉพาะช่องที่แก้)
+var AP_FIELDS = ["pipe", "alc", "target"];
 
 function apActive(){ return $("paneActPlan").classList.contains("active"); }
 
-function loadActivityPlan(force){
+function apDirty(){ return Object.keys(AP_EDITS).length > 0; }
+
+function loadActivityPlan(force, okMsg){
+  if(AP_EDIT && apDirty() && AP_CID === SELECTED) return;   // อย่าทับค่าที่กำลังแก้
   // ตัวเลือกฐานใช้ได้เฉพาะสัญญาเดิม เปลี่ยนสัญญาแล้วให้หลังบ้านเลือกค่าเริ่มต้นใหม่
   var base = (AP_CID === SELECTED && $("apBase").value) || "";
   var key = SELECTED + "|" + base;
@@ -1871,6 +1893,7 @@ function loadActivityPlan(force){
         AP_DATA = null;
         $("apTable").innerHTML = "";
         $("apNote").innerHTML = "";
+        $("apEditBar").style.display = "none";
         showMsg($("apMsg"), esc(j.error || "โหลดไม่สำเร็จ"), "err");
         return;
       }
@@ -1878,9 +1901,111 @@ function loadActivityPlan(force){
       AP_DATA = j.data;
       AP_CID = SELECTED;
       AP_FOR = SELECTED + "|" + AP_DATA.base.month_no;
+      AP_EDIT = false;
+      AP_EDITS = {};
       renderActivityPlan();
+      if(okMsg) showMsg($("apMsg"), okMsg, "ok");
     })
     .catch(function(e){ showMsg($("apMsg"), "เชื่อมต่อไม่สำเร็จ: " + esc(e), "err"); });
+}
+
+// ค่าที่ใช้คำนวณของแต่ละช่องกรอก: ถ้าแก้อยู่ใช้ค่าที่พิมพ์ ถ้าเว้นว่างใช้ค่าที่ระบบคำนวณ
+function apValue(g, code, field){
+  var c = g.cells[code] || {};
+  var key = g.month_no + "|" + code + "|" + field;
+  var auto = field === "target" ? (c.typed && c.typed.indexOf("target") >= 0 ? null : c.target_cum)
+                                : c["plan_" + field];
+  if(key in AP_EDITS){
+    var t = String(AP_EDITS[key]).trim();
+    if(t === "") return auto == null ? null : auto;
+    var v = parseFloat(t);
+    return isNaN(v) ? null : v;
+  }
+  return field === "target" ? c.target_cum : c[field];
+}
+
+// คอลัมน์ที่เหลือทั้งหมด คำนวณจากค่าฐาน + กิจกรรม + เป้าสะสม (สูตรเดียวกับหลังบ้าน)
+function apCompute(){
+  var d = AP_DATA, h = d.hours, UN = d.unassigned_label;
+  var cum = {}, cumUn = 0, out = [];
+  d.groups.forEach(function(g){
+    var res = { cells:{}, tot:{} };
+    var T = { pipe:0, alc:0, tgt:null, cut:null, inflow:null, loss:null };
+    function add(k, v){ if(v != null) T[k] = (T[k] || 0) + v; }
+    d.rows.forEach(function(r){
+      var code = r.dma_code;
+      var pipe = apValue(g, code, "pipe"), alc = apValue(g, code, "alc");
+      var tgt = apValue(g, code, "target");
+      cum[code] = (cum[code] || 0) + (pipe || 0) + (alc || 0);
+      var act = cum[code];
+      var cut = tgt != null ? tgt * h : null;
+      var inflow = (cut != null && r.inflow_d != null) ? r.inflow_d - cut : null;
+      var loss = (cut != null && r.loss_d != null) ? r.loss_d - cut : null;
+      res.cells[code] = {
+        pipe:pipe, alc:alc, target:tgt, gap: tgt != null ? tgt - act : null, cut:cut,
+        nf: r.nf_current != null ? r.nf_current - act : null,
+        inflow:inflow, loss:loss, rate: inflow ? loss / inflow * 100 : null
+      };
+      add("pipe", pipe); add("alc", alc); add("tgt", tgt); add("cut", cut);
+      add("inflow", inflow); add("loss", loss);
+    });
+    var un = g.cells[UN];
+    if(un){
+      add("pipe", un.pipe); add("alc", un.alc);
+      cumUn += (un.pipe || 0) + (un.alc || 0);
+    }
+    var cumAll = cumUn;
+    Object.keys(cum).forEach(function(k){ cumAll += cum[k]; });
+    T.gap = T.tgt != null ? T.tgt - cumAll : null;
+    T.cumAll = cumAll;
+    T.rate = T.inflow ? T.loss / T.inflow * 100 : null;
+    res.tot = T;
+    out.push(res);
+  });
+  return out;
+}
+
+function apGapHtml(v){
+  if(v == null) return '<span class="dim">-</span>';
+  if(Math.abs(v) < 0.005) return "0.00";
+  return '<span class="' + (v > 0 ? "num-warn" : "num-good") + '" title="' +
+    (v > 0 ? "ยังต้องหากิจกรรมเพิ่ม" : "กิจกรรมเกินเป้าที่จัดสรรไว้") + '">' +
+    (v > 0 ? "" : "−") + num(Math.abs(v), 2) + "</span>";
+}
+function apN(v){ return v == null ? '<span class="dim">-</span>' : num(v, 2); }
+
+// เติมตัวเลขทุกช่องที่คำนวณได้ (ใช้ทั้งตอนแสดงผลครั้งแรกและทุกครั้งที่พิมพ์ในโหมดแก้ไข)
+function apFill(){
+  var d = AP_DATA, res = apCompute(), tbl = $("apTable");
+  var tNf = 0, anyNf = false;
+  d.rows.forEach(function(r){ if(r.nf_current != null){ tNf += r.nf_current; anyNf = true; } });
+  d.groups.forEach(function(g, gi){
+    var R = res[gi];
+    Object.keys(R.cells).forEach(function(code){
+      var c = R.cells[code];
+      ["pipe","alc","target"].forEach(function(f){
+        var el = tbl.querySelector('[data-v="' + g.month_no + "|" + code + "|" + f + '"]');
+        if(el) el.innerHTML = apN(c[f]);
+      });
+      var set = function(k, html){
+        var el = tbl.querySelector('[data-c="' + g.month_no + "|" + code + "|" + k + '"]');
+        if(el) el.innerHTML = html;
+      };
+      set("gap", apGapHtml(c.gap)); set("cut", apN(c.cut)); set("nf", apN(c.nf));
+      set("inflow", apN(c.inflow)); set("loss", apN(c.loss)); set("rate", apN(c.rate));
+    });
+    var T = R.tot;
+    var tset = function(k, html, cls){
+      var el = tbl.querySelector('[data-t="' + g.month_no + "|" + k + '"]');
+      if(el){ el.innerHTML = html; if(cls !== undefined) el.className = cls; }
+    };
+    tset("pipe", apN(T.pipe || null)); tset("alc", apN(T.alc || null));
+    tset("gap", apGapHtml(T.gap)); tset("tgt", apN(T.tgt)); tset("cut", apN(T.cut));
+    tset("nf", apN(anyNf ? tNf - T.cumAll : null));
+    tset("inflow", apN(T.inflow)); tset("loss", apN(T.loss));
+    var ok = T.rate != null && T.rate <= g.target_rate + 0.005;
+    tset("rate", apN(T.rate), T.rate == null ? "" : (ok ? "num-good" : "num-bad"));
+  });
 }
 
 function renderActivityPlan(){
@@ -1890,17 +2015,24 @@ function renderActivityPlan(){
     return '<option value="' + o.month_no + '"' +
       (o.month_no === d.base.month_no ? " selected" : "") + ">" + esc(o.label) + "</option>";
   }).join("");
+  sel.disabled = AP_EDIT;
   $("apBaseNote").textContent = "รอบ 3 เดือน " + d.base.window.map(thaiMonth).join(", ") +
     " รวม " + d.base.days + " วัน · อัตรารวม " + num(d.base.loss_rate, 2) + "%";
 
-  function n2(v){ return v == null ? '<span class="dim">-</span>' : num(v, 2); }
-  function sum(list){
-    var s = 0, any = false;
-    list.forEach(function(v){ if(v != null){ s += v; any = true; } });
-    return any ? s : null;
-  }
+  // แถบปุ่มโหมดแก้ไข
+  $("apEditBar").style.display = d.groups.length ? "" : "none";
+  $("btnApEdit").style.display = (!AP_EDIT && d.can_edit) ? "" : "none";
+  $("btnApSave").style.display = AP_EDIT ? "" : "none";
+  $("btnApCancel").style.display = AP_EDIT ? "" : "none";
+  $("apEditHint").innerHTML = !d.can_edit
+    ? '<a href="/login">เข้าสู่ระบบ</a> เพื่อแก้ไขตาราง'
+    : (AP_EDIT
+      ? "กรอกในช่องสีส้ม/เหลือง (ลบ.ม./ชม.) · เว้นว่าง = ใช้ค่าที่ระบบคำนวณ (ตัวเลขจางในช่อง) · " +
+        "Enter = ลงแถวถัดไป · เป้าของ DMA อื่นจะเกลี่ยใหม่หลังกดบันทึก"
+      : "");
+  $("paneActPlan").classList.toggle("ap-editing", AP_EDIT);
 
-  var G = d.groups;
+  var G = d.groups, UN = d.unassigned_label;
   var head1 = '<tr><th rowspan="2" class="ap-dma">DMA</th>' +
     '<th colspan="5" class="ap-base">ฐาน: ข้อมูล ณ ' + esc(d.base.label) +
     ' (เดือนที่ ' + d.base.month_no + ')</th>' +
@@ -1925,69 +2057,65 @@ function renderActivityPlan(){
         "<th>น้ำสูญเสีย<small>%</small></th>";
     }).join("") + "</tr>";
 
-  function gapCell(v){
-    if(v == null) return '<td><span class="dim">-</span></td>';
-    if(Math.abs(v) < 0.005) return "<td>0.00</td>";
-    return '<td class="' + (v > 0 ? "num-warn" : "num-good") + '" title="' +
-      (v > 0 ? "ยังต้องหากิจกรรมเพิ่ม" : "กิจกรรมเกินเป้าที่จัดสรรไว้") + '">' +
-      (v > 0 ? "" : "−") + num(Math.abs(v), 2) + "</td>";
+  // ช่องกรอก (โหมดแก้ไข) หรือช่องแสดงค่า
+  function inputCell(g, r, field, cls){
+    var c = g.cells[r.dma_code] || {};
+    var key = g.month_no + "|" + r.dma_code + "|" + field;
+    var typed = (c.typed || []).indexOf(field) >= 0;
+    var mark = typed ? ' <span class="ap-typed" title="ค่าที่กรอกเองในตาราง">●</span>' : "";
+    if(!AP_EDIT || (field === "target" && r.loss_d == null)){
+      return '<td class="' + cls + '"><span data-v="' + key + '"></span>' + mark + "</td>";
+    }
+    var cur = field === "target" ? c.target_cum : c[field];
+    var auto = field === "target" ? (typed ? null : c.target_cum) : c["plan_" + field];
+    var val = key in AP_EDITS ? AP_EDITS[key] : (typed && cur != null ? +cur.toFixed(2) : "");
+    var ph = auto != null ? (Math.round(auto * 100) / 100).toString() : "";
+    return '<td class="' + cls + ' ap-incell"><input class="ap-in' + (key in AP_EDITS ? " changed" : "") +
+      '" type="number" min="0" step="0.01" data-k="' + key + '" data-col="' + g.month_no + "|" + field +
+      '" value="' + esc(val) + '" placeholder="' + esc(ph) + '"' +
+      ' title="' + esc(field === "target" ? "เว้นว่าง = เกลี่ยอัตโนมัติ" : "เว้นว่าง = ใช้ผลรวมจากแผนงาน") +
+      '"></td>';
   }
-  function groupCells(c, g){
-    if(!c) return '<td colspan="9"></td>';
-    var rateCls = "";
-    return '<td class="ap-act">' + n2(c.pipe) + '</td><td class="ap-act">' + n2(c.alc) + "</td>" +
-      gapCell(c.gap) + '<td class="ap-tgt">' + n2(c.target_cum) + "</td>" +
-      "<td>" + n2(c.cut_d) + "</td><td>" + n2(c.nf_target) + "</td>" +
-      "<td>" + n2(c.inflow_d) + "</td><td>" + n2(c.loss_d) + "</td>" +
-      '<td class="' + rateCls + '">' + n2(c.loss_rate) + "</td>";
+  function derived(g, code){
+    return ["gap","cut","nf","inflow","loss","rate"].map(function(k){
+      return '<td data-c="' + g.month_no + "|" + code + "|" + k + '"></td>';
+    }).join("");
   }
 
   var body = d.rows.map(function(r){
     return '<tr><td class="ap-dma">' + esc(r.dma_code) + "</td>" +
-      "<td>" + n2(r.inflow_d) + "</td><td>" + n2(r.loss_d) + "</td><td>" + n2(r.loss_rate) +
-      "</td><td>" + n2(r.inflow_h) + "</td><td>" + n2(r.nf_current) + "</td>" +
-      G.map(function(g){ return groupCells(g.cells[r.dma_code], g); }).join("") + "</tr>";
+      "<td>" + apN(r.inflow_d) + "</td><td>" + apN(r.loss_d) + "</td><td>" + apN(r.loss_rate) +
+      "</td><td>" + apN(r.inflow_h) + "</td><td>" + apN(r.nf_current) + "</td>" +
+      G.map(function(g){
+        var dc = derived(g, r.dma_code).split("</td>");
+        // ลำดับคอลัมน์: ปรับปรุง, สำรวจ, ต้องเพิ่ม, เป้าสะสม, ลดน้ำเข้า, NF, น้ำเข้า, สูญเสีย, %
+        return inputCell(g, r, "pipe", "ap-act") + inputCell(g, r, "alc", "ap-act") +
+          dc[0] + "</td>" + inputCell(g, r, "target", "ap-tgt") + dc.slice(1).join("</td>");
+      }).join("") + "</tr>";
   }).join("");
 
   // แผนงานที่ไม่ได้แยกราย DMA — แสดงเป็นแถวแยก ให้ยอดรวมกิจกรรมยังครบ
-  var UN = d.unassigned_label;
   if(G.some(function(g){ return g.cells[UN]; })){
     body += '<tr class="ap-un"><td class="ap-dma">' + esc(UN) + '</td><td colspan="5" class="dim">' +
       "แผนงานที่ยังไม่ได้แบ่งปริมาณราย DMA</td>" +
       G.map(function(g){
         var c = g.cells[UN];
-        return '<td class="ap-act">' + n2(c && c.pipe) + '</td><td class="ap-act">' +
-          n2(c && c.alc) + '</td><td colspan="7"></td>';
+        return '<td class="ap-act">' + apN(c && c.pipe) + '</td><td class="ap-act">' +
+          apN(c && c.alc) + '</td><td colspan="7"></td>';
       }).join("") + "</tr>";
   }
 
-  // แถวรวม
-  var R = d.rows;
-  var tIn = sum(R.map(function(r){ return r.inflow_d; }));
-  var tLoss = sum(R.map(function(r){ return r.loss_d; }));
-  var tNf = sum(R.map(function(r){ return r.nf_current; }));
-  var foot = '<tr class="ap-total"><td class="ap-dma">รวม</td><td>' + n2(tIn) + "</td><td>" + n2(tLoss) +
-    "</td><td>" + n2(tIn ? tLoss / tIn * 100 : null) + "</td><td>" +
-    n2(tIn != null ? tIn / d.hours : null) + "</td><td>" + n2(tNf) + "</td>";
-  var cumAll = 0;
-  G.forEach(function(g){
-    var cells = Object.keys(g.cells).map(function(k){ return g.cells[k]; });
-    var pipe = sum(cells.map(function(c){ return c.pipe; }));
-    var alc = sum(cells.map(function(c){ return c.alc; }));
-    cumAll += (pipe || 0) + (alc || 0);
-    var tgt = sum(R.map(function(r){ var c = g.cells[r.dma_code]; return c && c.target_cum; }));
-    var cut = sum(R.map(function(r){ var c = g.cells[r.dma_code]; return c && c.cut_d; }));
-    var inT = sum(R.map(function(r){ var c = g.cells[r.dma_code]; return c && c.inflow_d; }));
-    var lossT = sum(R.map(function(r){ var c = g.cells[r.dma_code]; return c && c.loss_d; }));
-    var rate = inT ? lossT / inT * 100 : null;
-    var ok = rate != null && rate <= g.target_rate + 0.005;
-    foot += '<td class="ap-act">' + n2(pipe) + '</td><td class="ap-act">' + n2(alc) + "</td>" +
-      gapCell(tgt != null ? tgt - cumAll : null) + '<td class="ap-tgt">' + n2(tgt) + "</td>" +
-      "<td>" + n2(cut) + "</td><td>" + n2(tNf != null ? tNf - cumAll : null) + "</td>" +
-      "<td>" + n2(inT) + "</td><td>" + n2(lossT) + "</td>" +
-      '<td class="' + (rate == null ? "" : (ok ? "num-good" : "num-bad")) + '">' + n2(rate) + "</td>";
-  });
-  foot += "</tr>";
+  var R = d.rows, tIn = 0, tLoss = 0, tNf = 0;
+  R.forEach(function(r){ tIn += r.inflow_d || 0; tLoss += r.loss_d || 0; tNf += r.nf_current || 0; });
+  var foot = '<tr class="ap-total"><td class="ap-dma">รวม</td><td>' + apN(tIn) + "</td><td>" +
+    apN(tLoss) + "</td><td>" + apN(tIn ? tLoss / tIn * 100 : null) + "</td><td>" +
+    apN(tIn / d.hours) + "</td><td>" + apN(tNf) + "</td>" +
+    G.map(function(g){
+      var t = function(k, cls){ return '<td' + (cls ? ' class="' + cls + '"' : "") +
+        ' data-t="' + g.month_no + "|" + k + '"></td>'; };
+      return t("pipe", "ap-act") + t("alc", "ap-act") + t("gap") + t("tgt", "ap-tgt") + t("cut") +
+        t("nf") + t("inflow") + t("loss") + t("rate");
+    }).join("") + "</tr>";
 
   $("apTable").innerHTML = "<thead>" + head1 + head2 + "</thead><tbody>" + body +
     "</tbody><tfoot>" + foot + "</tfoot>";
@@ -1996,6 +2124,28 @@ function renderActivityPlan(){
   Array.prototype.forEach.call(hr[1].cells, function(th){
     th.style.top = hr[0].offsetHeight + "px";
   });
+  apFill();
+
+  if(AP_EDIT){
+    Array.prototype.forEach.call($("apTable").querySelectorAll("input.ap-in"), function(inp){
+      inp.addEventListener("input", function(){
+        var key = inp.getAttribute("data-k");
+        AP_EDITS[key] = inp.value;
+        inp.classList.add("changed");
+        apFill();
+        $("btnApSave").textContent = "บันทึก (" + Object.keys(AP_EDITS).length + " ช่อง)";
+      });
+      inp.addEventListener("keydown", function(e){
+        if(e.key !== "Enter") return;
+        e.preventDefault();
+        var col = inp.getAttribute("data-col");
+        var all = $("apTable").querySelectorAll('input.ap-in[data-col="' + col + '"]');
+        var i = Array.prototype.indexOf.call(all, inp);
+        if(all[i + (e.shiftKey ? -1 : 1)]) all[i + (e.shiftKey ? -1 : 1)].focus();
+      });
+    });
+  }
+  $("btnApSave").textContent = "บันทึก" + (apDirty() ? " (" + Object.keys(AP_EDITS).length + " ช่อง)" : "");
 
   var notes = [];
   if(!G.length) notes.push("ไม่มีจุดวัดผลหลังเดือนฐานแล้ว");
@@ -2010,13 +2160,55 @@ function renderActivityPlan(){
       "หรือหลังเป้าสุดท้าย): " + d.skipped_events.map(function(e){
         return esc(e.title) + " (" + esc(e.month_label) + ")"; }).join(", "));
   }
+  notes.push('<span class="ap-typed">●</span> = ค่าที่กรอกเองในตาราง (ใช้แทนค่าที่ระบบคำนวณ) · ' +
+    "กิจกรรมปรับปรุง/สำรวจ ตั้งต้นจากแผนงานในแท็บ \"แผนงานลดน้ำสูญเสีย\" " +
+    "นับเข้าจุดวัดผลแรกที่ถึงหลังเดือนที่แผนงานแล้วเสร็จ");
   notes.push("เป้าลดน้ำเข้าสะสม = ปริมาณที่ต้องลดจากค่าฐานให้ถึงอัตราเป้า กระจายราย DMA " +
-    "ตามศักยภาพ MNF (เหมือนแท็บเป้าหมายย่อย ถ้าล็อกเป้า DMA ไว้ในแท็บนั้นจะใช้ค่าที่ล็อก) · " +
+    "ตามศักยภาพ MNF (DMA ที่กรอกเป้าเองจะคงค่าไว้ ส่วนที่เหลือเกลี่ยให้ DMA อื่น) · " +
     "ต้องเพิ่มกิจกรรม = เป้าสะสม − กิจกรรมสะสม (ค่าบวก = ยังขาด) · " +
     "ลดน้ำเข้า/วัน = เป้าสะสม × " + d.hours + " ชม. · NF ตามกิจกรรม = NF ปัจจุบัน − กิจกรรมสะสม · " +
-    "กิจกรรมนับเข้าจุดวัดผลแรกที่ถึงหลังเดือนที่แผนงานแล้วเสร็จ · " +
     "น้ำเข้า/น้ำสูญเสียเป้าหมาย = ค่าฐาน − ลดน้ำเข้า (สมมติน้ำจำหน่ายคงที่)");
   $("apNote").innerHTML = notes.map(function(t){ return "<div>• " + t + "</div>"; }).join("");
+}
+
+function apStartEdit(){
+  if(!AP_DATA || !AP_DATA.can_edit) return;
+  AP_EDIT = true; AP_EDITS = {};
+  hideMsg($("apMsg"));
+  renderActivityPlan();
+  var first = $("apTable").querySelector("input.ap-in");
+  if(first) first.focus();
+}
+
+function apCancelEdit(){
+  if(apDirty() && !window.confirm("ยกเลิกค่าที่แก้ไว้ " + Object.keys(AP_EDITS).length + " ช่อง?")) return;
+  AP_EDIT = false; AP_EDITS = {};
+  renderActivityPlan();
+}
+
+function apSave(){
+  var keys = Object.keys(AP_EDITS);
+  if(!keys.length){ AP_EDIT = false; renderActivityPlan(); return; }
+  var cells = [], bad = null;
+  keys.forEach(function(k){
+    var p = k.split("|"), t = String(AP_EDITS[k]).trim();
+    if(t !== "" && (isNaN(parseFloat(t)) || parseFloat(t) < 0)) bad = p[1];
+    cells.push({ measure_month_no: +p[0], dma_code: p[1], field: p[2], value: t });
+  });
+  if(bad){ showMsg($("apMsg"), "ค่าของ " + esc(bad) + " ต้องเป็นตัวเลขไม่ติดลบ", "err"); return; }
+  $("btnApSave").disabled = true;
+  fetch(API + "/activity-plan/cells", {
+    method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({ contract_id: SELECTED, base_no: AP_DATA.base.month_no, cells: cells })
+  }).then(function(r){ return r.json(); }).then(function(j){
+    $("btnApSave").disabled = false;
+    if(!j.ok){ showMsg($("apMsg"), esc(j.error), "err"); return; }
+    AP_EDIT = false; AP_EDITS = {};
+    loadActivityPlan(true, "บันทึก " + j.n_saved + " ช่องแล้ว — คำนวณและเกลี่ยเป้าใหม่เรียบร้อย");
+  }).catch(function(e){
+    $("btnApSave").disabled = false;
+    showMsg($("apMsg"), "บันทึกไม่สำเร็จ: " + esc(e), "err");
+  });
 }
 
 function renderDmaTable(){
@@ -2627,6 +2819,13 @@ function bindEvents(){
     loadActivityPlan(false);
   });
   $("apBase").addEventListener("change", function(){ loadActivityPlan(true); });
+  $("btnApEdit").addEventListener("click", apStartEdit);
+  $("btnApCancel").addEventListener("click", apCancelEdit);
+  $("btnApSave").addEventListener("click", apSave);
+  // เตือนก่อนออกจากหน้า ถ้ามีค่าที่แก้ในตารางแต่ยังไม่บันทึก
+  window.addEventListener("beforeunload", function(e){
+    if(AP_EDIT && apDirty()){ e.preventDefault(); e.returnValue = ""; }
+  });
   $("btnPlanEvents").addEventListener("click", function(){
     document.querySelector('.tab[data-pane="paneEvents"]').click();
     var target = (DATA && DATA.event_meta && DATA.event_meta.can_edit) ? $("evForm") : $("paneEvents");

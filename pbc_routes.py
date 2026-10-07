@@ -1091,17 +1091,27 @@ def create_pbc_blueprint(login_required=None, current_user_fn=None,
         prev_month = base_month
         cum_act = {}            # DMA -> กิจกรรมสะสม (ลบ.ม./ชม.)
         used_events = set()
+        typed = SVC.get_plan_cells(cid, base_no)   # ค่าที่กรอกเองในตาราง (โหมดแก้ไข)
+        loss_by = {r["dma_code"]: r["loss_d"] for r in rows}
         for t in future:
             ms_month = SVC.month_from_no(start, t["month_no"])
-            # เป้าราย DMA: ใช้ค่าที่ผู้ใช้ล็อกไว้ในแท็บเป้าหมายย่อย (ถ้ามี) แปลงเป็นต่อวัน
+            # เป้าราย DMA ที่ล็อกไว้ (หน่วย ลบ.ม./วัน เป็นปริมาณสูญเสียเป้าหมาย)
+            #   1) ค่าที่ล็อกในแท็บเป้าหมายย่อย  2) ค่าที่กรอกในตารางนี้ (สำคัญกว่า)
+            # DMA ที่ไม่ได้ล็อกจะถูกเกลี่ยส่วนที่เหลือให้อัตโนมัติ
             saved = SVC.get_dma_targets(cid, t["month_no"])
             manual = {c: v["target_loss_m3"] / CFG.DAYS_PER_MONTH
                       for c, v in saved.items()
                       if v["is_manual"] and v["target_loss_m3"] is not None}
+            typed_target = {}
+            for (ms, code, field), val in typed.items():
+                if ms == t["month_no"] and field == "target" and loss_by.get(code) is not None:
+                    typed_target[code] = val
+                    manual[code] = loss_by[code] - val * hours
             alloc, summary = FC.build_dma_targets(
                 basis, sales_total, t["target_rate"] / 100.0, hours, 1, manual=manual)
             target_h = {a["dma_code"]: a["reduction_m3"] / hours for a in alloc}
 
+            # กิจกรรมจากแผนงาน (แท็บแผนงานลดน้ำสูญเสีย)
             pipe, alc = {}, {}
             for e in events:
                 if not (prev_month < e["month"] <= ms_month):
@@ -1112,7 +1122,18 @@ def create_pbc_blueprint(login_required=None, current_user_fn=None,
                     {UNASSIGNED: e["reduction_m3h"]} if e["reduction_m3h"] else {})
                 for code, val in parts.items():
                     bucket[code] = bucket.get(code, 0.0) + val
-                    cum_act[code] = cum_act.get(code, 0.0) + val
+            plan_pipe, plan_alc = dict(pipe), dict(alc)
+            # ค่าที่กรอกเองในตารางใช้แทนผลรวมจากแผนงานของช่องนั้น
+            for (ms, code, field), val in typed.items():
+                if ms != t["month_no"] or code not in dma_set:
+                    continue
+                if field == "pipe":
+                    pipe[code] = val
+                elif field == "alc":
+                    alc[code] = val
+            for bucket in (pipe, alc):
+                for code, val in bucket.items():
+                    cum_act[code] = cum_act.get(code, 0.0) + (val or 0.0)
 
             cells = {}
             for r in rows:
@@ -1124,6 +1145,11 @@ def create_pbc_blueprint(login_required=None, current_user_fn=None,
                 loss_t = r["loss_d"] - cut_d if cut_d is not None else None
                 cells[code] = {
                     "pipe": pipe.get(code), "alc": alc.get(code),
+                    # ค่าตั้งต้นจากแผนงาน และช่องไหนเป็นค่าที่กรอกเอง (ใช้ในโหมดแก้ไข)
+                    "plan_pipe": plan_pipe.get(code), "plan_alc": plan_alc.get(code),
+                    "typed": [f for f in ("pipe", "alc", "target")
+                              if (t["month_no"], code, f) in typed],
+                    "target_auto": code not in typed_target and code not in manual,
                     "gap": (tgt - act) if tgt is not None else None,
                     "target_cum": tgt, "cut_d": cut_d,
                     "nf_target": (r["nf_current"] - act)
@@ -1155,7 +1181,46 @@ def create_pbc_blueprint(login_required=None, current_user_fn=None,
             "groups": groups,
             "unassigned_label": UNASSIGNED,
             "skipped_events": skipped,
+            "can_edit": _editor()[0] is not None or job_user_fn is None,
         }
+
+    @bp.route("/api/activity-plan/cells", methods=["POST"])
+    @guard
+    def api_activity_plan_cells():
+        """บันทึกค่าที่แก้ในตารางแผนกิจกรรม (โหมดแก้ไข) ทีเดียวทั้งชุด"""
+        data = request.get_json(silent=True) or {}
+        contract, _ = _resolve_contract(data.get("contract_id"))
+        if not contract:
+            return jsonify({"ok": False, "error": "ไม่พบสัญญา"}), 404
+        name, err = _need_editor()
+        if err:
+            return err
+        base_no = SVC.to_int(data.get("base_no"))
+        if base_no is None:
+            return jsonify({"ok": False, "error": "ไม่ระบุเดือนฐาน"}), 400
+        valid_dma = {d["dma_code"] for d in SVC.get_contract_dmas(contract["contract_id"])}
+        valid_ms = {t["month_no"] for t in SVC.get_targets(contract["contract_id"])}
+        cells = []
+        for c in data.get("cells") or []:
+            field = (c.get("field") or "").strip()
+            code = (c.get("dma_code") or "").strip()
+            ms = SVC.to_int(c.get("measure_month_no"))
+            if field not in SVC.PLAN_CELL_FIELDS or code not in valid_dma or ms not in valid_ms:
+                return jsonify({"ok": False, "error": "ช่องไม่ถูกต้อง: %s / %s / %s"
+                                % (code, ms, field)}), 400
+            raw = c.get("value")
+            val = None
+            if raw not in (None, ""):
+                val = SVC.to_float(raw)
+                if val is None or val < 0:
+                    return jsonify({"ok": False, "error": "ค่าใน %s เดือนที่ %s ต้องเป็นตัวเลข"
+                                    "ไม่ติดลบ" % (code, ms)}), 400
+            cells.append({"measure_month_no": ms, "dma_code": code,
+                          "field": field, "value": val})
+        if not cells:
+            return jsonify({"ok": False, "error": "ไม่มีค่าที่แก้ไข"}), 400
+        n = SVC.save_plan_cells(contract["contract_id"], base_no, cells, name)
+        return jsonify({"ok": True, "n_saved": n})
 
     @bp.route("/api/activity-plan")
     @guard
