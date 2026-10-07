@@ -2,7 +2,7 @@
 {% block title %}แจ้งเหตุการณ์ใหม่ — Smart NRW{% endblock %}
 {% block content %}
 <div class="container" style="max-width: 640px;">
-  <a href="{{ url_for('dashboard') }}">&larr; กลับไป Dashboard</a>
+  <a href="{{ url_for('incident_tree') }}">&larr; กลับไปติดตามเหตุการณ์</a>
 
   {% with messages = get_flashed_messages(with_categories=true) %}
     {% if messages %}

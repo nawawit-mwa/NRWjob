@@ -25,10 +25,15 @@
              class="side-nav-item {{ 'active' if active_page == 'mediumterm_60d' }}">ติดตาม MNF ช่วง 60 วัน</a>
           <a href="{{ url_for('mediumterm_trend') }}"
              class="side-nav-item {{ 'active' if active_page == 'mediumterm' }}">ติดตาม MNF เทียบ ก.ย. 68</a>
+        </div>
+        <div class="side-nav-group">
+          <div class="side-nav-label">Job Management</div>
           <a href="{{ url_for('incident_tree') }}"
              class="side-nav-item {{ 'active' if active_page == 'incident_tree' }}">ติดตามเหตุการณ์</a>
-          <a href="{{ url_for('dashboard') }}"
-             class="side-nav-item {{ 'active' if active_page == 'dashboard' }}">ติดตามงาน</a>
+          <a href="{{ url_for('alerts_list') }}"
+             class="side-nav-item {{ 'active' if active_page == 'alerts' }}">แสดง MNF ที่บันทึกไว้</a>
+          <a href="{{ url_for('new_incident') }}"
+             class="side-nav-item {{ 'active' if active_page == 'new_incident' }}">แจ้งเหตุการณ์ใหม่</a>
         </div>
         <div class="side-nav-group">
           <div class="side-nav-label">ติดตามพื้นที่ PBC</div>
@@ -36,23 +41,6 @@
              class="side-nav-item {{ 'active' if active_page == 'pbc_overview' }}">ภาพรวมทุกสัญญา</a>
           <a href="/pbc"
              class="side-nav-item {{ 'active' if active_page == 'pbc' }}">ติดตามรายสัญญา</a>
-        </div>
-        <div class="side-nav-group">
-          <div class="side-nav-label">การบัญชาการ</div>
-          <a href="{{ url_for('new_incident') }}"
-             class="side-nav-item {{ 'active' if active_page == 'new_incident' }}">แจ้งเหตุการณ์ใหม่</a>
-          <a href="{{ url_for('alerts_list') }}"
-             class="side-nav-item {{ 'active' if active_page == 'alerts' }}">แสดง MNF ผิดปกติ</a>
-        </div>
-        <div class="side-nav-group">
-          <div class="side-nav-label">การจัดการงาน</div>
-          <a href="{{ url_for('manage_jobs') }}"
-             class="side-nav-item {{ 'active' if active_page == 'manage_jobs' }}">มอบหมาย/ติดตามงาน</a>
-        </div>
-        <div class="side-nav-group">
-          <div class="side-nav-label">ปฏิบัติการภาคสนาม</div>
-          <a href="{{ url_for('my_jobs') }}"
-             class="side-nav-item {{ 'active' if active_page == 'my_jobs' }}">ติดตามงานที่รับผิดชอบ</a>
         </div>
         <div class="side-nav-group">
           <div class="side-nav-label">ผู้ดูแลระบบ</div>

@@ -9,8 +9,10 @@
     lateral_candidates - list ผู้ใช้ที่โอนงานให้ได้ (คำนวณแยกทีละ job จาก org_service.get_lateral_transfer_candidates_for_job)
     back_url         - URL ที่จะ redirect กลับมาหลังทำรายการ (หน้าปัจจุบัน)
     type_label       - ชื่อประเภทงานที่แปลแล้ว (ไม่ใช่ JobTypeID ดิบ)
+    assign_candidates - list ผู้ใช้ที่มอบหมายงานลงให้ได้ (org_service.get_assignable_users_for_job)
+                        ไม่บังคับใส่ — ถ้าไม่ส่งมา และมีสิทธิ์มอบหมาย จะแสดงคำอธิบายว่าทำไม dropdown ว่าง
 #}
-{% macro job_popup(job, perms, lateral_candidates, back_url, type_label) %}
+{% macro job_popup(job, perms, lateral_candidates, back_url, type_label, assign_candidates=[]) %}
 {% if perms.any %}
 <div class="job-popup-overlay" id="popup-{{ job.JobID }}">
   <div class="job-popup-box">
@@ -18,11 +20,32 @@
             onclick="document.getElementById('popup-{{ job.JobID }}').classList.remove('open')">✕</button>
     <h3>{{ job.JobID }} — {{ type_label }}</h3>
     <div class="pp-row">สถานะ: <span class="badge {{ job.Status|status_class }}">{{ job.Status }}</span></div>
-    <div class="pp-row">ผู้รับผิดชอบปัจจุบัน: {{ job.CurrentAssigneeRole or '—' }}</div>
+    <div class="pp-row">ผู้รับผิดชอบปัจจุบัน: {{ job.CurrentAssigneeUserID|user_short if job.CurrentAssigneeUserID else '—' }}</div>
     <div class="pp-row">กำหนดเสร็จ: {{ job.DueDate|date_display or '—' }}</div>
     <div class="pp-row">ความสำคัญ: {{ job.Priority or '—' }}</div>
 
     <div class="pp-actions">
+      {% if perms.can_assign %}
+      <div class="pp-section-label">มอบหมายงาน</div>
+      {% if assign_candidates %}
+      <form method="post" action="{{ url_for('job_assign', job_id=job.JobID) }}">
+        <input type="hidden" name="next" value="{{ back_url }}">
+        <select name="to_user_id" required>
+          <option value="">— เลือกผู้รับมอบหมาย —</option>
+          {% for c in assign_candidates|sort(attribute='Role') %}
+          <option value="{{ c.UserID }}">{{ c.Name }} ({{ c.Role }})</option>
+          {% endfor %}
+        </select>
+        <button type="submit" class="btn-sm assign">มอบหมาย</button>
+      </form>
+      {% else %}
+      <div class="pp-warn">
+        ยังมอบหมายไม่ได้: ไม่พบผู้ใช้ที่ Active, ระดับต่ำกว่าคุณ และสังกัดหน่วยงานที่รับผิดชอบงานนี้
+        (ส่วน {{ job.SectionID or '— ไม่ระบุ —' }} / กอง {{ job.DivisionID or '— ไม่ระบุ —' }})
+        — ให้ Admin ตรวจชีต Users ว่ามีผู้ใช้สังกัดส่วน/กองนี้หรือยัง
+      </div>
+      {% endif %}
+      {% endif %}
       {% if perms.can_accept %}
       <form method="post" action="{{ url_for('job_accept', job_id=job.JobID) }}">
         <input type="hidden" name="next" value="{{ back_url }}">

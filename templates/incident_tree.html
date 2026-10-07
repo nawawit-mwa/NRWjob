@@ -4,17 +4,86 @@
 
 {% block extra_head %}
 <style>
-  /* ผังต้นไม้ CSS ล้วน (ไม่ใช้ library เพิ่ม) — เหตุการณ์เป็น root, งานเป็นกิ่งด้านล่าง */
+  /* ===== แท็บ ===== */
+  .page-tabs {
+    display: flex;
+    gap: 4px;
+    border-bottom: 2px solid var(--line);
+    margin-bottom: 20px;
+  }
+  .page-tab {
+    padding: 10px 18px;
+    font-weight: 600;
+    font-size: 0.92rem;
+    color: var(--ink-soft);
+    text-decoration: none;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -2px;
+  }
+  .page-tab:hover { color: var(--mwa-navy-deep); }
+  .page-tab.active { color: var(--mwa-navy-deep); border-bottom-color: var(--mwa-sky); }
+  .page-tab .count {
+    display: inline-block;
+    min-width: 20px;
+    margin-left: 6px;
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: var(--mwa-sky);
+    color: #fff;
+    font-size: 0.72rem;
+    text-align: center;
+  }
+
+  /* ===== การ์ดสรุป (สีตามความหมาย) ===== */
+  .summary-card.sc-waiting { border-top-color: var(--amber); }
+  .summary-card.sc-overdue { border-top-color: var(--danger); }
+  .summary-card.sc-overdue .num { color: var(--danger); }
+  .summary-card.sc-closed { border-top-color: var(--mwa-green); }
+
+  .filter-bar { display: flex; gap: 14px; align-items: flex-end; flex-wrap: wrap; }
+  .filter-bar .field { margin-bottom: 0; min-width: 190px; flex: 1; }
+  .filter-bar .clear-link { font-size: 0.85rem; color: var(--mwa-green); font-weight: 600; white-space: nowrap; }
+
+  .table-scroll { overflow-x: auto; }
+  .table-scroll th, .table-scroll td { padding: 10px 10px; }
+  .table-scroll td.wrap { white-space: normal; min-width: 120px; }
+  .job-link {
+    background: none; border: none; padding: 0; cursor: pointer;
+    font: inherit; font-weight: 600; color: var(--mwa-navy); text-decoration: underline;
+  }
+  @media (max-width: 640px) {
+    .table-scroll .hide-sm { display: none; }
+  }
+
+  /* ===== ความคืบหน้าต่อเหตุการณ์ ===== */
+  .progress { display: flex; align-items: center; gap: 8px; min-width: 120px; }
+  .progress-bar { flex: 1; height: 6px; background: var(--line); border-radius: 999px; overflow: hidden; }
+  .progress-bar span { display: block; height: 100%; background: var(--mwa-green); }
+  .progress-text { font-size: 0.78rem; color: var(--ink-soft); white-space: nowrap; }
+  .flag {
+    display: inline-block; padding: 2px 8px; margin: 1px 2px 1px 0; border-radius: 999px;
+    font-size: 0.72rem; font-weight: 600; white-space: nowrap;
+  }
+  .flag.waiting { background: #fff4dc; color: var(--amber); }
+  .flag.overdue { background: #fbe9e4; color: var(--danger); }
+  tr.row-selected td { background: #eaf6ff; }
+  .due-overdue { color: var(--danger); font-weight: 600; }
+
+  /* ===== ผังต้นไม้ CSS ล้วน — เหตุการณ์เป็น root, งานเป็นกิ่งด้านล่าง ===== */
   .tree, .tree ul, .tree li {
     list-style: none;
     margin: 0;
     padding: 0;
     position: relative;
   }
+  /* กล่องเลื่อนแนวนอน: ผังกว้างกว่าจอเมื่อมีงานหลายใบ — ใช้ width:max-content + min-width:100%
+     เพื่อให้จัดกึ่งกลางได้ตอนผังแคบ และเลื่อนดูได้ครบทุกใบ (ไม่โดนตัดขอบซ้าย) ตอนผังกว้าง */
+  .tree-scroll { overflow-x: auto; padding-bottom: 10px; }
   .tree {
-    margin: 30px 0 10px;
+    margin: 24px 0 10px;
     text-align: center;
-    overflow-x: auto;
+    width: max-content;
+    min-width: 100%;
   }
   .tree ul {
     display: flex;
@@ -26,7 +95,7 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 34px 14px 0 14px;
+    padding: 34px 10px 0 10px;
     position: relative;
   }
   .tree li::before, .tree li::after {
@@ -64,6 +133,7 @@
   .tree-node.root {
     border-top: 3px solid var(--mwa-sky);
     min-width: 240px;
+    max-width: 560px;
   }
   .tree-node .tn-id {
     font-weight: 700;
@@ -84,7 +154,6 @@
     padding: 2px 8px;
     border-radius: 999px;
   }
-
   .tree-node.clickable {
     cursor: pointer;
     border-color: var(--mwa-sky);
@@ -92,8 +161,88 @@
   .tree-node.clickable:hover {
     box-shadow: 0 4px 14px rgba(0, 156, 255, 0.18);
   }
+
+  /* การ์ดงาน: กว้างเท่ากัน + ตัดรายละเอียดยาว (ซ้ำกับเหตุการณ์แม่) เหลือ 2 บรรทัด ชี้เมาส์ดูเต็ม */
+  .tree ul .tree-node { width: 230px; min-width: 0; }
+  .tree-node .tn-desc {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .tree-node.needs-assign { border: 1px dashed var(--mwa-sky); background: #f5fbff; }
+  .tree-node.is-overdue { border-color: var(--danger); }
+  .tn-assign-cta {
+    display: inline-block;
+    margin-top: 8px;
+    padding: 4px 12px;
+    border-radius: 6px;
+    background: var(--mwa-sky);
+    color: #fff;
+    font-size: 0.74rem;
+    font-weight: 600;
+  }
+  .tree-summary {
+    display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+    padding: 12px 16px 0; font-size: 0.8rem; color: var(--ink-soft);
+  }
+  .tree-summary .ts-chip {
+    padding: 3px 10px; border-radius: 999px; background: var(--paper); border: 1px solid var(--line);
+  }
+  .tree-summary .ts-chip.warn { border-color: #f0c36d; background: #fff7e6; color: #8a5a00; }
+  .tree-summary .ts-chip.bad { border-color: #e9b4a7; background: #fbe9e4; color: var(--danger); }
+
+  .my-section-note { font-size: 0.8rem; color: var(--ink-soft); margin: -6px 0 10px; }
 </style>
 {% endblock %}
+
+{# แถวตารางงาน (ใช้ในแท็บงานที่รับผิดชอบ) #}
+{% macro job_rows(job_list) %}
+<div class="table-scroll">
+<table>
+  <thead>
+    <tr>
+      <th>รหัสงาน</th>
+      <th>ประเภทงาน</th>
+      <th class="hide-sm">เหตุการณ์</th>
+      <th>สถานะ</th>
+      <th class="hide-sm">ผู้รับผิดชอบ</th>
+      <th>กำหนดเสร็จ</th>
+      <th class="hide-sm"></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for job in job_list %}
+    {% set perms = job_permissions.get(job.JobID, {}) %}
+    {% set late = job.DueDate and (job.DueDate|string)[:10] < today and job.Status not in ['ปิดงาน', 'ยกเลิกงาน'] %}
+    <tr>
+      <td>
+        {% if perms.any %}
+        <button type="button" class="job-link" title="กดเพื่อดำเนินการ"
+                onclick="document.getElementById('popup-{{ job.JobID }}').classList.add('open')">{{ job.JobID }}</button>
+        {% else %}{{ job.JobID }}{% endif %}
+      </td>
+      <td class="wrap">{{ job_type_name_map.get(job.JobType, job.JobType) }}</td>
+      <td class="hide-sm">
+        {% if job.SiblingJobGroup %}
+        <a href="{{ url_for('incident_tree', tab='tree', incident_id=job.SiblingJobGroup, **filter_args) }}">{{ job.SiblingJobGroup }}</a>
+        {% else %}—{% endif %}
+      </td>
+      <td><span class="badge {{ job.Status|status_class }}">{{ job.Status }}</span></td>
+      <td class="hide-sm">{{ job.CurrentAssigneeUserID|user_short if job.CurrentAssigneeUserID else '—' }}</td>
+      <td class="{{ 'due-overdue' if late }}">{{ job.DueDate|date_display or '—' }}{% if late %}<br>เลยกำหนด{% endif %}</td>
+      <td class="hide-sm">
+        {% if perms.any %}
+        <button type="button" class="btn-edit-trigger"
+                onclick="document.getElementById('popup-{{ job.JobID }}').classList.add('open')">ดำเนินการ</button>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endmacro %}
 
 {% block content %}
 <div class="container">
@@ -105,9 +254,86 @@
     {% endif %}
   {% endwith %}
 
-  <div class="section-title">เหตุการณ์ที่เกี่ยวข้อง</div>
+  {% set back_url = request.full_path.rstrip('?') %}
+
+  <nav class="page-tabs">
+    <a href="{{ url_for('incident_tree', tab='tree', **filter_args) }}"
+       class="page-tab {{ 'active' if tab == 'tree' }}">ผังเหตุการณ์</a>
+    <a href="{{ url_for('incident_tree', tab='my', **filter_args) }}"
+       class="page-tab {{ 'active' if tab == 'my' }}">งานที่รับผิดชอบ{% if my_count %}<span class="count">{{ my_count }}</span>{% endif %}</a>
+  </nav>
+
+  {% if tab == 'tree' %}
+  {# ===================== แท็บ: ผังเหตุการณ์ ===================== #}
+  <div class="summary-grid">
+    <a href="{{ url_for('incident_tree', tab='tree', view='open', **filter_args) }}"
+       class="summary-card summary-card-link {{ 'active-filter' if view == 'open' }}">
+      <div class="num">{{ summary.open }}</div>
+      <div class="label">เหตุการณ์ที่เปิดอยู่</div>
+    </a>
+    <a href="{{ url_for('incident_tree', tab='tree', view='waiting', **filter_args) }}"
+       class="summary-card summary-card-link sc-waiting {{ 'active-filter' if view == 'waiting' }}">
+      <div class="num">{{ summary.waiting }}</div>
+      <div class="label">มีงานรอมอบหมาย</div>
+    </a>
+    <a href="{{ url_for('incident_tree', tab='tree', view='overdue', **filter_args) }}"
+       class="summary-card summary-card-link sc-overdue {{ 'active-filter' if view == 'overdue' }}">
+      <div class="num">{{ summary.overdue }}</div>
+      <div class="label">มีงานเลยกำหนด</div>
+    </a>
+    <a href="{{ url_for('incident_tree', tab='tree', view='closed', **filter_args) }}"
+       class="summary-card summary-card-link sc-closed {{ 'active-filter' if view == 'closed' }}">
+      <div class="num">{{ summary.closed }}</div>
+      <div class="label">ปิดแล้ว</div>
+    </a>
+  </div>
+
+  <div class="panel" style="padding: 16px 18px; margin-bottom: 18px;">
+    <form method="get" class="filter-bar">
+      <input type="hidden" name="tab" value="tree">
+      <input type="hidden" name="view" value="{{ view }}">
+      <div class="field">
+        <label for="branch_group">ภาค (กลุ่มสาขา)</label>
+        <select id="branch_group" name="branch_group" onchange="this.form.branch.value=''; this.form.zone.value=''; this.form.submit()">
+          <option value="">— ทุกภาคในขอบเขตของคุณ —</option>
+          {% for g in branch_group_options %}
+          <option value="{{ g.BranchGroupID }}" {{ 'selected' if g.BranchGroupID == branch_group_filter }}>{{ g.BranchGroupName }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="branch">สาขา</label>
+        <select id="branch" name="branch" onchange="this.form.zone.value=''; this.form.submit()">
+          <option value="">— ทุกสาขาในขอบเขตของคุณ —</option>
+          {% for b in branch_options %}
+          <option value="{{ b.BranchID }}" {{ 'selected' if b.BranchID == branch_filter }}>{{ b.BranchName }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="zone">DMA (โซน)</label>
+        <select id="zone" name="zone" onchange="this.form.submit()">
+          <option value="">— ทุกโซนในขอบเขตของคุณ —</option>
+          {% for z in zone_options %}
+          <option value="{{ z.ZoneID }}" {{ 'selected' if z.ZoneID == zone_filter }}>{{ z.ZoneName }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% if filter_args %}
+      <a class="clear-link" href="{{ url_for('incident_tree', tab='tree', view=view) }}">ล้างตัวกรอง ✕</a>
+      {% endif %}
+    </form>
+  </div>
+
+  <div class="section-title">
+    {% if view == 'waiting' %}เหตุการณ์ที่มีงานรอมอบหมาย
+    {% elif view == 'overdue' %}เหตุการณ์ที่มีงานเลยกำหนด
+    {% elif view == 'closed' %}เหตุการณ์ที่ปิดแล้ว
+    {% else %}เหตุการณ์ที่เปิดอยู่{% endif %}
+  </div>
   <div class="panel" style="margin-bottom: 24px;">
     {% if incidents %}
+    <div class="table-scroll">
     <table>
       <thead>
         <tr>
@@ -116,41 +342,72 @@
           <th>สาขา</th>
           <th>โซน / DMA</th>
           <th>ความรุนแรง</th>
-          <th>สถานะการจ่ายงาน</th>
-          <th>กำหนดเสร็จ (รวม)</th>
+          <th>ความคืบหน้างาน</th>
+          <th>ต้องติดตาม</th>
+          <th>กำหนดเสร็จ</th>
           <th></th>
         </tr>
       </thead>
       <tbody>
         {% for inc in incidents %}
-        <tr {{ 'style="background:#eaf6ff;"' if inc.IncidentID == selected_id }}>
+        {% set st = incident_stats.get(inc.IncidentID, {'total': 0, 'done': 0, 'waiting': 0, 'overdue': 0}) %}
+        <tr class="{{ 'row-selected' if inc.IncidentID == selected_id }}">
           <td>{{ inc.IncidentID }}</td>
-          <td>{{ inc.IncidentType }}</td>
+          <td class="wrap">{{ inc.IncidentType }}</td>
           <td>{{ branch_name_map.get(inc.BranchID) or '—' }}</td>
           <td>{{ zone_name_map.get(inc.ZoneID) or 'ไม่ระบุ DMA' }}</td>
           <td>{{ inc.Severity }}</td>
-          <td>{{ inc.ConversionStatus }}</td>
+          <td>
+            {% if st.total %}
+            <div class="progress">
+              <div class="progress-bar"><span style="width: {{ (st.done * 100 / st.total)|round|int }}%;"></span></div>
+              <span class="progress-text">{{ st.done }}/{{ st.total }} งาน</span>
+            </div>
+            {% else %}
+            <span class="progress-text">ยังไม่จ่ายงาน</span>
+            {% endif %}
+          </td>
+          <td class="wrap">
+            {% if st.waiting %}<span class="flag waiting">รอมอบหมาย {{ st.waiting }}</span>{% endif %}
+            {% if st.overdue %}<span class="flag overdue">เลยกำหนด {{ st.overdue }}</span>{% endif %}
+            {% if not st.waiting and not st.overdue %}<span class="progress-text">—</span>{% endif %}
+          </td>
           <td>{{ inc.DueDate|date_display or '—' }}</td>
           <td>
             {% if inc.IncidentID == selected_id %}
             <span class="btn-edit-trigger" style="opacity:0.6; cursor:default;">กำลังดู</span>
             {% else %}
-            <a href="{{ url_for('incident_tree', incident_id=inc.IncidentID) }}" class="btn-edit-trigger">ดูผัง</a>
+            <a href="{{ url_for('incident_tree', tab='tree', view=view, incident_id=inc.IncidentID, **filter_args) }}#tree" class="btn-edit-trigger">ดูผัง</a>
             {% endif %}
           </td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
+    </div>
     {% else %}
-    <div class="empty-state">ไม่มีเหตุการณ์ในขอบเขตของคุณตอนนี้</div>
+    <div class="empty-state">ไม่มีเหตุการณ์ในมุมมองนี้</div>
     {% endif %}
   </div>
 
   {% if selected_incident %}
-  {% set back_url = url_for('incident_tree', incident_id=selected_id) %}
-  <div class="section-title">ผังเหตุการณ์: {{ selected_incident.IncidentID }}</div>
+  <div class="section-title" id="tree">ผังเหตุการณ์: {{ selected_incident.IncidentID }}</div>
   <div class="panel" style="padding: 4px;">
+    {% if jobs %}
+    {% set st = {'wait': 0, 'done': 0, 'late': 0} %}
+    {% for j in jobs %}
+      {% if j.Status == 'รอมอบหมาย' %}{% set _ = st.update({'wait': st.wait + 1}) %}{% endif %}
+      {% if j.Status in ['ปิดงาน', 'ยกเลิกงาน'] %}{% set _ = st.update({'done': st.done + 1}) %}{% endif %}
+      {% if j.DueDate and (j.DueDate|string)[:10] < today and j.Status not in ['ปิดงาน', 'ยกเลิกงาน'] %}{% set _ = st.update({'late': st.late + 1}) %}{% endif %}
+    {% endfor %}
+    <div class="tree-summary">
+      <span class="ts-chip">งานทั้งหมด {{ jobs|length }}</span>
+      {% if st.wait %}<span class="ts-chip warn">รอมอบหมาย {{ st.wait }}</span>{% endif %}
+      {% if st.late %}<span class="ts-chip bad">เลยกำหนด {{ st.late }}</span>{% endif %}
+      <span class="ts-chip">จบแล้ว {{ st.done }}</span>
+    </div>
+    {% endif %}
+    <div class="tree-scroll">
     <ul class="tree">
       <li>
         {% if incident_permissions.any %}
@@ -177,25 +434,29 @@
         <ul>
           {% for job in jobs %}
           {% set perms = job_permissions.get(job.JobID, {}) %}
+          {% set late = job.DueDate and (job.DueDate|string)[:10] < today and job.Status not in ['ปิดงาน', 'ยกเลิกงาน'] %}
           <li>
             {% if perms.any %}
-            <div class="tree-node clickable" onclick="document.getElementById('popup-{{ job.JobID }}').classList.add('open')">
+            <div class="tree-node clickable {{ 'needs-assign' if perms.can_assign and job.Status == 'รอมอบหมาย' }} {{ 'is-overdue' if late }}"
+                 onclick="document.getElementById('popup-{{ job.JobID }}').classList.add('open')">
             {% else %}
-            <div class="tree-node">
+            <div class="tree-node {{ 'is-overdue' if late }}">
             {% endif %}
               <div class="tn-id">{{ job.JobID }}</div>
               <div class="tn-row">ประเภทงาน: {{ job_type_name_map.get(job.JobType, job.JobType) }}</div>
-              <div class="tn-row">รายละเอียด: {{ job.Description or '—' }}</div>
+              <div class="tn-row tn-desc" title="{{ job.Description or '' }}">รายละเอียด: {{ job.Description or '—' }}</div>
               <div class="tn-row">โซน / DMA: {{ zone_name_map.get(job.ZoneID) or 'ไม่ระบุ DMA' }}</div>
               <div class="tn-row">
                 <span class="badge {{ job.Status|status_class }}">{{ job.Status }}</span>
               </div>
-              <div class="tn-row">ผู้รับผิดชอบ: {{ job.CurrentAssigneeRole or '—' }}</div>
-              <div class="tn-row">กำหนดเสร็จ: {{ job.DueDate|date_display or '—' }}</div>
+              <div class="tn-row">ผู้รับผิดชอบ: {{ job.CurrentAssigneeUserID|user_short if job.CurrentAssigneeUserID else '—' }}</div>
+              <div class="tn-row {{ 'due-overdue' if late }}">กำหนดเสร็จ: {{ job.DueDate|date_display or '—' }}{% if late %} · เลยกำหนด{% endif %}</div>
               {% if job.IsSlowestInGroup == True or job.IsSlowestInGroup == 'True' %}
               <span class="tn-slowest">ตัวกำหนด DueDate ของเหตุการณ์</span>
               {% endif %}
-              {% if perms.any %}
+              {% if perms.can_assign %}
+              <span class="tn-assign-cta">มอบหมายงาน</span>
+              {% elif perms.any %}
               <span class="tn-editable-badge">แก้ไขได้</span>
               {% endif %}
             </div>
@@ -205,20 +466,47 @@
         {% endif %}
       </li>
     </ul>
+    </div>
 
     {% if not jobs %}
     <div class="empty-state">เหตุการณ์นี้ยังไม่มีงานที่จ่ายเลย</div>
     {% endif %}
   </div>
-
-  {% for job in jobs %}
-  {{ jp.job_popup(job, job_permissions.get(job.JobID, {}), lateral_candidates_map.get(job.JobID, []), back_url, job_type_name_map.get(job.JobType, job.JobType)) }}
-  {% endfor %}
-
   {% else %}
   <div class="panel">
-    <div class="empty-state">เลือกเหตุการณ์ด้านบนเพื่อดูผังว่าแตกเป็นงานอะไรบ้าง</div>
+    <div class="empty-state">กด "ดูผัง" ที่เหตุการณ์ด้านบนเพื่อดูว่าแตกเป็นงานอะไรบ้าง</div>
   </div>
   {% endif %}
+
+  {% else %}
+  {# ===================== แท็บ: งานที่รับผิดชอบ ===================== #}
+  <div class="section-title">งานที่ต้องดำเนินการของฉัน</div>
+  <div class="panel" style="margin-bottom: 24px;">
+    {% if my_lists.assigned %}{{ job_rows(my_lists.assigned) }}
+    {% else %}<div class="empty-state">ไม่มีงานที่มอบหมายมาถึงคุณตอนนี้</div>{% endif %}
+  </div>
+
+  {% if my_lists.verify %}
+  <div class="section-title">งานรอตรวจสอบในส่วนของฉัน</div>
+  <div class="panel" style="margin-bottom: 24px;">{{ job_rows(my_lists.verify) }}</div>
+  {% endif %}
+
+  {% if my_lists.close %}
+  <div class="section-title">งานตรวจแล้ว รอปิดในส่วนของฉัน</div>
+  <div class="my-section-note">ปิดได้หลังวิศวกรกด "ตรวจผ่าน" แล้ว</div>
+  <div class="panel" style="margin-bottom: 24px;">{{ job_rows(my_lists.close) }}</div>
+  {% endif %}
+
+  <div class="section-title">งานเลยกำหนดในขอบเขตของฉัน</div>
+  <div class="panel" style="margin-bottom: 24px;">
+    {% if my_lists.overdue %}{{ job_rows(my_lists.overdue) }}
+    {% else %}<div class="empty-state">ไม่มีงานเลยกำหนด 👍</div>{% endif %}
+  </div>
+  {% endif %}
+
+  {# popup ของทุกงานในหน้า (สร้างครั้งเดียวต่อ JobID กัน id ซ้ำ) #}
+  {% for job in popup_jobs %}
+  {{ jp.job_popup(job, job_permissions.get(job.JobID, {}), lateral_candidates_map.get(job.JobID, []), back_url, job_type_name_map.get(job.JobType, job.JobType), assign_candidates_map.get(job.JobID, [])) }}
+  {% endfor %}
 </div>
 {% endblock %}

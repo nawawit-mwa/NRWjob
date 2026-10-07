@@ -89,6 +89,56 @@ def filter_jobs_with_open_incidents(jobs: list) -> list:
     return [j for j in jobs if j.get("SiblingJobGroup") not in closed_incident_ids]
 
 
+# ---------------------------------------------------------------------------
+# หน้า "ติดตามเหตุการณ์" (หน้าหลัก Job Management): สถิติงานต่อเหตุการณ์ + งานเลยกำหนด
+# ---------------------------------------------------------------------------
+JOB_FINISHED_STATUSES = ("ปิดงาน", "ยกเลิกงาน")
+
+
+def today_iso() -> str:
+    """วันที่ปัจจุบันตามเวลาไทย (UTC+7) รูปแบบ yyyy-mm-dd — เซิร์ฟเวอร์ Render ใช้ UTC
+    ถ้าใช้ date.today() ตรงๆ ช่วง 00:00-07:00 น. จะนับวันผิดไป 1 วัน"""
+    import datetime
+    bkk = datetime.timezone(datetime.timedelta(hours=7))
+    return datetime.datetime.now(bkk).date().isoformat()
+
+
+def is_job_overdue(job: dict, today: str) -> bool:
+    """เลยกำหนด = มี DueDate, DueDate < วันนี้ และงานยังไม่จบ (ไม่ใช่ ปิดงาน/ยกเลิกงาน)"""
+    due = str(job.get("DueDate") or "")[:10]
+    return bool(due) and due < today and job.get("Status") not in JOB_FINISHED_STATUSES
+
+
+def get_incident_job_stats(incidents: list, today: str) -> dict:
+    """คืน {IncidentID: {total, done, waiting, overdue}} สำหรับคอลัมน์ความคืบหน้าในตารางเหตุการณ์
+    นับจากงานทุกใบของเหตุการณ์นั้น (ผูกด้วย SiblingJobGroup) เหมือนที่ผังแสดง"""
+    from constants import STATUS_PENDING_ASSIGNMENT
+
+    wanted = {i["IncidentID"] for i in incidents}
+    stats = {iid: {"total": 0, "done": 0, "waiting": 0, "overdue": 0} for iid in wanted}
+    for j in sc.get_all_records("Jobs"):
+        iid = j.get("SiblingJobGroup")
+        if iid not in stats:
+            continue
+        st = stats[iid]
+        st["total"] += 1
+        if j.get("Status") in JOB_FINISHED_STATUSES:
+            st["done"] += 1
+        if j.get("Status") == STATUS_PENDING_ASSIGNMENT:
+            st["waiting"] += 1
+        if is_job_overdue(j, today):
+            st["overdue"] += 1
+    return stats
+
+
+def get_overdue_jobs_in_scope(user: dict, today: str) -> list:
+    """งานเลยกำหนดทั้งหมดในขอบเขตของ user (ข้ามทุกเหตุการณ์) เรียงจากเลยนานสุดก่อน
+    ไม่รวมงานที่เหตุการณ์แม่ปิดไปแล้ว"""
+    jobs = filter_jobs_with_open_incidents(get_dashboard_jobs(user))
+    overdue = [j for j in jobs if is_job_overdue(j, today)]
+    return sorted(overdue, key=lambda j: str(j.get("DueDate") or ""))
+
+
 def get_my_action_jobs(user: dict) -> dict:
     """รวมงานที่ user คนนี้ต้อง 'ลงมือทำอะไรบางอย่าง' ต่อ แบ่งเป็น 3 กลุ่ม:
     - assigned_to_me: งานที่มอบหมายมาถึงตัวเอง (รอรับ/ปฏิเสธ/กำลังดำเนินการ)
@@ -137,27 +187,36 @@ def get_assignable_jobs(user: dict) -> list:
     (รอมอบหมาย / รับงานแล้ว-รอส่งต่อ / ปฏิเสธ-รอมอบใหม่ / ตีกลับ-รอมอบใหม่)"""
     from constants import (
         STATUS_PENDING_ASSIGNMENT, STATUS_ACCEPTED, STATUS_REJECTED, STATUS_REOPENED,
-        ROLE_BRANCH_MANAGER, ROLE_DIVISION_DIRECTOR, ROLE_SECTION_CHIEF, ROLE_ENGINEER,
     )
 
     assignable_statuses = {
         STATUS_PENDING_ASSIGNMENT, STATUS_ACCEPTED, STATUS_REJECTED, STATUS_REOPENED,
     }
     all_jobs = sc.get_all_records("Jobs")
+    return [
+        j for j in all_jobs
+        if j.get("Status") in assignable_statuses and _job_in_assign_scope(j, user)
+    ]
+
+
+def _job_in_assign_scope(job: dict, user: dict) -> bool:
+    """งานนี้อยู่ในขอบเขตที่ user คนนี้มีสิทธิ์มอบหมายหรือไม่ (ใช้ร่วมกันระหว่างหน้า
+    มอบหมายงาน และปุ่มมอบหมายใน popup ของผังเหตุการณ์/dashboard ให้กติกาตรงกันเสมอ)"""
+    from constants import (
+        ROLE_ADMIN, ROLE_BRANCH_MANAGER, ROLE_DIVISION_DIRECTOR,
+        ROLE_SECTION_CHIEF, ROLE_ENGINEER,
+    )
+
     role = user.get("Role")
-
     if role == ROLE_ADMIN:
-        scoped = all_jobs
-    elif role == ROLE_BRANCH_MANAGER:
-        scoped = [j for j in all_jobs if j.get("BranchID") == user.get("BranchID")]
-    elif role == ROLE_DIVISION_DIRECTOR:
-        scoped = [j for j in all_jobs if j.get("DivisionID") == user.get("DivisionID")]
-    elif role in (ROLE_SECTION_CHIEF, ROLE_ENGINEER):
-        scoped = [j for j in all_jobs if j.get("SectionID") == user.get("SectionID")]
-    else:
-        scoped = []
-
-    return [j for j in scoped if j.get("Status") in assignable_statuses]
+        return True
+    if role == ROLE_BRANCH_MANAGER:
+        return bool(user.get("BranchID")) and job.get("BranchID") == user.get("BranchID")
+    if role == ROLE_DIVISION_DIRECTOR:
+        return bool(user.get("DivisionID")) and job.get("DivisionID") == user.get("DivisionID")
+    if role in (ROLE_SECTION_CHIEF, ROLE_ENGINEER):
+        return bool(user.get("SectionID")) and job.get("SectionID") == user.get("SectionID")
+    return False
 
 
 def get_job_permissions(job: dict, user: dict) -> dict:
@@ -168,7 +227,8 @@ def get_job_permissions(job: dict, user: dict) -> dict:
         ROLE_ADMIN, ROLE_ENGINEER, ROLE_FIELD_TECH, ROLE_CONTRACTOR,
         ROLE_LEVELS, ROLE_SECTION_CHIEF, BELOW_BRANCH_LEVEL_ROLES,
         STATUS_PENDING_ACCEPTANCE, STATUS_ACCEPTED, STATUS_IN_PROGRESS,
-        STATUS_COMPLETED_PENDING_VERIFY,
+        STATUS_COMPLETED_PENDING_VERIFY, STATUS_PENDING_ASSIGNMENT,
+        STATUS_REJECTED, STATUS_REOPENED, ASSIGNER_ROLES,
     )
 
     role = user.get("Role")
@@ -190,8 +250,14 @@ def get_job_permissions(job: dict, user: dict) -> dict:
     can_transfer = job.get("Status") in (STATUS_ACCEPTED, STATUS_IN_PROGRESS) and (
         is_admin or (is_owner and role in BELOW_BRANCH_LEVEL_ROLES)
     )
+    # มอบหมายลง: สถานะเดียวกับที่ job_service.assign_job ยอมรับ + อยู่ในขอบเขตของผู้มอบหมาย
+    # (เดิมไม่มีสิทธิ์นี้ใน popup เลย ทำให้งาน 'รอมอบหมาย' ในผังเหตุการณ์กดไม่ได้)
+    can_assign = job.get("Status") in (
+        STATUS_PENDING_ASSIGNMENT, STATUS_ACCEPTED, STATUS_REJECTED, STATUS_REOPENED,
+    ) and (is_admin or (role in ASSIGNER_ROLES and _job_in_assign_scope(job, user)))
 
     perms = {
+        "can_assign": can_assign,
         "can_accept": can_accept,
         "can_reject": can_reject,
         "can_submit": can_submit,
