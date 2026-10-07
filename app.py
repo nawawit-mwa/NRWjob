@@ -864,15 +864,22 @@ def job_assign(job_id):
     return _safe_redirect("incident_tree")
 
 
-if __name__ == "__main__":
-    # รันแบบนี้ตอนพัฒนาในเครื่องเท่านั้น (python app.py)
-    # ตอน deploy จริงบน Render จะใช้ gunicorn เรียก app:app โดยตรง ไม่ผ่านส่วนนี้เลย
-    app.run(debug=True, host="127.0.0.1", port=5000)
-    
 from pbc_routes import create_pbc_blueprint
 
+# ลงทะเบียนก่อนบล็อก __main__ — เดิมอยู่หลัง app.run() ทำให้ตอนรัน python app.py
+# ในเครื่อง หน้า /pbc ไม่ถูกลงทะเบียน (บน Render ใช้ gunicorn จึงไม่เจอปัญหานี้)
 app.register_blueprint(create_pbc_blueprint(
     #login_required=login_required,                    # decorator ของแอปเดิม
     current_user_fn=lambda: session.get("username", ""),
     branch_scope_fn=lambda: None,                     # None = เห็นทุกสาขา
+    user_fn=get_optional_user,                        # ให้แถบเมนูรู้ว่า login อยู่
+    # แผนงานบนกราฟ + สร้างเหตุการณ์ในระบบ Job ใช้ผู้ใช้ที่ login ระบบ Job
+    job_user_fn=get_optional_user,
+    job_branch_ids_fn=lambda u: [b.get("BranchID") for b in _branches_visible_to(u)],
 ))
+
+
+if __name__ == "__main__":
+    # รันแบบนี้ตอนพัฒนาในเครื่องเท่านั้น (python app.py)
+    # ตอน deploy จริงบน Render จะใช้ gunicorn เรียก app:app โดยตรง ไม่ผ่านส่วนนี้เลย
+    app.run(debug=True, host="127.0.0.1", port=5000)

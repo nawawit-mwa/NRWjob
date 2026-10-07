@@ -104,6 +104,7 @@ TAB_REMARKS = "Remarks"
 TAB_UPLOAD_LOG = "UploadLog"
 TAB_MONTHLY_WORK = "MonthlyWork"
 TAB_PROCUREMENT = "ProcurementSteps"
+TAB_EVENTS = "ContractEvents"
 
 # โครงคอลัมน์ของแต่ละ tab — ใช้ทั้งตอนสร้าง Sheet และตอนอ่าน/เขียน
 SHEET_SCHEMAS = {
@@ -155,7 +156,36 @@ SHEET_SCHEMAS = {
         "contract_id", "step_order", "step_name", "status", "detail",
         "updated_by", "updated_at",
     ],
+    # แผนงานลดน้ำสูญเสียและเหตุการณ์สำคัญ ที่แสดงเป็นป้ายบนกราฟอัตราน้ำสูญเสีย
+    # ตาราง append-only: แก้ไข = เพิ่มแถวใหม่ event_id เดิม, ลบ = เพิ่มแถว deleted=1
+    # ระบบใช้แถวล่างสุดของแต่ละ event_id เสมอ
+    TAB_EVENTS: [
+        "event_id", "contract_id", "event_type", "month", "title", "items",
+        "reduction_m3h", "status", "note", "linked_incident_id", "deleted",
+        "updated_by", "updated_at",
+    ],
 }
+
+# ประเภทของป้ายบนกราฟ
+#   box = กล่องเหลือง + ลูกศรแดงชี้ลงที่เส้นเป้า (งานที่ลดน้ำสูญเสียได้ มีปริมาณ m³/ชม.)
+#   arrow = ลูกศรเขียวชี้ขึ้นที่เส้นเป้า (ขั้นตอนสำคัญ ไม่มีปริมาณ)
+EVENT_TYPES = {
+    "pipe": {"label": "งานปรับปรุงท่อ", "mark": "box"},
+    "alc": {"label": "งาน ALC / ลดน้ำสูญเสียอื่นๆ", "mark": "box"},
+    "milestone": {"label": "ขั้นตอนสำคัญ", "mark": "arrow"},
+}
+
+# สถานะของแผนงาน (ยกเลิก = ไม่แสดงบนกราฟ และไม่นับรวมปริมาณ)
+EVENT_STATUS = {
+    "plan": "แผน",
+    "doing": "กำลังดำเนินการ",
+    "done": "แล้วเสร็จ",
+    "cancelled": "ยกเลิก",
+}
+
+# ประเภทเหตุการณ์ที่ใช้ตอนส่งเข้าระบบ Job management
+EVENT_INCIDENT_SOURCE = "PBC"
+EVENT_INCIDENT_SEVERITY = "กลาง"
 
 # ขั้นตอนจัดจ้างมาตรฐาน ใช้เป็นค่าตั้งต้นเมื่อยังไม่มีข้อมูลใน Sheet
 PROCUREMENT_STEPS = [
@@ -179,5 +209,5 @@ TEXT_COLUMNS = {
     "contract_id", "dma_code", "rtu_id", "month", "start_month",
     "effective_from", "effective_to", "event_date", "uploaded_at",
     "updated_at", "recorded_at", "upload_id", "branch_code",
-    "start_date", "end_date",
+    "start_date", "end_date", "event_id", "linked_incident_id",
 }

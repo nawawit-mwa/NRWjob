@@ -38,7 +38,8 @@ def _passthrough(fn):
 
 
 def create_pbc_blueprint(login_required=None, current_user_fn=None,
-                         branch_scope_fn=None, user_fn=None, url_prefix="/pbc"):
+                         branch_scope_fn=None, user_fn=None, url_prefix="/pbc",
+                         job_user_fn=None, job_branch_ids_fn=None):
     """
     login_required   : decorator ของแอปเดิม
     current_user_fn  : ฟังก์ชันคืนชื่อผู้ใช้ปัจจุบัน (ใช้บันทึกว่าใครแก้อะไร)
@@ -46,11 +47,18 @@ def create_pbc_blueprint(login_required=None, current_user_fn=None,
     user_fn          : ฟังก์ชันคืน object ผู้ใช้สำหรับ base_sidebar.html
                        (ต้องมี .Name และ .Role) ถ้าแอปใส่ผ่าน context_processor
                        อยู่แล้วไม่ต้องส่งมา
+    job_user_fn      : ฟังก์ชันคืน dict ผู้ใช้ที่ login ระบบ Job management อยู่
+                       (UserID, Name, Role) หรือ None — ใช้กับแผนงานบนกราฟและ
+                       การสร้างเหตุการณ์ในระบบ Job ถ้าไม่ส่งมา ฟีเจอร์ส่งงานเข้า
+                       ระบบ Job จะปิดไว้
+    job_branch_ids_fn: ฟังก์ชันรับ dict ผู้ใช้ คืน list BranchID (ระบบ Job) ที่ผู้ใช้
+                       สร้างเหตุการณ์ได้ — ใช้กฎเดียวกับหน้าแจ้งเหตุการณ์ของระบบ Job
     """
     guard = login_required or _passthrough
     who = current_user_fn or (lambda: "unknown")
     scope = branch_scope_fn or (lambda: None)
     user_obj = user_fn or (lambda: None)
+    job_user = job_user_fn or (lambda: None)
 
     bp = Blueprint("pbc", __name__, url_prefix=url_prefix)
 
@@ -411,7 +419,9 @@ def create_pbc_blueprint(login_required=None, current_user_fn=None,
         contract, _ = _resolve_contract(request.args.get("contract_id"))
         if not contract:
             return jsonify({"ok": False, "error": "ไม่พบสัญญา หรือไม่มีสิทธิ์เข้าถึง"}), 404
-        return jsonify({"ok": True, "data": _build_overview(contract)})
+        data = _build_overview(contract)
+        data.update(_events_payload(contract))
+        return jsonify({"ok": True, "data": data})
 
     @bp.route("/api/overview-all")
     @guard
@@ -879,6 +889,227 @@ def create_pbc_blueprint(login_required=None, current_user_fn=None,
             data.get("note", ""), who(),
         )
         return jsonify({"ok": True})
+
+    # -------------------------------------------------------------- แผนงาน/เหตุการณ์บนกราฟ
+
+    def _editor():
+        """คืน (ผู้ใช้ระบบ Job, ชื่อที่ใช้บันทึก) — ผู้ใช้เป็น None ถ้ายังไม่ login"""
+        user = job_user()
+        if user:
+            return user, (user.get("Name") or user.get("UserID") or "")
+        return None, who()
+
+    def _incident_info(incident_id):
+        """สถานะเหตุการณ์และงานลูกในระบบ Job — ห่อ try ไว้ ระบบ Job ล่มก็ไม่พังหน้า PBC"""
+        try:
+            import sheets_client as jsc
+            inc = jsc.find_one("Incidents", "IncidentID", incident_id)
+            if not inc:
+                return {"id": incident_id, "found": False}
+            jobs = jsc.find_many("Jobs", "SiblingJobGroup", incident_id)
+            return {
+                "id": incident_id, "found": True,
+                "status": inc.get("Status", ""),
+                "conversion": inc.get("ConversionStatus", ""),
+                "due_date": str(inc.get("DueDate") or ""),
+                "n_jobs": len(jobs),
+                "n_closed": sum(1 for j in jobs if j.get("Status") == "ปิดงาน"),
+                "n_cancelled": sum(1 for j in jobs if j.get("Status") == "ยกเลิกงาน"),
+            }
+        except Exception as exc:  # noqa: BLE001 — แสดงเป็นข้อความบนหน้าแทน
+            return {"id": incident_id, "found": None, "error": str(exc)}
+
+    def _events_payload(contract):
+        try:
+            events = SVC.get_events(contract["contract_id"])
+            error = ""
+        except Exception as exc:  # noqa: BLE001 — กราฟหลักต้องแสดงได้แม้ tab นี้มีปัญหา
+            events, error = [], "อ่านแผนงานไม่สำเร็จ: %s" % exc
+        for ev in events:
+            ev["incident"] = (_incident_info(ev["linked_incident_id"])
+                              if ev["linked_incident_id"] else None)
+        user, name = _editor()
+        return {
+            "events": events,
+            "event_summary": SVC.summarize_events(events),
+            "event_meta": {
+                "types": {k: v["label"] for k, v in CFG.EVENT_TYPES.items()},
+                "status": CFG.EVENT_STATUS,
+                # ถ้าแอปส่งระบบ login มาให้ ต้อง login ก่อนจึงแก้ได้
+                "can_edit": bool(user) or job_user_fn is None,
+                "can_send_job": bool(user),
+                "job_enabled": job_user_fn is not None,
+                "user_name": name if user else "",
+                "error": error,
+            },
+        }
+
+    def _event_input(data):
+        """ตรวจค่าจากฟอร์ม คืน (dict, ข้อความผิดพลาด)"""
+        etype = (data.get("event_type") or "").strip()
+        if etype not in CFG.EVENT_TYPES:
+            return None, "ประเภทไม่ถูกต้อง"
+        month = SVC.normalize_month(data.get("month"))
+        if not month:
+            return None, "ต้องระบุเดือน (YYYY-MM)"
+        title = (data.get("title") or "").strip()
+        if not title:
+            return None, "ต้องกรอกหัวข้อ"
+        status = (data.get("status") or "plan").strip()
+        if status not in CFG.EVENT_STATUS:
+            return None, "สถานะไม่ถูกต้อง"
+        red = data.get("reduction_m3h")
+        red_val = ""
+        if CFG.EVENT_TYPES[etype]["mark"] == "box" and red not in (None, ""):
+            red_val = SVC.to_float(red)
+            if red_val is None or red_val < 0:
+                return None, "ปริมาณที่คาดว่าลดได้ต้องเป็นตัวเลขไม่ติดลบ"
+        items = data.get("items") or []
+        if isinstance(items, str):
+            items = items.splitlines()
+        items = [str(x).strip() for x in items if str(x).strip()]
+        return {
+            "event_type": etype, "month": month, "title": title,
+            "items": items, "reduction_m3h": red_val, "status": status,
+            "note": (data.get("note") or "").strip(),
+        }, ""
+
+    def _need_editor():
+        user, name = _editor()
+        if job_user_fn is not None and not user:
+            return None, (jsonify({"ok": False,
+                                   "error": "กรุณาเข้าสู่ระบบก่อนแก้ไขแผนงาน"}), 401)
+        return name, None
+
+    @bp.route("/api/events", methods=["POST"])
+    @guard
+    def api_event_save():
+        data = request.get_json(silent=True) or {}
+        contract, _ = _resolve_contract(data.get("contract_id"))
+        if not contract:
+            return jsonify({"ok": False, "error": "ไม่พบสัญญา"}), 404
+        name, err = _need_editor()
+        if err:
+            return err
+        rec, msg = _event_input(data)
+        if msg:
+            return jsonify({"ok": False, "error": msg}), 400
+        try:
+            eid = SVC.save_event(contract["contract_id"], rec, name,
+                                 event_id=(data.get("event_id") or "").strip() or None)
+        except ValueError as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 400
+        return jsonify({"ok": True, "event_id": eid})
+
+    @bp.route("/api/events/<event_id>/delete", methods=["POST"])
+    @guard
+    def api_event_delete(event_id):
+        data = request.get_json(silent=True) or {}
+        contract, _ = _resolve_contract(data.get("contract_id"))
+        if not contract:
+            return jsonify({"ok": False, "error": "ไม่พบสัญญา"}), 404
+        name, err = _need_editor()
+        if err:
+            return err
+        try:
+            SVC.save_event(contract["contract_id"], {}, name,
+                           event_id=event_id, deleted=True)
+        except ValueError as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 400
+        return jsonify({"ok": True})
+
+    @bp.route("/api/events/<event_id>/incident", methods=["POST"])
+    @guard
+    def api_event_incident(event_id):
+        """
+        สร้างเหตุการณ์ (Incident) ในระบบ Job management จากแผนงานบนกราฟ
+        แล้วให้ผู้ใช้ไปจ่ายงานต่อที่หน้าจ่ายงานเดิมของระบบ Job
+        """
+        data = request.get_json(silent=True) or {}
+        contract, _ = _resolve_contract(data.get("contract_id"))
+        if not contract:
+            return jsonify({"ok": False, "error": "ไม่พบสัญญา"}), 404
+        user, name = _editor()
+        if not user:
+            return jsonify({"ok": False, "error":
+                            "กรุณาเข้าสู่ระบบ Job management ก่อนสร้างเหตุการณ์"}), 401
+        ev = SVC.get_event(contract["contract_id"], event_id)
+        if not ev:
+            return jsonify({"ok": False, "error": "ไม่พบรายการนี้"}), 404
+        if ev["linked_incident_id"]:
+            return jsonify({"ok": False, "error": "รายการนี้สร้างเป็นเหตุการณ์ %s ไปแล้ว"
+                            % ev["linked_incident_id"]}), 400
+
+        try:
+            import incident_service
+            import sheets_client as jsc
+        except ImportError:
+            return jsonify({"ok": False, "error": "ไม่พบโมดูลระบบ Job management"}), 500
+
+        # รหัสสาขาในสัญญาเป็นรหัส กปน. ไม่ตรงกับ BranchID ของระบบ Job
+        # จึงจับคู่ด้วยชื่อย่อสาขา (เช่น "สสภ.") กับคอลัมน์ BranchName
+        abbr = SVC.contract_branch_abbr(contract)
+        branch = None
+        for b in jsc.get_all_records("Branches"):
+            if abbr and str(b.get("BranchName") or "").strip() == abbr:
+                branch = b
+                break
+        if not branch:
+            return jsonify({"ok": False, "error":
+                            "จับคู่สาขาของสัญญากับระบบ Job ไม่ได้ (ชื่อย่อสาขา '%s') — "
+                            "ตรวจว่าชื่อพื้นที่ของสัญญามีชื่อย่อสาขา เช่น 'สสภ.' "
+                            "และตรงกับคอลัมน์ BranchName ในตาราง Branches" % (abbr or "-")}), 400
+        branch_id = str(branch.get("BranchID")).strip()
+        if job_branch_ids_fn is not None:
+            allowed = {str(x).strip() for x in (job_branch_ids_fn(user) or [])}
+            if branch_id not in allowed:
+                return jsonify({"ok": False, "error":
+                                "สร้างเหตุการณ์ได้เฉพาะสาขาที่อยู่ในความรับผิดชอบ "
+                                "(สาขานี้คือ %s)" % abbr}), 403
+
+        lines = ["[PBC %s — %s] %s: %s" % (contract.get("contract_no", ""),
+                                            contract.get("area_name", ""),
+                                            ev["type_label"], ev["title"])]
+        lines += ["- " + it for it in ev["items"]]
+        detail = "กำหนดแล้วเสร็จ " + ev["month_label"]
+        if ev["reduction_m3h"] is not None:
+            detail = ("คาดว่าลดน้ำสูญเสียได้ ≈ %s ลบ.ม./ชม. · " %
+                      ("%g" % ev["reduction_m3h"])) + detail
+        lines.append(detail)
+        if ev["note"]:
+            lines.append("หมายเหตุ: " + ev["note"])
+        lines.append("สร้างจากหน้า ติดตามรายสัญญา PBC (รายการ %s)" % ev["event_id"])
+
+        try:
+            incident_id = incident_service.create_incident(
+                incident_type="ลดน้ำสูญเสีย PBC: " + ev["type_label"],
+                description="\n".join(lines),
+                severity=CFG.EVENT_INCIDENT_SEVERITY,
+                reported_by=user["UserID"],
+                source=CFG.EVENT_INCIDENT_SOURCE,
+                branch_id=branch_id,
+            )
+        except (PermissionError, ValueError) as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 400
+
+        # กำหนดเสร็จของเหตุการณ์ = วันสุดท้ายของเดือนในแผน
+        y, m = (int(p) for p in ev["month"].split("-"))
+        last_day = (datetime(y + (m == 12), m % 12 + 1, 1)
+                    - datetime(y, m, 1)).days
+        try:
+            jsc.update_row("Incidents", "IncidentID", incident_id, {
+                "DueDate": "%04d-%02d-%02d" % (y, m, last_day),
+                "DueDateUpdatedAt": datetime.now().isoformat(timespec="seconds"),
+            })
+        except Exception:  # noqa: BLE001 — ไม่มีกำหนดเสร็จก็ยังจ่ายงานได้
+            pass
+
+        changes = {"linked_incident_id": incident_id}
+        if ev["status"] == "plan":
+            changes["status"] = "doing"
+        SVC.save_event(contract["contract_id"], changes, name, event_id=ev["event_id"])
+        return jsonify({"ok": True, "incident_id": incident_id,
+                        "convert_url": "/incidents/%s/convert" % incident_id})
 
     @bp.route("/api/remark", methods=["POST"])
     @guard

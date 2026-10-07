@@ -214,6 +214,49 @@
 .pbc-page .plan-table td.pf-pass{background:#e0f4de;color:#0a5b06;font-weight:700}
 .pbc-page .plan-table td.pf-fail{background:#fbe9e4;color:var(--danger);font-weight:700}
 .pbc-page .plan-table td.fut{color:var(--ink-soft)}
+/* ---------- ป้ายแผนงานบนกราฟ ---------- */
+.pbc-page .plan-ann{position:absolute;inset:0;pointer-events:none;z-index:1}
+.pbc-page .ev-box{position:absolute;pointer-events:auto;cursor:pointer;overflow:hidden;
+  background:#fff3a6;border:1px solid #e3c84a;border-radius:6px;padding:4px 8px;
+  font-size:.72rem;line-height:1.35;color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.pbc-page .ev-box:hover{border-color:#c0392b;box-shadow:0 2px 8px rgba(0,0,0,.15)}
+.pbc-page .ev-box.st-done{background:#f1f4f7;border-color:#c5d0da;color:var(--ink-soft)}
+.pbc-page .ev-box.st-plan{border-style:dashed}
+.pbc-page .ev-box .ev-h{font-size:.66rem;color:#8a6d00;font-weight:600;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+.pbc-page .ev-box.st-done .ev-h{color:var(--ink-soft)}
+.pbc-page .ev-box .ev-t{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pbc-page .ev-box .ev-it{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pbc-page .ev-box .ev-q{font-weight:700;color:#c0392b}
+.pbc-page .ev-arr{position:absolute;pointer-events:auto;cursor:pointer;color:#1f8a3a;
+  font-size:.74rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  background:rgba(255,255,255,.9);padding:0 3px;border-radius:3px;line-height:18px}
+.pbc-page .ev-arr:hover{text-decoration:underline}
+.pbc-page .ev-arr.st-done{color:#5c7488}
+
+/* ---------- แท็บแผนงาน ---------- */
+.pbc-page .ev-form{border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;
+  background:var(--pbc-panel-alt);margin-top:4px}
+.pbc-page .ev-form h3{margin:0 0 10px;font-size:.92rem;color:var(--mwa-navy-deep)}
+.pbc-page .ev-form textarea{font-family:inherit}
+.pbc-page #evTable th,.pbc-page #evTable td{text-align:left}
+.pbc-page #evTable td{vertical-align:top;white-space:normal}
+.pbc-page #evTable th:nth-child(4){text-align:right}
+.pbc-page #evTable td:nth-child(4){text-align:right;white-space:nowrap}
+.pbc-page #evTable td:first-child,.pbc-page #evTable td:nth-child(2),
+.pbc-page #evTable td:nth-child(5){white-space:nowrap}
+.pbc-page #evTable tbody tr{cursor:default}
+.pbc-page #evTable ol{margin:4px 0 0;padding-left:18px}
+.pbc-page #evTable button{padding:4px 10px;font-size:.78rem}
+.pbc-page #evTable .ev-act{white-space:nowrap;text-align:right}
+.pbc-page #evTable tr.ev-cancelled td{color:var(--ink-soft);text-decoration:line-through}
+.pbc-page #evTable tr.ev-cancelled td.ev-act,.pbc-page #evTable tr.ev-cancelled td.ev-job{
+  text-decoration:none}
+.pbc-page .ev-dot{display:inline-block;width:10px;height:10px;border-radius:2px;
+  margin-right:6px;vertical-align:middle}
+.pbc-page .ev-dot.box{background:#fff3a6;border:1px solid #e3c84a}
+.pbc-page .ev-dot.arrow{background:#1f8a3a;border-radius:50%}
+
 .pbc-page .plan-empty{display:none;padding:30px;text-align:center;color:var(--ink-soft);
   border:1px dashed var(--line);border-radius:8px}
 </style>
@@ -275,9 +318,11 @@
     <div class="plan-scroll" id="planScroll">
       <div class="plan-inner" id="planInner">
         <!-- plan-yfix = สำเนาแกน y ที่ตรึงไว้ซ้ายสุด ให้ยังเห็นสเกลตอนเลื่อนดูเดือนอื่น -->
-        <div class="plan-chart rate">
+        <div class="plan-chart rate" id="planRateBox">
           <div class="plan-yfix"><canvas></canvas></div>
           <div class="plan-cv"><canvas id="planRateChart"></canvas></div>
+          <!-- กล่องเหลือง/ข้อความเขียวของแผนงาน (วาดเป็น HTML ทับกราฟ) -->
+          <div class="plan-ann" id="planAnn"></div>
         </div>
         <div class="plan-chart vol">
           <div class="plan-yfix"><canvas></canvas></div>
@@ -293,6 +338,7 @@
   <div class="pbc-panel">
     <div class="tabs">
       <div class="tab active" data-pane="paneTable">สถานะราย DMA</div>
+      <div class="tab" data-pane="paneEvents">แผนงานลดน้ำสูญเสีย</div>
       <div class="tab" data-pane="paneTargets">เป้าหมายย่อยราย DMA</div>
       <div class="tab" data-pane="paneWork">ผลงานภาคสนาม</div>
       {% if enable_upload %}
@@ -312,6 +358,61 @@
             <th>พื้นที่</th><th>น้ำเข้า</th><th>น้ำจำหน่าย</th><th>น้ำสูญเสีย</th>
             <th>อัตรา %</th><th>MNF ปัจจุบัน</th><th>พื้นค่า MNF</th>
             <th>แรงดันเฉลี่ย (ม.)</th><th>สถานะ</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ------------------ แผนงานลดน้ำสูญเสีย ------------------ -->
+    <div class="tabpane" id="paneEvents">
+      <div class="hint">
+        แผนงานที่บันทึกที่นี่จะแสดงบน "กราฟแสดงอัตราน้ำสูญเสียฐานและเป้าหมาย" —
+        งานปรับปรุงท่อ / ALC เป็นกล่องสีเหลืองพร้อมลูกศรแดงชี้ที่เดือนที่คาดว่าจะแล้วเสร็จ
+        ขั้นตอนสำคัญ (เช่น เปิด PR, เริ่มส่งของ) เป็นลูกศรสีเขียว ·
+        กด "สร้างเหตุการณ์" เพื่อส่งเข้าระบบ Job management แล้วจ่ายงานต่อได้ทันที
+      </div>
+      <div class="msg" id="evLoginMsg"></div>
+      <div class="cards" id="evCards"></div>
+      <div class="ev-form" id="evForm">
+        <h3 id="evFormTitle">เพิ่มแผนงาน</h3>
+        <div class="formrow">
+          <label>ประเภท</label>
+          <select id="evType" style="flex:0 1 240px"></select>
+          <label style="min-width:auto">เดือนที่คาดว่าแล้วเสร็จ</label>
+          <input type="month" id="evMonth" style="flex:0 1 170px">
+          <label style="min-width:auto">สถานะ</label>
+          <select id="evStatus" style="flex:0 1 170px"></select>
+        </div>
+        <div class="formrow">
+          <label>หัวข้อ</label>
+          <input id="evTitle" maxlength="120">
+        </div>
+        <div class="formrow" id="evItemsRow">
+          <label>รายการ<br><span class="dim">บรรทัดละ 1 รายการ</span></label>
+          <textarea id="evItems" rows="3"
+                    placeholder="เช่น&#10;ซ.ศรีบุญเรือง 1&#10;หลักสี่พลาซ่า"></textarea>
+        </div>
+        <div class="formrow" id="evRedRow">
+          <label>คาดว่าลดได้</label>
+          <input type="number" id="evRed" min="0" step="1" style="max-width:140px;flex:0 0 auto">
+          <span class="dim">ลบ.ม./ชม. (ใช้รวมยอดเทียบกับเป้าที่ต้องลด)</span>
+        </div>
+        <div class="formrow">
+          <label>หมายเหตุ</label>
+          <input id="evNote" maxlength="200">
+        </div>
+        <div class="formrow" style="margin-bottom:0">
+          <button class="primary" id="btnEvSave">บันทึก</button>
+          <button id="btnEvCancel" style="display:none">ยกเลิกการแก้ไข</button>
+        </div>
+        <div class="msg" id="evMsg"></div>
+      </div>
+      <div class="tablewrap" style="max-height:none;margin-top:14px">
+        <table id="evTable">
+          <thead><tr>
+            <th>เดือน</th><th>ประเภท</th><th>หัวข้อ / รายการ</th>
+            <th>ลดได้ (ลบ.ม./ชม.)</th><th>สถานะ</th><th>ระบบ Job management</th><th></th>
           </tr></thead>
           <tbody></tbody>
         </table>
@@ -604,6 +705,7 @@ function render(){
   renderMilestones();
   renderWork();
   renderPlan();
+  renderEvents();
   renderDmaTable();
   renderBarChart();
   renderTargets();
@@ -1031,6 +1133,13 @@ function renderPlan(){
                 grid:{ offset:true, color:"#eef3f8", drawTicks:false } };
   var fixWidth = function(scale){ scale.width = PLAN_LABEL_W; };
   var bandOpts = { idx: msIdx, lastIdx: lastIdx };
+  // ป้ายแผนงาน: กล่องเหลืองต้องการพื้นที่เหนือกราฟ ข้อความเขียวต้องการพื้นที่ใต้กราฟ
+  var evLay = planLayoutEvents(nos, colW);
+  // ลูกศรชี้ที่เส้นเป้า ถ้าเดือนนั้นไม่มีเป้าใช้อัตราจริงแทน
+  evLay.values = vTarget.map(function(v, i){
+    return v != null ? v : (vRoll[i] != null ? vRoll[i] : vRate[i]);
+  });
+  $("planRateBox").style.height = (310 + evLay.topH) + "px";
 
   // ---------- กราฟอัตรา
   var vals = [];
@@ -1080,13 +1189,15 @@ function renderPlan(){
   CHARTS.planRate = new Chart($("planRateChart"), {
     type:"line",
     data:{ labels: nos, datasets: rateDs },
-    plugins:[planBandPlugin, planYFixPlugin],
+    plugins:[planBandPlugin, planEventPlugin, planYFixPlugin],
     options:{
       responsive:true, maintainAspectRatio:false, animation:false,
-      layout:{ padding:{ left:0, right:PLAN_RIGHT_W, top:10, bottom:2 } },
+      layout:{ padding:{ left:0, right:PLAN_RIGHT_W, top:10 + evLay.topH, bottom:2 } },
       interaction:{ mode:"index", intersect:false },
       plugins:{
         legend:{ display:false },
+        // ลูกศรชี้ที่เส้นเป้า ถ้าเดือนนั้นไม่มีเป้าใช้อัตราจริงแทน
+        planEvents: { layout: evLay },
         planBand: { idx: msIdx, lastIdx: lastIdx,
                     caption: lastIdx != null && lastIdx < nos.length - 1
                       ? "ข้อมูลล่าสุด " + monthLabelForNo(lastNo) : "" },
@@ -1120,6 +1231,8 @@ function renderPlan(){
       }
     }
   });
+
+  planDrawEventLabels(evLay);
 
   // ---------- กราฟปริมาณ (แท่งเรียงกัน น้ำเข้า / น้ำจำหน่าย / น้ำสูญเสีย)
   var vMax = Math.max.apply(null, vInflow.filter(function(v){ return v != null; })
@@ -1233,6 +1346,15 @@ function renderPlan(){
       (measure ? ' <span class="dim">ให้ถึงเป้าเดือนที่ ' + measure.month_no +
         ' (' + num(measure.target_rate, 2) + '%)</span>' : '') + '</span>');
   }
+  // ยอดรวมของแผนงานเทียบเป้าที่ต้องลด (เหมือนมุมซ้ายบนของกราฟนำเสนอเดิม)
+  var et = evTotals();
+  if(et.planned > 0){
+    chips.push('<span class="plan-chip">งานปรับปรุงท่อ ≈ <b>' + num(et.pipe) + '</b>' +
+      (et.alc ? ' · ALC ≈ <b>' + num(et.alc) + '</b>' : '') + ' ลบ.ม./ชม.' +
+      (et.gap != null ? ' <span class="' + (et.gap > 0 ? 'num-warn' : 'num-good') + '">' +
+        (et.gap > 0 ? 'ยังขาด ≈ ' + num(et.gap) : 'ครอบคลุมเป้าแล้ว') + '</span>' : '') +
+      '</span>');
+  }
   var lastRoll = rolling.length ? rolling[rolling.length-1] : null;
   if(lastRoll){
     chips.push('<span class="plan-chip">เฉลี่ย 3 เดือนล่าสุด <b>' +
@@ -1252,6 +1374,371 @@ function renderPlan(){
     var target = PLAN_LABEL_W + (lastIdx + 1) * colW - sc.clientWidth * 0.66;
     sc.scrollLeft = Math.max(0, target);
   }
+}
+
+// ---------------------------------------------------------------- แผนงานลดน้ำสูญเสีย / ขั้นตอนสำคัญ
+// ข้อมูลอยู่ใน tab ContractEvents ของ Sheet NRW_PBC (มากับ /api/overview เป็น DATA.events)
+//   งานปรับปรุงท่อ / ALC  -> กล่องเหลือง + ลูกศรแดงชี้ลงที่เส้นเป้า (แถบเหนือกราฟ)
+//   ขั้นตอนสำคัญ          -> ข้อความสีเขียวใต้เส้นเป้า + ลูกศรชี้ขึ้นที่เส้น
+// ส่งรายการเข้าระบบ Job management เป็นเหตุการณ์ (Incident) แล้วไปจ่ายงานต่อที่หน้าจ่ายงานเดิม
+var PLAN_BOX_H = 84;        // ความสูงกล่องเหลือง (คงที่ ให้คำนวณจุดเริ่มลูกศรได้)
+var PLAN_BOX_ROW = 92;      // ระยะต่อแถวของกล่อง เมื่อกล่องเดือนใกล้กันต้องซ้อนลงแถวถัดไป
+var PLAN_ARROW_ROW = 22;    // ระยะต่อแถวของข้อความลูกศรเขียว
+var PLAN_ARROW_GAP = 30;    // ระยะจากเส้นเป้าลงมาถึงข้อความลูกศรเขียว
+var PLAN_MAX_ROWS = 3;
+var EV_EDIT_ID = null;      // event_id ที่กำลังแก้ไขในฟอร์ม (null = เพิ่มใหม่)
+var EV_CID = null;          // สัญญาที่ฟอร์มตั้งค่าเริ่มต้นไว้ล่าสุด
+
+// "2027-02" -> เลขเดือนของสัญญา (เดือนเริ่มสัญญา = 1)
+function planMonthNo(ym){
+  var s = String((DATA && DATA.contract && DATA.contract.start_month) || "").split("-");
+  var p = String(ym || "").split("-");
+  if(s.length !== 2 || p.length < 2) return null;
+  return (parseInt(p[0],10) * 12 + parseInt(p[1],10)) -
+         (parseInt(s[0],10) * 12 + parseInt(s[1],10)) + 1;
+}
+
+// จัดตำแหน่งป้ายบนกราฟ: กล่องที่เดือนใกล้กันจนชนกันจะถูกดันลงแถวถัดไป (สูงสุด 3 แถว)
+function planLayoutEvents(nos, colW){
+  var boxes = [], arrows = [], boxRowEnd = [], arrowRowEnd = [];
+  var boxW = Math.max(170, Math.min(230, Math.round(colW * 2.8)));
+  function fit(ends, left, right){
+    var r = 0;
+    while(r < ends.length && ends[r] > left) r++;
+    if(r >= PLAN_MAX_ROWS) r = PLAN_MAX_ROWS - 1;
+    ends[r] = right;
+    return r;
+  }
+  (DATA.events || []).forEach(function(ev){
+    if(ev.status === "cancelled") return;
+    var idx = nos.indexOf(planMonthNo(ev.month));
+    if(idx < 0) return;
+    var cx = PLAN_LABEL_W + idx * colW + colW / 2;
+    if(ev.mark === "box"){
+      var left = cx - 12;
+      boxes.push({ ev:ev, idx:idx, cx:cx, left:left,
+                   row: fit(boxRowEnd, left, left + boxW + 8) });
+    } else {
+      var w = Math.min(240, 30 + ev.title.length * 7);
+      var l = cx - 9;
+      arrows.push({ ev:ev, idx:idx, cx:cx, left:l, w:w,
+                    row: fit(arrowRowEnd, l, l + w + 10) });
+    }
+  });
+  var nBox = boxes.reduce(function(m, b){ return Math.max(m, b.row + 1); }, 0);
+  return { boxes:boxes, arrows:arrows, boxW:boxW, values:[],
+           topH: nBox ? nBox * PLAN_BOX_ROW + 4 : 0 };
+}
+
+// ตำแหน่งแนวตั้ง (px) ของเส้นเป้า ณ คอลัมน์ idx และของข้อความลูกศรเขียว
+function planLineY(chart, lay, idx){
+  var a = chart.chartArea, v = lay.values[idx];
+  return v == null ? (a.top + a.bottom) / 2 : chart.scales.y.getPixelForValue(v);
+}
+function planArrowLabelY(chart, lay, r){
+  var y = planLineY(chart, lay, r.idx) + PLAN_ARROW_GAP + r.row * PLAN_ARROW_ROW;
+  return Math.min(y, chart.chartArea.bottom - 20);
+}
+
+// วาดลูกศรแดง (กล่อง -> เส้นเป้า) และลูกศรเขียว (ข้อความ -> เส้นเป้า) ลงบน canvas
+var planEventPlugin = {
+  id:"planEvents",
+  afterDatasetsDraw:function(chart, args, opts){
+    var lay = opts.layout;
+    if(!lay || (!lay.boxes.length && !lay.arrows.length)) return;
+    var ctx = chart.ctx;
+    function lineY(idx){ return planLineY(chart, lay, idx); }
+    function arrow(x, y0, y1, color){
+      var dir = y1 > y0 ? 1 : -1;
+      ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 2;
+      ctx.setLineDash([]);
+      ctx.beginPath(); ctx.moveTo(x, y0); ctx.lineTo(x, y1 - dir * 7); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x, y1); ctx.lineTo(x - 5, y1 - dir * 9); ctx.lineTo(x + 5, y1 - dir * 9);
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.save();
+    lay.boxes.forEach(function(b){
+      var y0 = 4 + b.row * PLAN_BOX_ROW + PLAN_BOX_H;
+      arrow(b.cx, y0, lineY(b.idx) - 5, b.ev.status === "done" ? "#7a8b99" : "#c0392b");
+    });
+    lay.arrows.forEach(function(r){
+      arrow(r.cx, planArrowLabelY(chart, lay, r) + 2, lineY(r.idx) + 5,
+            r.ev.status === "done" ? "#7a8b99" : "#1f8a3a");
+    });
+    ctx.restore();
+  }
+};
+
+// กล่องเหลือง / ข้อความเขียว เป็น HTML วางทับกราฟ (ตัดคำภาษาไทยได้ คลิกแก้ไขได้)
+function planDrawEventLabels(lay){
+  var host = $("planAnn");
+  if(!host) return;
+  var chart = CHARTS.planRate;
+  var html = lay.boxes.map(function(b){
+    var ev = b.ev, items = ev.items || [];
+    // กล่องสูงคงที่ ~5 บรรทัด: หัว + หัวข้อ + รายการ 2 บรรทัด + ปริมาณ
+    // ถ้ารายการเกิน 2 แสดงรายการแรกแล้วบอกจำนวนที่เหลือ (ดูครบได้ที่ tooltip/ตาราง)
+    var nShow = items.length > 2 ? 1 : items.length;
+    var shown = items.slice(0, nShow).map(function(t, i){
+      return '<div class="ev-it">' + (i + 1) + ". " + esc(t) + "</div>";
+    }).join("");
+    if(items.length > nShow) shown += '<div class="ev-it dim">และอีก ' + (items.length - nShow) + " รายการ</div>";
+    var tip = ev.type_label + " · " + ev.month_label + "\n" + ev.title +
+      (items.length ? "\n" + items.map(function(t, i){ return (i+1) + ". " + t; }).join("\n") : "") +
+      (ev.reduction_m3h != null ? "\nคาดว่าลดได้ ≈ " + num(ev.reduction_m3h) + " ลบ.ม./ชม." : "") +
+      "\nสถานะ: " + ev.status_label;
+    return '<div class="ev-box st-' + ev.status + '" data-id="' + esc(ev.event_id) + '"' +
+      ' title="' + esc(tip) + '" style="left:' + b.left + 'px;top:' +
+      (4 + b.row * PLAN_BOX_ROW) + 'px;width:' + lay.boxW + 'px;height:' + PLAN_BOX_H + 'px">' +
+      '<div class="ev-h">' + esc(ev.type_label) + " · " + esc(ev.month_label) +
+        (ev.status === "done" ? " ✓" : "") + "</div>" +
+      '<div class="ev-t">' + esc(ev.title) + "</div>" + shown +
+      (ev.reduction_m3h != null
+        ? '<div class="ev-q">≈ ' + num(ev.reduction_m3h) + " ลบ.ม./ชม.</div>" : "") +
+      "</div>";
+  }).join("");
+  if(chart){
+    html += lay.arrows.map(function(r){
+      return '<div class="ev-arr st-' + r.ev.status + '" data-id="' + esc(r.ev.event_id) + '"' +
+        ' title="' + esc(r.ev.month_label + " · " + r.ev.title + " (" + r.ev.status_label + ")") + '"' +
+        ' style="left:' + (r.cx + 5) + 'px;top:' + planArrowLabelY(chart, lay, r) +
+        'px;max-width:' + r.w + 'px">' + esc(r.ev.title) + "</div>";
+    }).join("");
+  }
+  host.innerHTML = html;
+  Array.prototype.forEach.call(host.querySelectorAll("[data-id]"), function(el){
+    el.addEventListener("click", function(){ openEventEditor(el.getAttribute("data-id")); });
+  });
+}
+
+function evFind(id){
+  var out = null;
+  (DATA.events || []).forEach(function(e){ if(e.event_id === id) out = e; });
+  return out;
+}
+
+// ตัวเลขสรุป: ปริมาณที่ต้องลดตามเป้าสัญญา เทียบกับผลรวมของแผนงานที่บันทึกไว้
+function evTotals(){
+  var bd = DATA.breakdown, s = bd && bd.summary;
+  var need = (s && s.total_reduction_m3 != null) ? s.total_reduction_m3 / denomOf() : null;
+  var es = DATA.event_summary || {};
+  var pipe = es.pipe || 0, alc = es.alc || 0;
+  return { need:need, pipe:pipe, alc:alc, planned:pipe + alc,
+           gap: need == null ? null : need - pipe - alc,
+           measure_no: bd ? bd.measure_month_no : null };
+}
+
+function renderEvents(){
+  var meta = DATA.event_meta || {};
+  var evs = DATA.events || [];
+  var t = evTotals();
+
+  // ฟอร์ม: ตัวเลือกประเภท/สถานะมาจากหลังบ้าน
+  if(!$("evType").options.length){
+    $("evType").innerHTML = Object.keys(meta.types || {}).map(function(k){
+      return '<option value="' + k + '">' + esc(meta.types[k]) + "</option>";
+    }).join("");
+    $("evStatus").innerHTML = Object.keys(meta.status || {}).map(function(k){
+      return '<option value="' + k + '">' + esc(meta.status[k]) + "</option>";
+    }).join("");
+    evTypeChanged();
+  }
+  if(EV_CID !== SELECTED){   // เปลี่ยนสัญญา: ล้างฟอร์มและตั้งเดือนเริ่มต้นใหม่
+    EV_CID = SELECTED;
+    $("evMonth").value = "";
+    resetEventForm();
+  }
+
+  var login = $("evLoginMsg");
+  if(meta.error){
+    showMsg(login, esc(meta.error), "err");
+  } else if(!meta.can_edit){
+    showMsg(login, 'ดูได้อย่างเดียว — <a href="/login">เข้าสู่ระบบ</a> ' +
+      "เพื่อเพิ่ม/แก้ไขแผนงาน และส่งเข้าระบบ Job management", "info");
+  } else {
+    hideMsg(login);
+  }
+  $("evForm").style.display = meta.can_edit ? "" : "none";
+
+  var cards = [];
+  if(t.need != null){
+    cards.push({label:"ต้องลดน้ำสูญเสียตามเป้า", value:num(t.need) ,
+      note:"ลบ.ม./ชม. ให้ถึงเป้าเดือนที่ " + (t.measure_no || "-")});
+  }
+  cards.push({label:"รวมงานปรับปรุงท่อ", value:num(t.pipe), note:"ลบ.ม./ชม. ตามแผน"});
+  cards.push({label:"รวมงาน ALC / อื่นๆ", value:num(t.alc), note:"ลบ.ม./ชม. ตามแผน"});
+  if(t.gap != null){
+    cards.push({label: t.gap > 0 ? "ยังขาดจากเป้า" : "แผนครอบคลุมเป้าแล้ว",
+      cls: t.gap > 0 ? "warn" : "good", value:num(Math.abs(t.gap)),
+      note: t.gap > 0 ? "ลบ.ม./ชม. ต้องเพิ่มแผนงานอีก" : "ลบ.ม./ชม. เกินเป้า"});
+  }
+  $("evCards").innerHTML = cards.map(function(k){
+    return '<div class="card ' + (k.cls || "") + '"><div class="label">' + esc(k.label) +
+      '</div><div class="value">' + esc(k.value) + '</div><div class="note">' +
+      esc(k.note) + "</div></div>";
+  }).join("");
+
+  var tb = $("evTable").querySelector("tbody");
+  if(!evs.length){
+    tb.innerHTML = '<tr><td colspan="7" class="dim" style="text-align:center">' +
+      "ยังไม่มีแผนงาน" + (meta.can_edit ? " — เพิ่มรายการแรกด้วยฟอร์มด้านบน" : "") +
+      "</td></tr>";
+    return;
+  }
+  tb.innerHTML = evs.map(function(ev){
+    var inc = ev.incident, job;
+    if(inc && inc.found){
+      job = '<a href="/incidents/tree?incident_id=' + encodeURIComponent(inc.id) +
+        '" target="_blank">' + esc(inc.id) + "</a> · " + esc(inc.status) +
+        (inc.n_jobs
+          ? '<div class="dim">งาน ' + inc.n_jobs + " งาน · ปิดแล้ว " + inc.n_closed + "</div>"
+          : '<div><a href="/incidents/' + encodeURIComponent(inc.id) +
+            '/convert" target="_blank">ยังไม่ได้จ่ายงาน — ไปจ่ายงาน →</a></div>');
+    } else if(inc){
+      job = esc(inc.id) + ' <span class="num-warn">' +
+        (inc.found === false ? "ไม่พบในระบบ Job" : "อ่านสถานะไม่ได้") + "</span>";
+    } else if(meta.can_send_job && ev.status !== "cancelled"){
+      job = '<button class="ev-send" data-id="' + esc(ev.event_id) + '">สร้างเหตุการณ์ →</button>';
+    } else {
+      job = '<span class="dim">-</span>';
+    }
+    var actions = meta.can_edit
+      ? '<button class="ev-edit" data-id="' + esc(ev.event_id) + '">แก้ไข</button> ' +
+        '<button class="ev-del" data-id="' + esc(ev.event_id) + '">ลบ</button>'
+      : "";
+    return '<tr class="' + (ev.status === "cancelled" ? "ev-cancelled" : "") + '">' +
+      "<td>" + esc(ev.month_label) + "</td>" +
+      '<td><span class="ev-dot ' + ev.mark + '"></span>' + esc(ev.type_label) + "</td>" +
+      '<td class="ev-desc"><b>' + esc(ev.title) + "</b>" +
+        (ev.items.length ? "<ol>" + ev.items.map(function(x){
+          return "<li>" + esc(x) + "</li>"; }).join("") + "</ol>" : "") +
+        (ev.note ? '<div class="dim">' + esc(ev.note) + "</div>" : "") + "</td>" +
+      "<td>" + (ev.reduction_m3h == null ? '<span class="dim">-</span>' : num(ev.reduction_m3h)) + "</td>" +
+      "<td>" + esc(ev.status_label) + "</td>" +
+      '<td class="ev-job">' + job + "</td>" +
+      '<td class="ev-act">' + actions + "</td></tr>";
+  }).join("");
+
+  Array.prototype.forEach.call(tb.querySelectorAll(".ev-edit"), function(b){
+    b.addEventListener("click", function(){ openEventEditor(b.getAttribute("data-id")); });
+  });
+  Array.prototype.forEach.call(tb.querySelectorAll(".ev-del"), function(b){
+    b.addEventListener("click", function(){ deleteEvent(b.getAttribute("data-id")); });
+  });
+  Array.prototype.forEach.call(tb.querySelectorAll(".ev-send"), function(b){
+    b.addEventListener("click", function(){ sendEventToJob(b.getAttribute("data-id"), b); });
+  });
+}
+
+function evTypeChanged(){
+  var isBox = $("evType").value !== "milestone";
+  $("evItemsRow").style.display = isBox ? "" : "none";
+  $("evRedRow").style.display = isBox ? "" : "none";
+  $("evTitle").placeholder = isBox
+    ? "เช่น งานปรับปรุงท่อ ซ.ศรีบุญเรือง 1"
+    : "เช่น เปิด PR, เริ่มทยอยส่งของ";
+}
+
+function resetEventForm(){
+  EV_EDIT_ID = null;
+  $("evFormTitle").textContent = "เพิ่มแผนงาน";
+  $("btnEvCancel").style.display = "none";
+  $("evTitle").value = ""; $("evItems").value = ""; $("evRed").value = "";
+  $("evNote").value = ""; $("evStatus").value = "plan";
+  if(!$("evMonth").value){
+    var lastNo = (DATA.monthly || []).length
+      ? DATA.monthly[DATA.monthly.length - 1].month_no : 1;
+    var s = String(DATA.contract.start_month || "").split("-");
+    if(s.length === 2){
+      var idx = parseInt(s[0],10) * 12 + parseInt(s[1],10) - 1 + lastNo;  // เดือนถัดจากข้อมูลล่าสุด
+      $("evMonth").value = Math.floor(idx / 12) + "-" + ("0" + (idx % 12 + 1)).slice(-2);
+    }
+  }
+}
+
+function openEventEditor(id){
+  var ev = evFind(id);
+  if(!ev) return;
+  document.querySelector('.tab[data-pane="paneEvents"]').click();
+  if(!(DATA.event_meta || {}).can_edit){
+    $("paneEvents").scrollIntoView({behavior:"smooth", block:"start"});
+    return;
+  }
+  EV_EDIT_ID = id;
+  $("evFormTitle").textContent = "แก้ไขแผนงาน " + id;
+  $("btnEvCancel").style.display = "";
+  $("evType").value = ev.event_type; evTypeChanged();
+  $("evMonth").value = ev.month;
+  $("evStatus").value = ev.status;
+  $("evTitle").value = ev.title;
+  $("evItems").value = (ev.items || []).join("\n");
+  $("evRed").value = ev.reduction_m3h == null ? "" : ev.reduction_m3h;
+  $("evNote").value = ev.note || "";
+  hideMsg($("evMsg"));
+  $("evForm").scrollIntoView({behavior:"smooth", block:"center"});
+}
+
+function saveEvent(){
+  var body = {
+    contract_id: SELECTED, event_id: EV_EDIT_ID || "",
+    event_type: $("evType").value, month: $("evMonth").value,
+    status: $("evStatus").value, title: $("evTitle").value,
+    items: $("evItems").value, reduction_m3h: $("evRed").value, note: $("evNote").value
+  };
+  $("btnEvSave").disabled = true;
+  fetch(API + "/events", { method:"POST", headers:{"Content-Type":"application/json"},
+                           body: JSON.stringify(body) })
+    .then(function(r){ return r.json(); })
+    .then(function(j){
+      $("btnEvSave").disabled = false;
+      if(!j.ok){ showMsg($("evMsg"), esc(j.error), "err"); return; }
+      showMsg($("evMsg"), (EV_EDIT_ID ? "แก้ไข" : "เพิ่ม") + "แผนงานแล้ว — กราฟอัปเดตแล้ว", "ok");
+      resetEventForm();
+      load();
+    })
+    .catch(function(e){
+      $("btnEvSave").disabled = false;
+      showMsg($("evMsg"), "บันทึกไม่สำเร็จ: " + esc(e), "err");
+    });
+}
+
+function deleteEvent(id){
+  var ev = evFind(id);
+  if(!ev) return;
+  var warn = ev.linked_incident_id
+    ? "\n(เหตุการณ์ " + ev.linked_incident_id + " ในระบบ Job จะยังอยู่ ต้องปิดเองที่ระบบ Job)" : "";
+  if(!window.confirm("ลบแผนงาน \"" + ev.title + "\" ออกจากกราฟ?" + warn)) return;
+  fetch(API + "/events/" + encodeURIComponent(id) + "/delete", {
+    method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({ contract_id: SELECTED })
+  }).then(function(r){ return r.json(); }).then(function(j){
+    if(!j.ok){ showMsg($("evMsg"), esc(j.error), "err"); return; }
+    if(EV_EDIT_ID === id) resetEventForm();
+    showMsg($("evMsg"), "ลบแผนงานแล้ว", "ok");
+    load();
+  });
+}
+
+function sendEventToJob(id, btn){
+  var ev = evFind(id);
+  if(!ev) return;
+  if(!window.confirm("สร้างเหตุการณ์ในระบบ Job management จากแผนงาน\n\"" + ev.title +
+      "\"\nกำหนดแล้วเสร็จ " + ev.month_label + " ?")) return;
+  if(btn) btn.disabled = true;
+  fetch(API + "/events/" + encodeURIComponent(id) + "/incident", {
+    method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({ contract_id: SELECTED })
+  }).then(function(r){ return r.json(); }).then(function(j){
+    if(btn) btn.disabled = false;
+    if(!j.ok){ showMsg($("evMsg"), esc(j.error), "err"); return; }
+    showMsg($("evMsg"), "สร้างเหตุการณ์ <b>" + esc(j.incident_id) + "</b> แล้ว — " +
+      '<a href="' + esc(j.convert_url) + '" target="_blank">ไปจ่ายงาน (เลือกประเภทงาน) →</a>', "ok");
+    load();
+  }).catch(function(e){
+    if(btn) btn.disabled = false;
+    showMsg($("evMsg"), "สร้างเหตุการณ์ไม่สำเร็จ: " + esc(e), "err");
+  });
 }
 
 function renderDmaTable(){
@@ -1857,6 +2344,11 @@ function bindEvents(){
   });
   if($("mRemarkSave")) $("mRemarkSave").addEventListener("click", saveRemark);
   $("btnSaveWork").addEventListener("click", saveWork);
+  $("evType").addEventListener("change", evTypeChanged);
+  $("btnEvSave").addEventListener("click", saveEvent);
+  $("btnEvCancel").addEventListener("click", function(){
+    resetEventForm(); hideMsg($("evMsg"));
+  });
   bindUploadEvents();
 }
 

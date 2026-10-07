@@ -72,8 +72,24 @@ def get_spreadsheet():
         return _spreadsheet
 
 
+# tab ที่เพิ่มภายหลัง สร้างให้อัตโนมัติถ้ายังไม่มีใน Sheet
+# ไม่ต้องรัน pbc_schema_setup.py ก่อนใช้งานฟีเจอร์ใหม่
+_AUTO_CREATE_TABS = {CFG.TAB_EVENTS}
+
+
 def _worksheet(tab):
-    return get_spreadsheet().worksheet(tab)
+    sheet = get_spreadsheet()
+    try:
+        return sheet.worksheet(tab)
+    except Exception as exc:
+        not_found = gspread is not None and isinstance(
+            exc, gspread.exceptions.WorksheetNotFound)
+        if not (not_found and tab in _AUTO_CREATE_TABS):
+            raise
+        header = CFG.SHEET_SCHEMAS[tab]
+        ws = sheet.add_worksheet(title=tab, rows=1000, cols=max(len(header), 12))
+        ws.append_row(header, value_input_option="RAW")
+        return ws
 
 
 def invalidate_cache(tab=None):
@@ -817,3 +833,129 @@ def save_remark(contract_id, dma_code, event_date, category, text, user):
         "recorded_by": user,
         "recorded_at": now_str(),
     }])
+
+
+# ------------------------------------------------------------------ แผนงาน/เหตุการณ์บนกราฟ
+
+def _event_from_row(r):
+    etype = (r.get("event_type") or "").strip()
+    if etype not in CFG.EVENT_TYPES:
+        etype = "milestone"
+    status = (r.get("status") or "").strip()
+    if status not in CFG.EVENT_STATUS:
+        status = "plan"
+    items = [ln.strip() for ln in str(r.get("items") or "").splitlines() if ln.strip()]
+    month = normalize_month(r.get("month"))
+    return {
+        "event_id": (r.get("event_id") or "").strip(),
+        "contract_id": (r.get("contract_id") or "").strip(),
+        "event_type": etype,
+        "type_label": CFG.EVENT_TYPES[etype]["label"],
+        "mark": CFG.EVENT_TYPES[etype]["mark"],
+        "month": month,
+        "month_label": month_label_th(month) if month else "",
+        "title": (r.get("title") or "").strip(),
+        "items": items,
+        "reduction_m3h": to_float(r.get("reduction_m3h")),
+        "status": status,
+        "status_label": CFG.EVENT_STATUS[status],
+        "note": (r.get("note") or "").strip(),
+        "linked_incident_id": (r.get("linked_incident_id") or "").strip(),
+        "updated_by": r.get("updated_by", ""),
+        "updated_at": r.get("updated_at", ""),
+    }
+
+
+def get_events(contract_id):
+    """
+    แผนงาน/เหตุการณ์ของสัญญา (แถวล่าสุดของแต่ละ event_id ที่ยังไม่ถูกลบ)
+    เรียงตามเดือน แล้วตามประเภท (กล่องก่อนลูกศร)
+    """
+    rows = [
+        r for r in read_tab(CFG.TAB_EVENTS)
+        if (r.get("contract_id") or "").strip() == contract_id
+        and (r.get("event_id") or "").strip()
+    ]
+    latest = _latest_by_key(
+        rows, lambda r: r.get("event_id", "").strip(),
+        lambda r: r.get("updated_at", ""),
+    )
+    out = []
+    for r in latest.values():
+        if str(r.get("deleted") or "").strip().lower() in ("1", "true", "yes"):
+            continue
+        ev = _event_from_row(r)
+        if ev["month"]:
+            out.append(ev)
+    out.sort(key=lambda e: (e["month"], e["mark"] != "box", e["event_id"]))
+    return out
+
+
+def get_event(contract_id, event_id):
+    for ev in get_events(contract_id):
+        if ev["event_id"] == event_id:
+            return ev
+    return None
+
+
+def save_event(contract_id, data, user, event_id=None, deleted=False):
+    """
+    เพิ่ม/แก้ไข/ลบแผนงาน — เขียนเป็นแถวใหม่เสมอ (append-only)
+    data ใช้คีย์เดียวกับ get_events ส่วนที่ไม่ส่งมาจะคงค่าเดิมไว้
+    คืน event_id
+    """
+    current = get_event(contract_id, event_id) if event_id else None
+    if event_id and current is None:
+        raise ValueError("ไม่พบรายการนี้ อาจถูกลบไปแล้ว")
+    base = current or {}
+
+    def pick(key, default=""):
+        return data[key] if key in data else base.get(key, default)
+
+    items = pick("items", [])
+    if isinstance(items, str):
+        items = [ln.strip() for ln in items.splitlines() if ln.strip()]
+    rec = {
+        "event_id": event_id or "EV-" + uuid.uuid4().hex[:8].upper(),
+        "contract_id": contract_id,
+        "event_type": pick("event_type", "milestone"),
+        "month": normalize_month(pick("month")),
+        "title": (pick("title") or "").strip(),
+        "items": "\n".join(items),
+        "reduction_m3h": pick("reduction_m3h", ""),
+        "status": pick("status", "plan"),
+        "note": (pick("note") or "").strip(),
+        "linked_incident_id": pick("linked_incident_id", ""),
+        "deleted": 1 if deleted else "",
+        "updated_by": user,
+        "updated_at": now_str(),
+    }
+    if rec["reduction_m3h"] is None:
+        rec["reduction_m3h"] = ""
+    append_rows(CFG.TAB_EVENTS, [rec])
+    return rec["event_id"]
+
+
+def summarize_events(events):
+    """รวมปริมาณที่คาดว่าลดได้ (ลบ.ม./ชม.) แยกตามประเภท ไม่นับรายการที่ยกเลิก"""
+    out = {k: 0.0 for k in CFG.EVENT_TYPES}
+    for ev in events:
+        if ev["status"] == "cancelled" or ev["reduction_m3h"] is None:
+            continue
+        out[ev["event_type"]] += ev["reduction_m3h"]
+    return out
+
+
+_BRANCH_ABBR_RE = re.compile(r"(สส[\u0E00-\u0E7F]+\.)")
+
+
+def contract_branch_abbr(contract):
+    """
+    ชื่อย่อสาขาของสัญญา เช่น "สสภ." — ใช้จับคู่กับตาราง Branches ของระบบ Job
+    (รหัสสาขาในสัญญาเป็นรหัส กปน. ซึ่งไม่ตรงกับ BranchID ของระบบ Job)
+    """
+    for field in ("area_name", "branch_name", "note"):
+        m = _BRANCH_ABBR_RE.search(str(contract.get(field) or ""))
+        if m:
+            return m.group(1)
+    return ""
