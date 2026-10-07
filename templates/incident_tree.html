@@ -182,6 +182,47 @@
     font-size: 0.74rem;
     font-weight: 600;
   }
+  /* ===== สายการมอบหมายใต้การ์ดงาน ===== */
+  .assign-chain { width: 230px; display: flex; flex-direction: column; }
+  .hop {
+    position: relative;
+    margin-top: 22px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px 12px;
+    background: #fbfdff;
+    text-align: left;
+    font-size: 0.74rem;
+    color: var(--ink-soft);
+  }
+  .hop::before {
+    content: '';
+    position: absolute;
+    top: -23px;
+    left: 50%;
+    height: 22px;
+    border-left: 2px solid var(--line);
+  }
+  .hop.current { border-color: var(--mwa-sky); background: #eef8ff; box-shadow: 0 2px 8px rgba(0,156,255,0.12); }
+  .hop-head { display: flex; gap: 6px; align-items: flex-start; font-weight: 700; color: var(--mwa-navy-deep); font-size: 0.76rem; }
+  .hop-no {
+    flex: none; width: 18px; height: 18px; border-radius: 50%;
+    background: var(--mwa-navy-deep); color: #fff; font-size: 0.66rem;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .hop-row { margin-top: 2px; }
+  .hop-note { color: var(--danger); }
+  .hop-state, .hop-here {
+    display: inline-block; margin-top: 5px; padding: 1px 8px; border-radius: 999px;
+    font-size: 0.68rem; font-weight: 600;
+  }
+  .hop-state.st-wait { background: #fff4dc; color: var(--amber); }
+  .hop-state.st-ok { background: #dcecfc; color: var(--mwa-navy-deep); }
+  .hop-state.st-bad { background: #fbe9e4; color: var(--danger); }
+  .hop-state.st-pass { background: var(--paper); color: var(--ink-soft); border: 1px solid var(--line); }
+  .hop-state.st-done { background: #f3e0fb; color: var(--mwa-purple); }
+  .hop-here { background: var(--mwa-sky); color: #fff; }
+
   .tree-summary {
     display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
     padding: 12px 16px 0; font-size: 0.8rem; color: var(--ink-soft);
@@ -460,6 +501,27 @@
               <span class="tn-editable-badge">แก้ไขได้</span>
               {% endif %}
             </div>
+
+            {# สายการมอบหมาย: 1 node ต่อการมอบหมาย/โอน 1 ครั้ง ต่อลงมาใต้การ์ดงาน #}
+            {% set chain = assignment_chains.get(job.JobID, []) %}
+            {% if chain %}
+            <div class="assign-chain">
+              {% for hop in chain %}
+              <div class="hop {{ 'current' if hop.is_current }}">
+                <div class="hop-head">
+                  <span class="hop-no">{{ loop.index }}</span>
+                  <span>{{ hop.kind }} → {{ hop.to|user_short }}</span>
+                </div>
+                <div class="hop-row">โดย {{ hop.by|user_short }}</div>
+                <div class="hop-row">{{ hop.at_display }}</div>
+                {% if hop.due %}<div class="hop-row">กำหนดเสร็จ: {{ hop.due|date_display }}</div>{% endif %}
+                <span class="hop-state st-{{ {'รอรับ':'wait','รับงานแล้ว':'ok','ปฏิเสธ':'bad','ส่งต่อแล้ว':'pass','เปลี่ยนผู้รับ':'pass','ส่งงานเสร็จ':'done'}.get(hop.state, 'pass') }}">{{ hop.state }}</span>
+                {% if hop.is_current %}<span class="hop-here">งานอยู่ที่นี่</span>{% endif %}
+                {% if hop.note %}<div class="hop-row hop-note">{{ hop.note }}</div>{% endif %}
+              </div>
+              {% endfor %}
+            </div>
+            {% endif %}
           </li>
           {% endfor %}
         </ul>
@@ -506,7 +568,7 @@
 
   {# popup ของทุกงานในหน้า (สร้างครั้งเดียวต่อ JobID กัน id ซ้ำ) #}
   {% for job in popup_jobs %}
-  {{ jp.job_popup(job, job_permissions.get(job.JobID, {}), lateral_candidates_map.get(job.JobID, []), back_url, job_type_name_map.get(job.JobType, job.JobType), assign_candidates_map.get(job.JobID, [])) }}
+  {{ jp.job_popup(job, job_permissions.get(job.JobID, {}), lateral_candidates_map.get(job.JobID, []), back_url, job_type_name_map.get(job.JobType, job.JobType), assign_candidates_map.get(job.JobID, []), today) }}
   {% endfor %}
 </div>
 {% endblock %}

@@ -139,6 +139,75 @@ def get_overdue_jobs_in_scope(user: dict, today: str) -> list:
     return sorted(overdue, key=lambda j: str(j.get("DueDate") or ""))
 
 
+def get_assignment_chains(job_ids: list) -> dict:
+    """สายการมอบหมายของแต่ละงาน (สร้างจาก JobLogs) สำหรับวาด node ต่อลงมาใต้การ์ดงานในผัง
+    คืน {JobID: [hop, ...]} เรียงตามเวลา — hop = {kind, to, by, at, at_display, due, state, note, is_current}
+    state: รอรับ / รับงานแล้ว / ปฏิเสธ / ส่งต่อแล้ว / เปลี่ยนผู้รับ / ส่งงานเสร็จ"""
+    import re
+    from constants import (
+        ACTION_MANUAL_ASSIGN, ACTION_LATERAL_TRANSFER, ACTION_ACCEPT, ACTION_REJECT,
+        ACTION_SUBMIT_COMPLETION, ACTION_SET_DUE_DATE,
+    )
+
+    wanted = set(job_ids)
+    if not wanted:
+        return {}
+    logs_by_job = {}
+    for log in sc.get_all_records("JobLogs"):
+        if log.get("JobID") in wanted:
+            logs_by_job.setdefault(log["JobID"], []).append(log)
+
+    def _at_display(ts):
+        ts = str(ts or "").replace("T", " ")
+        if len(ts) >= 16 and ts[4] == "-":
+            return f"{ts[8:10]}/{ts[5:7]}/{ts[0:4]} {ts[11:16]}"
+        return ts
+
+    chains = {}
+    for job_id, logs in logs_by_job.items():
+        logs.sort(key=lambda l: (str(l.get("Timestamp") or ""), str(l.get("LogID") or "")))
+        hops = []
+        for log in logs:
+            action = log.get("ActionType")
+            if action in (ACTION_MANUAL_ASSIGN, ACTION_LATERAL_TRANSFER):
+                if hops:
+                    prev = hops[-1]
+                    if prev["state"] == "รับงานแล้ว":
+                        prev["state"] = "ส่งต่อแล้ว"
+                    elif prev["state"] == "รอรับ":
+                        prev["state"] = "เปลี่ยนผู้รับ"
+                hops.append({
+                    "kind": "มอบหมาย" if action == ACTION_MANUAL_ASSIGN else "โอนงาน",
+                    "to": log.get("ToUserID") or "",
+                    "by": log.get("FromUserID") or "",
+                    "at": log.get("Timestamp") or "",
+                    "at_display": _at_display(log.get("Timestamp")),
+                    "due": "",
+                    "state": "รอรับ",
+                    "note": "",
+                    "is_current": False,
+                })
+            elif not hops:
+                continue
+            elif action == ACTION_ACCEPT:
+                hops[-1]["state"] = "รับงานแล้ว"
+            elif action == ACTION_REJECT:
+                hops[-1]["state"] = "ปฏิเสธ"
+                hops[-1]["note"] = str(log.get("Notes") or "")
+            elif action == ACTION_SUBMIT_COMPLETION:
+                hops[-1]["state"] = "ส่งงานเสร็จ"
+            elif action == ACTION_SET_DUE_DATE:
+                m = re.search(r"DueDate=(\d{4}-\d{2}-\d{2})", str(log.get("Notes") or ""))
+                if m:
+                    hops[-1]["due"] = m.group(1)
+        # มอบหมายต่อโดยไม่ได้กำหนดวันใหม่ (เช่น วิศวกร → ช่าง) = ใช้กำหนดเสร็จเดิมของรอบก่อนหน้า
+        for prev, hop in zip(hops, hops[1:]):
+            if not hop["due"] and prev["due"]:
+                hop["due"] = prev["due"]
+        chains[job_id] = hops
+    return chains
+
+
 def get_my_action_jobs(user: dict) -> dict:
     """รวมงานที่ user คนนี้ต้อง 'ลงมือทำอะไรบางอย่าง' ต่อ แบ่งเป็น 3 กลุ่ม:
     - assigned_to_me: งานที่มอบหมายมาถึงตัวเอง (รอรับ/ปฏิเสธ/กำลังดำเนินการ)
@@ -256,8 +325,12 @@ def get_job_permissions(job: dict, user: dict) -> dict:
         STATUS_PENDING_ASSIGNMENT, STATUS_ACCEPTED, STATUS_REJECTED, STATUS_REOPENED,
     ) and (is_admin or (role in ASSIGNER_ROLES and _job_in_assign_scope(job, user)))
 
+    from constants import DUE_DATE_EDITOR_MAX_LEVEL
+    can_set_due = can_assign and role_level(role) <= DUE_DATE_EDITOR_MAX_LEVEL
+
     perms = {
         "can_assign": can_assign,
+        "can_set_due": can_set_due,
         "can_accept": can_accept,
         "can_reject": can_reject,
         "can_submit": can_submit,

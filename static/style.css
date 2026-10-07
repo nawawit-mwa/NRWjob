@@ -621,6 +621,21 @@ tr:last-child td { border-bottom: none; }
 .btn-sm.transfer { background: var(--mwa-purple); color: #fff; }
 .btn-sm.assign { background: var(--mwa-sky); color: #fff; }
 
+.job-popup-box form.pp-assign-form { flex-direction: column; align-items: stretch; gap: 4px; }
+.job-popup-box form.pp-assign-form select,
+.job-popup-box form.pp-assign-form input[type="date"] {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 0.82rem;
+  font-family: var(--font-ui);
+  margin-bottom: 6px;
+}
+.job-popup-box form.pp-assign-form .btn-sm { align-self: flex-end; }
+.job-popup-box .pp-field-label { font-size: 0.74rem; color: var(--ink-soft); }
+.job-popup-box .pp-hint { font-size: 0.76rem; color: var(--ink-soft); margin-bottom: 6px; }
+
 .job-popup-box .pp-section-label {
   font-size: 0.76rem;
   font-weight: 700;

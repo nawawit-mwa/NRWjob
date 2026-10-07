@@ -59,9 +59,23 @@ def _get_user(user_id):
 # ---------------------------------------------------------------------------
 # มอบหมายงาน (Manual Assign) — ระดับบนมอบหมายให้ระดับล่างชั้นใดก็ได้ (ข้ามระดับ/ข้ามกองได้)
 # ---------------------------------------------------------------------------
-def assign_job(job_id: str, to_user_id: str, by_user: dict):
+def assign_job(job_id: str, to_user_id: str, by_user: dict, due_date: str = ""):
+    """due_date (ไม่บังคับ, 'yyyy-mm-dd'): กำหนดเสร็จพร้อมการมอบหมาย — ต้องเป็นหัวหน้าส่วนขึ้นไป
+    ตรวจสิทธิ์/รูปแบบวันที่ก่อนเขียนข้อมูลใดๆ เพื่อไม่ให้มอบหมายสำเร็จแต่กำหนดเสร็จล้มเหลวครึ่งทาง"""
     job = _get_job(job_id)
     to_user = _get_user(to_user_id)
+
+    due_date = (due_date or "").strip()
+    if due_date:
+        try:
+            datetime.date.fromisoformat(due_date)
+        except ValueError:
+            raise ValueError("รูปแบบกำหนดเสร็จไม่ถูกต้อง")
+        if role_level(by_user.get("Role")) > DUE_DATE_EDITOR_MAX_LEVEL:
+            raise PermissionError("ต้องเป็นหัวหน้าส่วนขึ้นไปเท่านั้นที่กำหนด DueDate ได้")
+        bkk_today = (datetime.datetime.utcnow() + datetime.timedelta(hours=7)).date().isoformat()
+        if due_date < bkk_today:
+            raise ValueError("กำหนดเสร็จต้องไม่เป็นวันที่ผ่านมาแล้ว")
 
     if by_user.get("Role") not in ASSIGNER_ROLES and by_user.get("Role") != ROLE_ADMIN:
         raise PermissionError("Role นี้ไม่มีสิทธิ์มอบหมายงาน")
@@ -83,6 +97,13 @@ def assign_job(job_id: str, to_user_id: str, by_user: dict):
         "TransferScope": "",
     })
     _log(job_id, ACTION_MANUAL_ASSIGN, by_user, to_user)
+
+    if due_date:
+        if due_date != str(job.get("DueDate") or "")[:10]:
+            set_due_date(job_id, due_date, by_user)
+        else:
+            # วันที่เดิม — ไม่ต้องเขียน Jobs/คำนวณ Incident ใหม่ แค่ลง log ให้ผังแสดงกำหนดเสร็จของการมอบหมายรอบนี้
+            _log(job_id, ACTION_SET_DUE_DATE, by_user, notes=f"DueDate={due_date} (คงเดิม)")
 
 
 # ---------------------------------------------------------------------------

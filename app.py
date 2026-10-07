@@ -675,6 +675,12 @@ def incident_tree():
             selected_incident = sc.find_one("Incidents", "IncidentID", selected_id)
             incident_permissions = incident_service.get_incident_permissions(selected_incident, user)
             jobs = sc.find_many("Jobs", "SiblingJobGroup", selected_id)
+    assignment_chains = dashboard_service.get_assignment_chains([j["JobID"] for j in jobs])
+    # ผูก hop สุดท้ายกับผู้ถือครองงานปัจจุบัน เพื่อไฮไลต์ node ว่า "อยู่ที่ใครตอนนี้"
+    for j in jobs:
+        hops = assignment_chains.get(j["JobID"])
+        if hops and hops[-1]["to"] == j.get("CurrentAssigneeUserID"):
+            hops[-1]["is_current"] = True
 
     # ---- แท็บงานที่รับผิดชอบ ----
     action_jobs = dashboard_service.get_my_action_jobs(user)
@@ -731,6 +737,7 @@ def incident_tree():
         selected_id=selected_id,
         selected_incident=selected_incident,
         jobs=jobs,
+        assignment_chains=assignment_chains,
         my_lists=my_lists,
         my_count=my_count,
         popup_jobs=popup_jobs,
@@ -856,9 +863,13 @@ def job_assign(job_id):
     if not to_user_id:
         flash("กรุณาเลือกผู้รับมอบหมาย", "error")
         return _safe_redirect("incident_tree")
+    due_date = request.form.get("due_date", "")
     try:
-        job_service.assign_job(job_id, to_user_id, user)
-        flash(f"มอบหมายงาน {job_id} เรียบร้อยแล้ว", "info")
+        job_service.assign_job(job_id, to_user_id, user, due_date=due_date)
+        msg = f"มอบหมายงาน {job_id} เรียบร้อยแล้ว"
+        if due_date:
+            msg += f" · กำหนดเสร็จ {_date_display(due_date)}"
+        flash(msg, "info")
     except (PermissionError, ValueError) as e:
         flash(str(e), "error")
     return _safe_redirect("incident_tree")

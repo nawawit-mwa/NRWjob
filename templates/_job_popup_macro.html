@@ -12,7 +12,7 @@
     assign_candidates - list ผู้ใช้ที่มอบหมายงานลงให้ได้ (org_service.get_assignable_users_for_job)
                         ไม่บังคับใส่ — ถ้าไม่ส่งมา และมีสิทธิ์มอบหมาย จะแสดงคำอธิบายว่าทำไม dropdown ว่าง
 #}
-{% macro job_popup(job, perms, lateral_candidates, back_url, type_label, assign_candidates=[]) %}
+{% macro job_popup(job, perms, lateral_candidates, back_url, type_label, assign_candidates=[], today='') %}
 {% if perms.any %}
 <div class="job-popup-overlay" id="popup-{{ job.JobID }}">
   <div class="job-popup-box">
@@ -28,14 +28,23 @@
       {% if perms.can_assign %}
       <div class="pp-section-label">มอบหมายงาน</div>
       {% if assign_candidates %}
-      <form method="post" action="{{ url_for('job_assign', job_id=job.JobID) }}">
+      <form method="post" action="{{ url_for('job_assign', job_id=job.JobID) }}" class="pp-assign-form">
         <input type="hidden" name="next" value="{{ back_url }}">
+        <label class="pp-field-label">ผู้รับมอบหมาย</label>
         <select name="to_user_id" required>
           <option value="">— เลือกผู้รับมอบหมาย —</option>
           {% for c in assign_candidates|sort(attribute='Role') %}
           <option value="{{ c.UserID }}">{{ c.Name }} ({{ c.Role }})</option>
           {% endfor %}
         </select>
+        {% if perms.can_set_due %}
+        <label class="pp-field-label">กำหนดเสร็จ</label>
+        <input type="date" name="due_date" required
+               value="{{ (job.DueDate|string)[:10] if job.DueDate else '' }}"
+               {% if today %}min="{{ today }}"{% endif %}>
+        {% else %}
+        <div class="pp-hint">กำหนดเสร็จ: {{ job.DueDate|date_display or '—' }} (หัวหน้าส่วนขึ้นไปเป็นผู้กำหนด)</div>
+        {% endif %}
         <button type="submit" class="btn-sm assign">มอบหมาย</button>
       </form>
       {% else %}
