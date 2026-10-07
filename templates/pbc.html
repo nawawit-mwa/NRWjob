@@ -312,7 +312,11 @@
         <h2>กราฟแสดงอัตราน้ำสูญเสียฐานและเป้าหมาย</h2>
         <div class="hint" id="planSub" style="margin-bottom:0"></div>
       </div>
-      <div class="plan-chips" id="planChips"></div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:flex-end">
+        <div class="plan-chips" id="planChips"></div>
+        <!-- ทางลัดไปแท็บ "แผนงานลดน้ำสูญเสีย" ใต้กราฟ (ฟอร์มกล่องเหลือง/ลูกศรเขียว) -->
+        <button id="btnPlanEvents">＋ แผนงาน / เหตุการณ์</button>
+      </div>
     </div>
     <div class="plan-legend" id="planLegend"></div>
     <div class="plan-scroll" id="planScroll">
@@ -2345,6 +2349,11 @@ function bindEvents(){
   if($("mRemarkSave")) $("mRemarkSave").addEventListener("click", saveRemark);
   $("btnSaveWork").addEventListener("click", saveWork);
   $("evType").addEventListener("change", evTypeChanged);
+  $("btnPlanEvents").addEventListener("click", function(){
+    document.querySelector('.tab[data-pane="paneEvents"]').click();
+    var target = (DATA && DATA.event_meta && DATA.event_meta.can_edit) ? $("evForm") : $("paneEvents");
+    target.scrollIntoView({behavior:"smooth", block:"start"});
+  });
   $("btnEvSave").addEventListener("click", saveEvent);
   $("btnEvCancel").addEventListener("click", function(){
     resetEventForm(); hideMsg($("evMsg"));
