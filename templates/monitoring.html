@@ -379,7 +379,7 @@
 
     <div id="tabJob" class="mtab-panel">
       <div id="mAlertLinkedPanel" style="display:none;margin-bottom:12px;padding:10px 14px;border-radius:10px;background:rgba(7,156,0,.14);border:1px solid var(--green);color:var(--green);font-size:12.5px;font-weight:600;">
-        ✅ เปิดเป็นเหตุการณ์แล้ว: <span id="mAlertLinkedIncident" class="mono"></span>
+        ✅ เปิดเป็นเหตุการณ์แล้ว: <span id="mAlertLinkedIncident" class="mono"></span><span id="mAlertLinkedDate"></span>
         <div id="mAlertLinkedDue"></div>
       </div>
 
@@ -1903,7 +1903,7 @@ async function refreshAlertStatusPanel(rtuId){
         statusBadge.style.background = 'rgba(7,156,0,.14)';
         statusBadge.style.border = '1px solid var(--green)';
         statusBadge.style.color = 'var(--green)';
-        statusBadge.innerHTML = `✅ เปิดเป็นเหตุการณ์แล้ว: ${incidentLinkHtml(json.incident_id)} (บันทึก ${alertLinkHtml(json.alert_id)} เมื่อ ${escapeHtml(formatDateDDMMYYYY(json.saved_at))})`
+        statusBadge.innerHTML = `✅ เปิดเป็นเหตุการณ์แล้ว: ${incidentLinkHtml(json.incident_id)}${json.linked_at ? ` เมื่อ ${escapeHtml(formatDateDDMMYYYY(json.linked_at))}` : ''} (บันทึกการเตือนเพื่อตรวจสอบ ${alertLinkHtml(json.alert_id)} เมื่อ ${escapeHtml(formatDateDDMMYYYY(json.saved_at))})`
           + incidentDueLineHtml(json.incident_due_date, json.incident_status)
           + alertNoteLineHtml(json.note);
       } else {
@@ -1926,6 +1926,7 @@ async function refreshAlertStatusPanel(rtuId){
       if(json.linked){
         linkedPanel.style.display = 'block';
         document.getElementById('mAlertLinkedIncident').innerHTML = incidentLinkHtml(json.incident_id);
+        document.getElementById('mAlertLinkedDate').textContent = json.linked_at ? ` เมื่อ ${formatDateDDMMYYYY(json.linked_at)}` : '';
         document.getElementById('mAlertLinkedDue').innerHTML = incidentDueLineHtml(json.incident_due_date, json.incident_status);
       }
     } else {

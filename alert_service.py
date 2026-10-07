@@ -250,7 +250,8 @@ def get_alert_status_for_rtu(rtu_id: str) -> dict:
     - alert_id / saved_at: ข้อมูลของแถว active ล่าสุด (ถ้า saved=True)
     - note: หมายเหตุที่กรอกไว้ตอนบันทึก (ค่าว่างถ้าไม่ได้กรอก)
     - linked / incident_id: แถวนั้นถูกแปลงเป็นเหตุการณ์แล้วหรือยัง
-    - incident_due_date / incident_status: กำหนดเสร็จ + สถานะของเหตุการณ์ที่ผูกไว้ (ถ้า linked=True)"""
+    - incident_due_date / incident_status: กำหนดเสร็จ + สถานะของเหตุการณ์ที่ผูกไว้ (ถ้า linked=True)
+    - linked_at: วันที่เปิดเป็นเหตุการณ์ (LinkedIncidentAt — ถ้าว่างใช้ ReportedAt ของเหตุการณ์แทน)"""
     active = get_active_alert_for_rtu(rtu_id)
     if not active:
         return {"saved": False, "linked": False}
@@ -273,4 +274,5 @@ def get_alert_status_for_rtu(rtu_id: str) -> dict:
             incident = {}
         result["incident_due_date"] = str(incident.get("DueDate", "") or "")
         result["incident_status"] = str(incident.get("Status", "") or "")
+        result["linked_at"] = str(active.get("LinkedIncidentAt", "") or incident.get("ReportedAt", "") or "")
     return result
