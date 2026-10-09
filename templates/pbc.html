@@ -283,6 +283,8 @@
 .pbc-page #apTable th.ap-tgt{background:#fff09a;color:#6b5600}
 .pbc-page #apTable td.ap-act{background:#fff7ee}
 .pbc-page #apTable td.ap-tgt{background:#fffbd9;font-weight:600}
+.pbc-page #apTable th.ap-tgt2{background:#fff6c9;color:#6b5600}
+.pbc-page #apTable td[data-c$="|mnf"],.pbc-page #apTable td.ap-tgt2{background:#fffdf0}
 .pbc-page #apTable tbody tr{cursor:default}
 .pbc-page #apTable tr.ap-un td{color:var(--ink-soft);font-style:italic}
 .pbc-page #apTable tfoot td{position:sticky;bottom:0;background:#eef4fa;font-weight:700;
@@ -387,7 +389,6 @@
       <div class="tab active" data-pane="paneTable">สถานะราย DMA</div>
       <div class="tab" data-pane="paneEvents">แผนงานลดน้ำสูญเสีย</div>
       <div class="tab" data-pane="paneActPlan">ตารางแผนกิจกรรมราย DMA</div>
-      <div class="tab" data-pane="paneTargets">เป้าหมายย่อยราย DMA</div>
       <div class="tab" data-pane="paneWork">ผลงานภาคสนาม</div>
       {% if enable_upload %}
       <div class="tab" data-pane="paneUpload">อัปโหลดรายงาน WB220</div>
@@ -491,47 +492,6 @@
       <div class="msg" id="apMsg"></div>
       <div class="tablewrap ap-wrap"><table id="apTable"></table></div>
       <div class="hint" id="apNote"></div>
-    </div>
-
-    <!-- ------------------ เป้าหมายย่อย ------------------ -->
-    <div class="tabpane" id="paneTargets">
-      <div class="hint" id="targetHint"></div>
-      <div class="msg info show" id="targetSummary"></div>
-      <div class="formrow">
-        <label style="min-width:auto">ปริมาณน้ำสูญเสียรวมที่ต้องการลด</label>
-        <input type="number" id="totalReduction" min="0" step="1"
-               style="max-width:140px;flex:0 0 auto">
-        <span class="dim">ลบ.ม./เดือน</span>
-        <span class="dim">=</span>
-        <input type="number" id="totalReductionNf" min="0" step="0.1"
-               style="max-width:110px;flex:0 0 auto">
-        <span class="dim">ลบ.ม./ชม. (NF รวม)</span>
-      </div>
-      <div class="formrow" style="margin-bottom:12px">
-        <button id="btnUseTarget">ใช้ค่าตามเป้าสัญญา</button>
-        <button id="btnSumRows">ใช้ผลรวมจากที่กรอกในตาราง</button>
-        <button id="btnRecalc">คำนวณเกลี่ยใหม่</button>
-        <button id="btnResetTargets">ล้างค่าที่แก้เอง</button>
-        <button class="primary" id="btnSaveTargets">บันทึกเป้าหมาย</button>
-      </div>
-      <div class="hint" id="targetUnitHint">
-        กรอกช่องไหนก็ได้ อีกช่องจะคำนวณตามให้ทันที
-        (ปริมาณต่อเดือน = NF × ชั่วโมงต่อวัน × จำนวนวัน)
-      </div>
-      <div class="msg" id="targetMsg"></div>
-      <div class="tablewrap">
-        <table id="targetTable">
-          <thead><tr>
-            <th>DMA</th>
-            <th>L.Vol ปัจจุบัน</th>
-            <th>MNF จาก L.Vol</th>
-            <th>MNF ปัจจุบัน<br>(ลบ.ม./ชม.)</th>
-            <th>เป้า NF ที่ต้องการลด<br>(ลบ.ม./ชม.)</th>
-            <th>MNF เป้าหมาย<br>(ลบ.ม./ชม.)</th>
-          </tr></thead>
-          <tbody></tbody>
-        </table>
-      </div>
     </div>
 
     <!-- ------------------ ผลงานภาคสนาม ------------------ -->
@@ -676,8 +636,6 @@ var C = { teal:"#009cff", amber:"#b5790f", red:"#a6402a", green:"#079c00",
           muted:"#5c7488", band:"rgba(0,156,255,.14)", line:"#d9e6f2" };
 
 var DATA = null;          // ผลจาก /api/overview
-var TARGET_ROWS = [];     // แถวเป้าหมายที่กำลังแก้อยู่
-var MANUAL = {};          // {dma_code: target_loss_m3} ที่ผู้ใช้ล็อกเอง
 var CHARTS = {};
 var PENDING_FILE = null;
 var MODAL_DMA = null;
@@ -758,7 +716,6 @@ function load(){
     .then(function(j){
       if(!j.ok){ $("contractSub").textContent = j.error || "โหลดข้อมูลไม่สำเร็จ"; return; }
       DATA = j.data;
-      MANUAL = {};
       render();
     })
     .catch(function(e){ $("contractSub").textContent = "เชื่อมต่อไม่สำเร็จ: " + e; });
@@ -784,7 +741,6 @@ function render(){
   if(apActive()) loadActivityPlan(true);
   renderDmaTable();
   renderBarChart();
-  renderTargets();
 }
 
 function renderHelp(){
@@ -1930,7 +1886,7 @@ function apCompute(){
   var cum = {}, cumUn = 0, out = [];
   d.groups.forEach(function(g){
     var res = { cells:{}, tot:{} };
-    var T = { pipe:0, alc:0, tgt:null, cut:null, inflow:null, loss:null };
+    var T = { pipe:0, alc:0, tgt:null, cut:null, inflow:null, loss:null, mnf:null };
     function add(k, v){ if(v != null) T[k] = (T[k] || 0) + v; }
     d.rows.forEach(function(r){
       var code = r.dma_code;
@@ -1944,9 +1900,13 @@ function apCompute(){
       res.cells[code] = {
         pipe:pipe, alc:alc, target:tgt, gap: tgt != null ? tgt - act : null, cut:cut,
         nf: r.nf_current != null ? r.nf_current - act : null,
+        // MNF เป้าหมาย = NF ปัจจุบัน − เป้าสะสม (ค่าที่ต้องกดให้ได้ ใช้สั่งงานภาคสนาม)
+        mnf: (r.nf_current != null && tgt != null) ? Math.max(r.nf_current - tgt, 0) : null,
+        floor: r.mnf_floor,
         inflow:inflow, loss:loss, rate: inflow ? loss / inflow * 100 : null
       };
       add("pipe", pipe); add("alc", alc); add("tgt", tgt); add("cut", cut);
+      if(r.nf_current != null && tgt != null) add("mnf", Math.max(r.nf_current - tgt, 0));
       add("inflow", inflow); add("loss", loss);
     });
     var un = g.cells[UN];
@@ -1992,6 +1952,11 @@ function apFill(){
         if(el) el.innerHTML = html;
       };
       set("gap", apGapHtml(c.gap)); set("cut", apN(c.cut)); set("nf", apN(c.nf));
+      // ต่ำกว่าพื้นค่า MNF (ค่าต่ำสุดที่ DMA นี้เคยทำได้) = เป้าอาจตั้งไว้เกินจริง
+      set("mnf", c.mnf != null && c.floor != null && c.mnf < c.floor - 0.005
+        ? '<span class="num-warn" title="ต่ำกว่าพื้นค่า MNF ' + num(c.floor, 2) +
+          ' ที่ DMA นี้เคยทำได้">' + num(c.mnf, 2) + "</span>"
+        : apN(c.mnf));
       set("inflow", apN(c.inflow)); set("loss", apN(c.loss)); set("rate", apN(c.rate));
     });
     var T = R.tot;
@@ -2002,6 +1967,7 @@ function apFill(){
     tset("pipe", apN(T.pipe || null)); tset("alc", apN(T.alc || null));
     tset("gap", apGapHtml(T.gap)); tset("tgt", apN(T.tgt)); tset("cut", apN(T.cut));
     tset("nf", apN(anyNf ? tNf - T.cumAll : null));
+    tset("mnf", apN(T.mnf));
     tset("inflow", apN(T.inflow)); tset("loss", apN(T.loss));
     var ok = T.rate != null && T.rate <= g.target_rate + 0.005;
     tset("rate", apN(T.rate), T.rate == null ? "" : (ok ? "num-good" : "num-bad"));
@@ -2037,7 +2003,7 @@ function renderActivityPlan(){
     '<th colspan="5" class="ap-base">ฐาน: ข้อมูล ณ ' + esc(d.base.label) +
     ' (เดือนที่ ' + d.base.month_no + ')</th>' +
     G.map(function(g, i){
-      return '<th colspan="9" class="ap-g' + (i % 2) + '">เป้าหมายเดือนที่ ' + g.month_no +
+      return '<th colspan="10" class="ap-g' + (i % 2) + '">เป้าหมายเดือนที่ ' + g.month_no +
         " (" + num(g.target_rate, 2) + "% @" + esc(g.label) + ")</th>";
     }).join("") + "</tr>";
   var u = "<small>ลบ.ม./วัน</small>", uh = "<small>ลบ.ม./ชม.</small>";
@@ -2050,6 +2016,7 @@ function renderActivityPlan(){
         '<th class="ap-act">กิจกรรม<br>สำรวจ/ALC' + uh + '</th>' +
         "<th>ต้องเพิ่ม<br>กิจกรรม" + uh + "</th>" +
         '<th class="ap-tgt">เป้าลดน้ำเข้า<br>สะสม' + uh + "</th>" +
+        '<th class="ap-tgt2">MNF<br>เป้าหมาย' + uh + "</th>" +
         "<th>ลดน้ำเข้า" + u + "</th>" +
         "<th>NF ตาม<br>กิจกรรม" + uh + "</th>" +
         "<th>น้ำเข้า<br>เป้าหมาย" + u + "</th>" +
@@ -2077,7 +2044,7 @@ function renderActivityPlan(){
       '"></td>';
   }
   function derived(g, code){
-    return ["gap","cut","nf","inflow","loss","rate"].map(function(k){
+    return ["gap","mnf","cut","nf","inflow","loss","rate"].map(function(k){
       return '<td data-c="' + g.month_no + "|" + code + "|" + k + '"></td>';
     }).join("");
   }
@@ -2101,7 +2068,7 @@ function renderActivityPlan(){
       G.map(function(g){
         var c = g.cells[UN];
         return '<td class="ap-act">' + apN(c && c.pipe) + '</td><td class="ap-act">' +
-          apN(c && c.alc) + '</td><td colspan="7"></td>';
+          apN(c && c.alc) + '</td><td colspan="8"></td>';
       }).join("") + "</tr>";
   }
 
@@ -2113,7 +2080,8 @@ function renderActivityPlan(){
     G.map(function(g){
       var t = function(k, cls){ return '<td' + (cls ? ' class="' + cls + '"' : "") +
         ' data-t="' + g.month_no + "|" + k + '"></td>'; };
-      return t("pipe", "ap-act") + t("alc", "ap-act") + t("gap") + t("tgt", "ap-tgt") + t("cut") +
+      return t("pipe", "ap-act") + t("alc", "ap-act") + t("gap") + t("tgt", "ap-tgt") +
+        t("mnf", "ap-tgt2") + t("cut") +
         t("nf") + t("inflow") + t("loss") + t("rate");
     }).join("") + "</tr>";
 
@@ -2166,8 +2134,10 @@ function renderActivityPlan(){
   notes.push("เป้าลดน้ำเข้าสะสม = ปริมาณที่ต้องลดจากค่าฐานให้ถึงอัตราเป้า กระจายราย DMA " +
     "ตามศักยภาพ MNF (DMA ที่กรอกเป้าเองจะคงค่าไว้ ส่วนที่เหลือเกลี่ยให้ DMA อื่น) · " +
     "ต้องเพิ่มกิจกรรม = เป้าสะสม − กิจกรรมสะสม (ค่าบวก = ยังขาด) · " +
+    "MNF เป้าหมาย = NF ปัจจุบัน − เป้าสะสม (สีส้ม = ต่ำกว่าพื้นค่า MNF ที่ DMA นั้นเคยทำได้) · " +
     "ลดน้ำเข้า/วัน = เป้าสะสม × " + d.hours + " ชม. · NF ตามกิจกรรม = NF ปัจจุบัน − กิจกรรมสะสม · " +
-    "น้ำเข้า/น้ำสูญเสียเป้าหมาย = ค่าฐาน − ลดน้ำเข้า (สมมติน้ำจำหน่ายคงที่)");
+    "น้ำเข้า/น้ำสูญเสียเป้าหมาย = ค่าฐาน − ลดน้ำเข้า (สมมติน้ำจำหน่ายคงที่) · " +
+    "เป้าราย DMA ที่เคยบันทึกไว้ในแท็บ \"เป้าหมายย่อยราย DMA\" เดิม (ยกเลิกแท็บแล้ว) ยังนับเป็นค่าที่ล็อกไว้");
   $("apNote").innerHTML = notes.map(function(t){ return "<div>• " + t + "</div>"; }).join("");
 }
 
@@ -2286,161 +2256,12 @@ function renderBarChart(){
   });
 }
 
-// ---------------------------------------------------------------- เป้าหมายย่อย
-function renderTargets(){
-  var bd = DATA.breakdown;
-  var tb = $("targetTable").querySelector("tbody");
-  if(!bd || !bd.rows || !bd.rows.length){
-    $("targetHint").textContent =
-      "ยังคำนวณเป้าหมายย่อยไม่ได้ — ต้องมีข้อมูลครบอย่างน้อย 3 เดือนก่อน";
-    $("targetSummary").className = "msg";
-    tb.innerHTML = "";
-    return;
-  }
-  TARGET_ROWS = bd.rows.slice();
-  if(!$("totalReduction").value && bd.summary){
-    setTotalReduction(bd.summary.total_reduction_m3 || 0);
-  }
-  $("targetHint").innerHTML =
-    "อ้างอิงเป้าสุดท้ายของสัญญา เดือนที่ " + bd.measure_month_no +
-    " (" + num(bd.target_rate, 3) + "%) · " +
-    "กระจายเป้าตามศักยภาพที่แต่ละ DMA ลดได้จริง " +
-    "(ศักยภาพ = MNF ปัจจุบัน − พื้นค่า MNF × " + bd.hours_per_day + " ชม. × " +
-    bd.days + " วัน) DMA ที่ไม่มีข้อมูลใช้สัดส่วนน้ำสูญเสียแทน · " +
-    "แก้ช่อง \"เป้า NF ที่ต้องการลด\" ได้ ระบบจะเกลี่ยส่วนที่เหลือให้ DMA อื่นอัตโนมัติ";
-  drawTargetRows();
-}
-
-function setTotalReduction(volume){
-  var v = Math.max(volume || 0, 0);
-  $("totalReduction").value = Math.round(v);
-  $("totalReductionNf").value = (v / denomOf()).toFixed(1);
-}
-
+// ปริมาณต่อเดือน ↔ อัตราการไหล (ลบ.ม./ชม.) = ชั่วโมงต่อวัน × จำนวนวันมาตรฐานต่อเดือน
+// (แท็บ "เป้าหมายย่อยราย DMA" เดิมถูกรวมเข้าตารางแผนกิจกรรมราย DMA แล้ว)
 function denomOf(){
   var bd = DATA && DATA.breakdown;
   if(!bd) return 24 * 30;
   return (bd.hours_per_day || 24) * (bd.days || 30);
-}
-
-function drawTargetRows(){
-  var bd = DATA.breakdown;
-  var tb = $("targetTable").querySelector("tbody");
-  var denom = (bd.hours_per_day || 24) * (bd.days || 30);
-  tb.innerHTML = TARGET_ROWS.map(function(r){
-    // ปริมาณน้ำสูญเสียต่อเดือน คิดกลับเป็นอัตราการไหลเฉลี่ยที่ไหลทิ้งตลอดเวลา
-    var mnfFromVol = denom ? r.loss_m3 / denom : null;
-    // อัตราการไหลที่ต้องกดลง = ปริมาณที่ต้องลด หารด้วยชั่วโมงรวมของเดือน
-    var nfCut = denom ? r.reduction_m3 / denom : null;
-    // MNF เป้าหมายมีความหมายเฉพาะ DMA ที่มีข้อมูล MNF จริง
-    var mnfTarget = (r.mnf_current == null || nfCut == null)
-      ? null : Math.max(r.mnf_current - nfCut, 0);
-    return '<tr>' +
-      '<td>' + esc(r.dma_code) +
-        (r.is_manual ? ' <span class="pbc-badge ovr">แก้เอง</span>' : '') + '</td>' +
-      '<td>' + num(r.loss_m3) + '</td>' +
-      '<td class="dim">' + num(mnfFromVol,1) + '</td>' +
-      '<td>' + num(r.mnf_current,1) + '</td>' +
-      '<td><input class="editnum" type="number" min="0" step="0.1" ' +
-        'data-dma="' + esc(r.dma_code) + '" ' +
-        'data-loss="' + (r.loss_m3 == null ? 0 : r.loss_m3) + '" value="' +
-        (nfCut==null ? "" : nfCut.toFixed(1)) + '"></td>' +
-      '<td class="num-good">' + num(mnfTarget,1) + '</td></tr>';
-  }).join("");
-
-  Array.prototype.forEach.call(tb.querySelectorAll("input"), function(inp){
-    inp.addEventListener("change", function(){
-      var code = inp.getAttribute("data-dma");
-      var loss = parseFloat(inp.getAttribute("data-loss")) || 0;
-      var nf = parseFloat(inp.value);
-      if(isNaN(nf) || nf < 0){
-        delete MANUAL[code];
-      } else {
-        // ค่าที่กรอกเป็นอัตราการไหล แปลงเป็นปริมาณต่อเดือนก่อนส่งหลังบ้าน
-        var cut = nf * denomOf();
-        // ลดได้มากสุดเท่าที่มีน้ำสูญเสียอยู่จริง
-        if(cut > loss){
-          cut = loss;
-          inp.value = (loss / denomOf()).toFixed(1);
-        }
-        MANUAL[code] = loss - cut;
-      }
-      recalcTargets();
-    });
-  });
-
-  var s = bd.summary || {};
-  var unalloc = s.unallocated_m3 || 0;
-  var target = DATA.next_target ? DATA.next_target.target_rate : null;
-  var alloc = s.allocated_reduction_m3 || 0;
-  var text = "ต้องลดรวม " + num(s.total_reduction_m3) + " ลบ.ม./เดือน" +
-    " (" + num(s.total_reduction_m3 / denomOf(), 1) + " ลบ.ม./ชม.)" +
-    " · กระจายแล้ว " + num(alloc) + " ลบ.ม./เดือน" +
-    " (" + num(alloc / denomOf(), 1) + " ลบ.ม./ชม.)";
-  if(s.resulting_rate != null){
-    text += " · อัตราที่จะได้ " + num(s.resulting_rate,2) + "%" +
-      (target != null ? " (เป้า " + num(target,2) + "%)" : "");
-  }
-  if(unalloc > 1){
-    showMsg($("targetSummary"), text +
-      "<br><b>ยังกระจายไม่ครบอีก " + num(unalloc) + " ลบ.ม.</b> — " +
-      "เป้าที่แก้เองรวมกันแล้วยังไม่ถึงเป้าใหญ่ ต้องลดเป้าของบาง DMA ลงอีก", "err");
-  } else if(target != null && s.resulting_rate != null &&
-            s.resulting_rate < target - 0.05){
-    showMsg($("targetSummary"), text +
-      "<br>แผนนี้ตั้งเป้าเข้มกว่าที่สัญญากำหนด เพราะเป้าที่แก้เองบางพื้นที่ต่ำกว่าที่จำเป็น",
-      "info");
-  } else {
-    showMsg($("targetSummary"), text, "info");
-  }
-}
-
-function recalcTargets(){
-  var bd = DATA.breakdown;
-  if(!bd || !bd.rows.length) return;
-  var basis = TARGET_ROWS.map(function(r){
-    return { dma_code:r.dma_code, inflow_m3:r.inflow_m3, sales_m3:r.sales_m3,
-             loss_m3:r.loss_m3, mnf_current:r.mnf_current, mnf_floor:r.mnf_floor };
-  });
-  var payload = {
-    contract_id: SELECTED, basis: basis, manual: MANUAL,
-    sales_m3: bd.summary.sales_m3, target_rate: DATA.next_target.target_rate
-  };
-  var manualTotal = parseFloat($("totalReduction").value);
-  if(!isNaN(manualTotal) && manualTotal >= 0){
-    payload.total_reduction_m3 = manualTotal;
-  }
-  fetch(API + "/preview-targets", {
-    method:"POST", headers:{"Content-Type":"application/json"},
-    body: JSON.stringify(payload)
-  }).then(function(r){ return r.json(); }).then(function(j){
-    if(!j.ok){ showMsg($("targetMsg"), esc(j.error), "err"); return; }
-    TARGET_ROWS = j.rows;
-    // เก็บกลับเข้า DATA ด้วย เพราะกราฟแท่งอ่านเป้าจากตรงนี้
-    DATA.breakdown.rows = j.rows;
-    DATA.breakdown.summary = j.summary;
-    drawTargetRows();
-    renderBarChart();
-  });
-}
-
-function saveTargets(){
-  if(!TARGET_ROWS.length) return;
-  var payload = TARGET_ROWS.map(function(r){
-    return { dma_code:r.dma_code, target_loss_m3:r.target_loss_m3,
-             target_mnf:r.target_mnf, is_manual: !!MANUAL[r.dma_code] };
-  });
-  fetch(API + "/targets", {
-    method:"POST", headers:{"Content-Type":"application/json"},
-    body: JSON.stringify({ contract_id: SELECTED,
-      measure_month_no: DATA.breakdown.measure_month_no, targets: payload })
-  }).then(function(r){ return r.json(); }).then(function(j){
-    if(!j.ok){ showMsg($("targetMsg"), esc(j.error), "err"); return; }
-    showMsg($("targetMsg"), "บันทึกเป้าหมาย " + j.n_saved + " DMA แล้ว", "ok");
-    // กราฟแท่งใช้เป้าที่เพิ่งบันทึก ต้องวาดใหม่ให้ตรงกัน
-    DATA.breakdown.rows = TARGET_ROWS;
-    renderBarChart();
-  });
 }
 
 // ---------------------------------------------------------------- popup
@@ -2755,41 +2576,6 @@ function bindEvents(){
     clearTimeout(PLAN_RESIZE_TIMER);
     PLAN_RESIZE_TIMER = setTimeout(function(){ if(DATA) renderPlan(); }, 200);
   });
-  // สองช่องบนแถบควบคุมเป็นค่าเดียวกันคนละหน่วย แก้ช่องไหนอีกช่องตามทันที
-  $("totalReduction").addEventListener("input", function(){
-    var v = parseFloat($("totalReduction").value);
-    $("totalReductionNf").value =
-      isNaN(v) ? "" : (v / denomOf()).toFixed(1);
-  });
-  $("totalReductionNf").addEventListener("input", function(){
-    var v = parseFloat($("totalReductionNf").value);
-    $("totalReduction").value =
-      isNaN(v) ? "" : Math.round(v * denomOf());
-  });
-  $("btnSumRows").addEventListener("click", function(){
-    // รวมค่าที่กรอกในตารางขึ้นมาเป็นเป้ารวม
-    var sum = 0;
-    TARGET_ROWS.forEach(function(r){ sum += (r.reduction_m3 || 0); });
-    setTotalReduction(sum);
-    recalcTargets();
-  });
-  $("btnRecalc").addEventListener("click", recalcTargets);
-  $("btnUseTarget").addEventListener("click", function(){
-    // กลับไปใช้ปริมาณที่คำนวณจากเป้าตามสัญญา
-    var bd = DATA && DATA.breakdown;
-    if(bd && bd.summary){
-      setTotalReduction(bd.summary.total_reduction_m3 || 0);
-      recalcTargets();
-    }
-  });
-  $("btnResetTargets").addEventListener("click", function(){
-    MANUAL = {};
-    if(DATA && DATA.breakdown && DATA.breakdown.summary){
-      setTotalReduction(DATA.breakdown.summary.total_reduction_m3 || 0);
-    }
-    recalcTargets();
-  });
-  $("btnSaveTargets").addEventListener("click", saveTargets);
   $("helpLink").addEventListener("click", function(e){
     e.preventDefault();
     $("helpModal").classList.add("open");

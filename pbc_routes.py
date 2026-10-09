@@ -1096,7 +1096,9 @@ def create_pbc_blueprint(login_required=None, current_user_fn=None,
         for t in future:
             ms_month = SVC.month_from_no(start, t["month_no"])
             # เป้าราย DMA ที่ล็อกไว้ (หน่วย ลบ.ม./วัน เป็นปริมาณสูญเสียเป้าหมาย)
-            #   1) ค่าที่ล็อกในแท็บเป้าหมายย่อย  2) ค่าที่กรอกในตารางนี้ (สำคัญกว่า)
+            #   1) ค่าที่เคยล็อกในแท็บเป้าหมายย่อยเดิม (ตาราง DMATargets — แท็บนี้ถูกรวมเข้า
+            #      ตารางแผนกิจกรรมแล้ว ไม่มีหน้าจอแก้ แต่ค่าที่บันทึกไว้ยังใช้อยู่)
+            #   2) ค่าที่กรอกในตารางนี้ (สำคัญกว่า)
             # DMA ที่ไม่ได้ล็อกจะถูกเกลี่ยส่วนที่เหลือให้อัตโนมัติ
             saved = SVC.get_dma_targets(cid, t["month_no"])
             manual = {c: v["target_loss_m3"] / CFG.DAYS_PER_MONTH
