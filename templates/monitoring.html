@@ -757,10 +757,12 @@ function envelopeFromCsv(rows){
     // เช็คก่อน fillGaps ว่ามีข้อมูลแรงดันจริงอยู่บ้างไหม (เดิม hourlyFromFlowCsv() ปล่อยให้ pressure เป็น
     // array ว่างถ้าไม่มีคอลัมน์ pressure_bar ใน flow_log.csv เลย — fillGaps() เติม 0 ทุกจุดถ้าไม่เช็คจุดนี้
     // ก่อน จะกลายเป็นกราฟเส้นแรงดัน 0 บาร์แบนๆ ที่ดูเหมือนมีข้อมูลจริงทั้งที่ไม่มี)
-    const pressureAvailable = d.pressureLast.some(v => v !== null);
+    const pressureAvailable = d.pressureLast.some(v => v !== null) || d.pressureMax.some(v => v !== null);
+    // เส้นวันล่าสุดว่างทั้งเส้น = pipeline ตั้งใจไม่ส่ง (วันข้อมูล E ที่ถูกเติมค่า) — คง null ไว้ ไม่วาดเส้น
+    const keepNull = arr => arr.some(v => v !== null) ? fillGaps(arr) : arr;
     out[code] = {
-      flowLast: fillGaps(d.flowLast), flowMin: fillGaps(d.flowMin), flowMax: fillGaps(d.flowMax),
-      pressureLast: pressureAvailable ? fillGaps(d.pressureLast) : [],
+      flowLast: keepNull(d.flowLast), flowMin: fillGaps(d.flowMin), flowMax: fillGaps(d.flowMax),
+      pressureLast: pressureAvailable ? keepNull(d.pressureLast) : [],
       pressureMin: pressureAvailable ? fillGaps(d.pressureMin) : [],
       pressureMax: pressureAvailable ? fillGaps(d.pressureMax) : [],
     };
@@ -782,6 +784,8 @@ function seriesFromCsv(rows){
       mnfSeries: list.map(r=>Number(r.mnf)),
       totalSeries: list.map(r=>Number(r.daily_total)),
       dateSeries: list.map(r=>r.date),   // ใช้ทำแกน X ของกราฟ "MNF รายวัน" ให้โชว์วันที่จริงแทน D1/D2/...
+      // วันที่จุด E เกินเกณฑ์ = ไฟล์คุณภาพดีเติมค่าแทนทั้งวัน (ไม่ใช่ข้อมูลจริง) — คอลัมน์จาก pipeline ที่ใช้ alert_tuning
+      eImputed: list.map(r=>String(r.e_imputed).toLowerCase()==='true'),
       cPlusSeries: list.filter(r=>r.cusum_cplus!=='' && r.cusum_cplus!=null).map(r=>Number(r.cusum_cplus)),
     };
   });
@@ -839,6 +843,8 @@ function summaryFromCsv(rows){
       // กลุ่ม D / วันล่าสุดไม่สมบูรณ์ (คอลัมน์เสริมจาก prepare_dma_csv.py ของ Alert Tuner — ไฟล์เก่าไม่มี = ว่าง)
       dataFaultReasons: r.data_fault_reasons || '',
       fallbackFromDate: r.fallback_from_date || '',
+      latestEImputed: String(r.latest_e_imputed).toLowerCase()==='true',
+      latestEPoints: (r.latest_e_points!==undefined && r.latest_e_points!=='') ? Number(r.latest_e_points) : null,
       evalDaysExcluded: r.eval_days_excluded || '',
       // diagnostic เท่านั้น — ไม่มีผลต่อ case/status ใดๆ แค่เตือนให้คนไปเช็คข้อมูลดิบ ดูที่มาที่
       // prepare_dma_csv.py คอมเมนต์ RTU_ZIGZAG_SIGN_CHANGE_RATIO
@@ -949,6 +955,13 @@ const STATUS_COLOR = {alert:'#e5484d', watch:'#e8a33d', data_fault:'#8b6cc4'};  
 /** สถานะที่ "ไม่มีส่วนต่าง/การสูญเสียให้โชว์" — ปกติ (C) และ ข้อมูลผิดปกติ (D: ไม่ได้ประเมินการรั่ว) */
 function noExcessStatus(st){ return st==='ok' || st==='data_fault'; }
 
+/** MNF ปัจจุบันสำหรับแสดงผล — วันล่าสุดเป็นข้อมูล E ที่ถูกเติมค่า = ไม่มีค่าจริงให้แสดง */
+function mnfText(d, unit){
+  if(d.a.latestEImputed) return '— (ข้อมูล E)';
+  return `${d.a.currentMnf.toFixed(1)}${unit||''}`;
+}
+const E_IMPUTED_COLOR = '#9aa5b5';
+
 function dStatus(d){
   // "สถานะที่ใช้แสดงผล/นับ KPI" — ถ้า DM มีหมายเหตุ (มีงานใน job_log ที่ยังไม่ปิดงาน) ให้ถือเป็นกลุ่ม
   // "มีหมายเหตุ" แทนสถานะเดิม (แจ้งเตือน/เฝ้าระวัง/ปกติ) เฉพาะตอนจัดกลุ่ม/กรอง/เรียงบนหน้าเว็บเท่านั้น —
@@ -1032,13 +1045,13 @@ async function refreshFromCsv(isFirstLoad){
     if(!codes.length) throw new Error('อ่านไฟล์ได้แต่ไม่พบจุดวัด RTU ที่ใช้ได้ใน dma_status_summary.csv');
 
     data = codes.map(code=>{
-      const s = summaryByDma[code], sr = seriesByDma[code] || {mnfSeries:[], totalSeries:[], dateSeries:[], cPlusSeries:[]};
+      const s = summaryByDma[code], sr = seriesByDma[code] || {mnfSeries:[], totalSeries:[], dateSeries:[], cPlusSeries:[], eImputed:[]};
       const breachIdx = sr.cPlusSeries.findIndex(v=>v>s.cusumH);
       const remark = remarksByDma[code] || null;   // UI display เท่านั้น — ไม่กระทบสถิติ/สถานะที่คำนวณจาก Python เลย
       return {
         code, name: s.name, envelope: envelopeByDma[code] || null,
         a: {
-          mnfSeries: sr.mnfSeries, totalSeries: sr.totalSeries, dateSeries: sr.dateSeries,
+          mnfSeries: sr.mnfSeries, totalSeries: sr.totalSeries, dateSeries: sr.dateSeries, eImputed: sr.eImputed || [],
           mean: s.mean, sd: s.sd, threshold: s.threshold, watchThreshold: s.watchThreshold,
           status: s.status, case: s.case, caseReason: s.caseReason, currentMnf: s.currentMnf,
           noDataDays: s.noDataDays, mnfStart: s.mnfStart, mnfEnd: s.mnfEnd,
@@ -1052,6 +1065,7 @@ async function refreshFromCsv(isFirstLoad){
           proximityEstimate: s.proximityEstimate, favadVolumeTotal: s.favadVolumeTotal,
           userType: s.userType, pipeMaterial: s.pipeMaterial, lastDataDate: s.lastDataDate,
           dataFaultReasons: s.dataFaultReasons, fallbackFromDate: s.fallbackFromDate, evalDaysExcluded: s.evalDaysExcluded,
+          latestEImputed: s.latestEImputed, latestEPoints: s.latestEPoints,
           remark, hasRemark: !!remark,
         },
       };
@@ -1377,7 +1391,7 @@ function renderPriority(){
     return `<tr onclick="openModal('${d.code}')">
       <td><span class="badge ${d.a.status}"${d.a.status==='data_fault'?` title="${escapeHtml(d.a.caseReason||'')}"`:''}><span class="bdot"></span>${(CASE_META[d.a.case]||CASE_META.C).icon} ${(CASE_META[d.a.case]||CASE_META.C).label}</span>${d.a.fallbackFromDate?` <span class="mono" style="font-size:10.5px;color:var(--amber);" title="วันล่าสุดข้อมูลไม่สมบูรณ์ ใช้ข้อมูลวันที่ ${escapeHtml(d.a.fallbackFromDate)} แทน">📅เมื่อวาน</span>`:''}${d.a.status!=='data_fault' && d.a.hardThresholdBreached?' <span class="mono" style="font-size:10.5px;color:#e5484d;" title="เกิน Hard Flow Threshold ตรงๆ เตือนทันที">⚡hard</span>':''}${d.a.status!=='data_fault' && d.a.mk.significant?' <span class="mono" style="font-size:10.5px;color:#e8a33d;" title="Mann-Kendall: แนวโน้มเพิ่มขึ้นมีนัยสำคัญ">▲trend</span>':''}${d.a.status!=='data_fault' && d.a.cusumRecentBreach?' <span class="mono" style="font-size:10.5px;color:#e5484d;" title="CUSUM: ฐานการไหลขยับขึ้นถาวรในช่วงล่าสุด">⚑cusum</span>':''}${savedMarkHtml(d.code)}${d.a.hasRemark?` <span class="mono" style="font-size:10.5px;color:var(--remark);" title="${(d.a.remark.text||d.a.remark.category||'').replace(/"/g,'&quot;')}">📌 remark</span>`:''}</td>
       <td><b>${d.code}</b> <!--· ${d.name}--></td>
-      <td class="mono">${d.a.currentMnf.toFixed(1)} m³/hr</td>
+      <td class="mono">${mnfText(d,' m³/hr')}</td>
       <td class="mono">${d.a.mean.toFixed(1)} ± ${(2*d.a.sd).toFixed(1)}</td>
       <td class="${deltaClass} mono">${deltaTxt}</td>
       <td class="mono">${pctTxt}</td>
@@ -1417,7 +1431,7 @@ function renderCards(){
       </div>
       <svg viewBox="0 0 200 36" preserveAspectRatio="none"><polyline points="${spark}" fill="none" stroke="${color}" stroke-width="2"/></svg>
       <div class="metrics">
-        <span>MNF ปัจจุบัน <span class="mnf">${d.a.currentMnf.toFixed(1)}</span></span>
+        <span>MNF ปัจจุบัน <span class="mnf">${mnfText(d)}</span></span>
         <span>ฐาน <span class="mnf">${d.a.mean.toFixed(1)}</span></span>
       </div>
       <div style="font-size:11px;color:var(--text-faint);margin-top:4px;">Night Flow: ${d.a.mnfStart && d.a.mnfEnd ? `${d.a.mnfStart}–${d.a.mnfEnd}` : '—'}</div>
@@ -1553,7 +1567,7 @@ function openModal(code){
   }
 
   document.getElementById('mKpis').innerHTML = `
-    <div class="mkpi"><div class="l">MNF ปัจจุบัน</div><div class="v mono">${d.a.currentMnf.toFixed(1)} m³/hr</div></div>
+    <div class="mkpi"><div class="l">MNF ปัจจุบัน</div><div class="v mono">${mnfText(d,' m³/hr')}</div></div>
     <div class="mkpi"><div class="l">ช่วง Night Flow (MNF Window)</div><div class="v mono">${d.a.mnfStart && d.a.mnfEnd ? `${d.a.mnfStart}–${d.a.mnfEnd}` : '—'}</div></div>
     <div class="mkpi"><div class="l">ค่าเฉลี่ยฐาน</div><div class="v mono">${d.a.mean.toFixed(1)} m³/hr</div></div>
     <div class="mkpi"><div class="l">เกณฑ์แจ้งเตือน (+2SD)</div><div class="v mono">${d.a.threshold.toFixed(1)} m³/hr</div></div>
@@ -1621,10 +1635,16 @@ function openModal(code){
     ? d.a.dateSeries.map(formatDateDDMM)
     : Array.from({length:d.a.mnfSeries.length},(_,i)=>`D${i+1}`);
   if(mnfChart) mnfChart.destroy();
+  const eImp = (d.a.eImputed && d.a.eImputed.length === d.a.mnfSeries.length) ? d.a.eImputed : [];
   mnfChart = new Chart(document.getElementById('chartMnf'), {
     type:'line',
     data:{ labels, datasets:[
-      {label:'MNF จริง', data:d.a.mnfSeries, borderColor:'#38bfc7', backgroundColor:'transparent', borderWidth:2, pointRadius:0, tension:.25},
+      {label:'MNF จริง', data:d.a.mnfSeries, borderColor:'#38bfc7', backgroundColor:'transparent', borderWidth:2, pointRadius:0, tension:.25,
+       segment:{ borderColor: c => (eImp[c.p0DataIndex]||eImp[c.p1DataIndex]) ? E_IMPUTED_COLOR : undefined,
+                 borderDash: c => (eImp[c.p0DataIndex]||eImp[c.p1DataIndex]) ? [3,3] : undefined }},
+      ...(eImp.some(Boolean) ? [{label:'วันข้อมูล E (เติมค่า ไม่ใช่ข้อมูลจริง)', data:d.a.mnfSeries.map((v,i)=> eImp[i] ? v : null),
+         showLine:false, pointRadius:4, pointHoverRadius:5, pointStyle:'circle', borderColor:E_IMPUTED_COLOR,
+         backgroundColor:'transparent', pointBackgroundColor:'transparent', borderWidth:1.5}] : []),
       {label:'ค่าเฉลี่ยฐาน', data:labels.map(()=>d.a.mean), borderColor:'#5b6b85', borderDash:[4,4], borderWidth:1.5, pointRadius:0},
       {label:'เกณฑ์ +2SD', data:labels.map(()=>d.a.threshold), borderColor:'#e5484d', borderDash:[4,4], borderWidth:1.5, pointRadius:0},
     ]},
@@ -1661,9 +1681,13 @@ function openModal(code){
     return `${h}:${m}`;
   });
 
+  const eNote = d.a.latestEImputed
+    ? `⚠️ วันที่ ${lastPlottedDate || 'ล่าสุด'} ข้อมูล E ${d.a.latestEPoints!=null ? d.a.latestEPoints+'/96 จุด' : 'เกินเกณฑ์'} — `
+      + 'ระบบเติมค่าแทนทั้งวัน ไม่ใช่ข้อมูลจริง จึงไม่แสดงเส้นวันล่าสุด (แถบเทา = ช่วงปกติย้อนหลัง)'
+    : null;
   if(hasHourly){
     hourlyCanvas.style.display = '';
-    hourlyNoteEl.textContent = HOURLY_NOTE_DEFAULT;
+    hourlyNoteEl.textContent = eNote || HOURLY_NOTE_DEFAULT;
     hourlyTitleEl.textContent = lastPlottedDate
       ? `รูปแบบการไหลรายวัน (ราย 15 นาที) — ล่าสุด (${lastPlottedDate}) เทียบช่วงปกติ`
       : 'รูปแบบการไหลรายวัน (ราย 15 นาที) — ล่าสุด เทียบช่วงปกติ';
@@ -1696,7 +1720,7 @@ function openModal(code){
 
   if(lastDayPressure.length){
     pressureCanvas.style.display = '';
-    pressureNoteEl.textContent = PRESSURE_NOTE_DEFAULT;
+    pressureNoteEl.textContent = eNote || PRESSURE_NOTE_DEFAULT;
     pressureChart = new Chart(pressureCanvas, {
       type:'line',
       data:{ labels:intervalLabels, datasets:[
