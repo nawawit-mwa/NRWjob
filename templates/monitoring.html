@@ -84,7 +84,7 @@
   header{display:flex;flex-wrap:wrap;gap:14px;justify-content:space-between;align-items:flex-end;margin-bottom:6px;}
   h1{font-family:'Sarabun','Segoe UI',sans-serif;font-weight:700;font-size:clamp(20px,2.6vw,28px);margin:0 0 4px;letter-spacing:.2px;}
   .sub{color:var(--text-dim);font-size:13.5px;margin:0;max-width:560px;line-height:1.55;}
-  .live{display:flex;align-items:center;gap:8px;color:var(--teal);font-size:12.5px;}
+  .live{display:flex;align-items:center;gap:8px;color:var(--teal);font-size:13.5px;}
   .dot{width:7px;height:7px;border-radius:50%;background:var(--teal);box-shadow:0 0 0 3px var(--teal-soft);animation:pulse 2s infinite;}
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 
@@ -285,8 +285,10 @@
       <p class="sub">คัดกรองพื้นที่ที่มีแนวโน้มน้ำสูญเสีย/ท่อแตกรั่ว จากสถิติ Minimum Night Flow (MNF) <br>และ Statistical Process Control ต่อพื้นที่ DMA</p>
     </div>
     <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;">
-      <div class="live"><span class="dot"></span><span id="sourceLabel">กำลังโหลด...</span></div>
-      <div style="font-size:11px;color:var(--text-faint);">อัปเดตล่าสุด: <span id="ts" class="mono"></span> · <a href="http://172.16.106.145:8050/" target="_blank" rel="noopener noreferrer" style="font-size:11px;">ประมวลผลใหม่</a></div>
+      <!-- เวลาประมวลผลจริงของ pipeline (generated_at) เด่นเป็นบรรทัดหลัก — เดิมบรรทัดนี้เป็น "CSV (คำนวณโดย Python) —
+           รีเฟรชทุก 5 นาที" ซึ่งชวนเข้าใจผิด (ข้อมูลเปลี่ยนวันละครั้งตามรอบ pipeline ไม่ใช่ทุก 5 นาที) -->
+      <div class="live"><span class="dot"></span><span>อัปเดตล่าสุด: <span id="ts" class="mono" style="font-weight:700;">กำลังโหลด...</span></span></div>
+      <div style="font-size:11px;color:var(--text-faint);"><span id="sourceLabel"></span><a href="http://172.16.106.145:8050/" target="_blank" rel="noopener noreferrer" style="font-size:11px;">ประมวลผลใหม่</a></div>
     </div>
   </header>
 
@@ -1072,9 +1074,7 @@ async function refreshFromCsv(isFirstLoad){
     });
     applyBranchMapToData();   // เผื่อ branch map โหลดเสร็จมาก่อน CSV รอบนี้แล้ว (ปกติจะโหลดคู่ขนานกันตอนเปิดหน้า)
 
-    document.getElementById('sourceLabel').textContent = AUTO_REFRESH_ENABLED
-      ? `CSV (คำนวณโดย Python) — รีเฟรชทุก ${REFRESH_MINUTES} นาที`
-      : `CSV (คำนวณโดย Python) — Auto-refresh ปิดอยู่ (ข้อมูล ณ ตอนโหลดหน้านี้)`;
+    document.getElementById('sourceLabel').textContent = '';   // ข้อมูลจริง: แสดงแค่เวลาอัปเดตล่าสุด (บรรทัดบน)
     document.getElementById('csvPathLabel').textContent = ignoreSet.size
       ? `${ENVELOPE_CSV_URL}, ${SERIES_CSV_URL}, ${SUMMARY_CSV_URL} · ซ่อนอยู่ ${ignoreSet.size} RTU ตาม ${IGNORE_CSV_URL}`
       : `${ENVELOPE_CSV_URL}, ${SERIES_CSV_URL}, ${SUMMARY_CSV_URL}`;
@@ -1083,7 +1083,7 @@ async function refreshFromCsv(isFirstLoad){
   }catch(err){
     if(isFirstLoad){
       data = generateData().map(d=>({...d, a:analyze(d), envelope:envelopeFromDemoHourly(d)}));
-      document.getElementById('sourceLabel').textContent = 'ข้อมูลจำลอง (Synthetic — fallback, คำนวณใน JS)';
+      document.getElementById('sourceLabel').textContent = 'ข้อมูลจำลอง (Synthetic — fallback, คำนวณใน JS) · ';
       document.getElementById('banner').innerHTML =
         `⚠️ <div><b>ไม่พบ/อ่านไฟล์ CSV ไม่สำเร็จ</b> (${err.message}) — กำลังแสดง<b>ข้อมูลจำลอง</b>แทน
          รันสคริปต์ <code class="mono">prepare_dma_csv.py</code> ก่อนเพื่อสร้างไฟล์ทั้ง 4 ไฟล์
