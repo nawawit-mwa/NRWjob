@@ -846,6 +846,8 @@ function summaryFromCsv(rows){
       dataFaultReasons: r.data_fault_reasons || '',
       fallbackFromDate: r.fallback_from_date || '',
       latestEImputed: String(r.latest_e_imputed).toLowerCase()==='true',
+      goodDays: (r.good_days!==undefined && r.good_days!=='') ? Number(r.good_days) : null,
+      windowDays: (r.window_days!==undefined && r.window_days!=='') ? Number(r.window_days) : null,
       latestEPoints: (r.latest_e_points!==undefined && r.latest_e_points!=='') ? Number(r.latest_e_points) : null,
       evalDaysExcluded: r.eval_days_excluded || '',
       // diagnostic เท่านั้น — ไม่มีผลต่อ case/status ใดๆ แค่เตือนให้คนไปเช็คข้อมูลดิบ ดูที่มาที่
@@ -1009,6 +1011,12 @@ const HOURLY_NOTE_DEFAULT = 'แถบเทา = ช่วง flow ปกติ
 // dma_hourly_envelope.csv ที่ export ให้ทุก DMA ที่ active (ดู prepare_dma_csv.py) ข้อความนี้เหลือไว้เป็น
 // fallback เผื่อกรณี pipeline ข้าม DMA นี้ไปจริงๆ (เช่น baseline คำนวณไม่ได้) เท่านั้น
 const HOURLY_NOTE_EMPTY = 'ไม่มีข้อมูลราย 15 นาทีสำหรับจุดวัด RTU นี้ในรอบข้อมูลล่าสุด (MNF/CUSUM ด้านบนยังใช้งานได้ตามปกติ)';
+// ตู้ที่ข้อมูล flow ใช้ได้แต่แรงดันใช้ไม่ได้ (ค้าง/เป็น 0) — evaluate_export_rtu_data.py ผ่านแบบ flow-only และส่งแรงดันว่าง
+const PRESSURE_NOTE_FLOW_ONLY = 'RTU นี้ไม่มีข้อมูลแรงดันที่ใช้ได้ (เซนเซอร์แรงดันค้าง/เป็น 0) — ประเมินจาก flow อย่างเดียว ไม่ได้ยืนยันแรงดันตก';
+function noPressureData(d){
+  const e = d.envelope;
+  return !!(e && e.flowMax && e.flowMax.some(v => v !== null) && !(e.pressureMax && e.pressureMax.length));
+}
 const PRESSURE_NOTE_DEFAULT = 'ใช้ยืนยันร่วมกับ flow สูง: ถ้าแรงดันตกพร้อมกับ flow เพิ่มขึ้นอย่างต่อเนื่อง = สัญญาณท่อแตกที่น่าเชื่อถือกว่าดู flow อย่างเดียว';
 const PRESSURE_NOTE_EMPTY = 'ไม่มีข้อมูลแรงดันราย 15 นาทีสำหรับจุดวัด RTUนี้ (เหตุผลเดียวกับกราฟการไหลด้านบน)';
 
@@ -1068,6 +1076,7 @@ async function refreshFromCsv(isFirstLoad){
           userType: s.userType, pipeMaterial: s.pipeMaterial, lastDataDate: s.lastDataDate,
           dataFaultReasons: s.dataFaultReasons, fallbackFromDate: s.fallbackFromDate, evalDaysExcluded: s.evalDaysExcluded,
           latestEImputed: s.latestEImputed, latestEPoints: s.latestEPoints,
+          goodDays: s.goodDays, windowDays: s.windowDays,
           remark, hasRemark: !!remark,
         },
       };
@@ -1574,7 +1583,8 @@ function openModal(code){
     <div class="mkpi"><div class="l">Mann-Kendall (10 วัน)</div><div class="v mono" style="font-size:13px;">${d.a.mk.trend}</div></div>
     <div class="mkpi"><div class="l">CUSUM</div><div class="v mono" style="font-size:13px;">${d.a.cs.breached?`ตัดเกณฑ์ที่วันหลัง baseline #${d.a.cs.breachIndex+1}`:'ยังไม่ตัดเกณฑ์'}</div></div>
     <!--<div class="mkpi"><div class="l">Sustained Flow วันนี้</div><div class="v mono" style="font-size:13px;">${d.a.sustainedRunIntervals} จาก 96 intervals${d.a.sustainedFlowBreach?' ⚠️':''}</div></div>-->
-    <div class="mkpi"><div class="l">แรงดันตกยืนยัน</div><div class="v mono" style="font-size:13px;">${d.a.pressureDropConfirmed?'ใช่ — ตกร่วมกับ flow สูง':'ไม่พบ'}</div></div>
+    <div class="mkpi"><div class="l">แรงดันตกยืนยัน</div><div class="v mono" style="font-size:13px;">${noPressureData(d)?'— (ไม่มีข้อมูลแรงดัน)':(d.a.pressureDropConfirmed?'ใช่ — ตกร่วมกับ flow สูง':'ไม่พบ')}</div></div>
+    ${d.a.goodDays!=null && d.a.windowDays ? `<div class="mkpi"><div class="l">คุณภาพข้อมูล (${d.a.windowDays} วันล่าสุด)</div><div class="v mono" style="font-size:13px;${d.a.goodDays < d.a.windowDays*0.7 ? 'color:var(--amber);' : ''}" title="วันที่ใช้ได้ตามป้ายคุณภาพรายวัน (RTU Tuner) — วันใช้ไม่ได้ไม่ถูกนำไปคำนวณ">ใช้ได้ ${d.a.goodDays}/${d.a.windowDays} วัน</div></div>` : ''}
     <div class="mkpi"><div class="l">ประมาณระยะจุดรั่วจาก RTU</div><div class="v mono" style="font-size:12.5px;">${d.a.proximityEstimate || '— (ยังไม่พบสัญญาณให้ประมาณ)'}</div></div>
     <!--<div class="mkpi"><div class="l">R_eff (System Resistance)</div><div class="v mono">${d.a.rEffMedian!=null? d.a.rEffMedian.toFixed(4): '—'}</div></div>-->
   `;
@@ -1732,7 +1742,7 @@ function openModal(code){
     });
   } else {
     pressureCanvas.style.display = 'none';
-    pressureNoteEl.textContent = PRESSURE_NOTE_EMPTY;
+    pressureNoteEl.textContent = noPressureData(d) ? PRESSURE_NOTE_FLOW_ONLY : PRESSURE_NOTE_EMPTY;
   }
 
   document.getElementById('overlay').classList.add('open');
