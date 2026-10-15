@@ -1790,7 +1790,8 @@ function incidentLinkHtml(incidentId){
 }
 function alertLinkHtml(alertId){
   if(!alertId) return '';
-  return `<a href="/alerts" target="_blank" rel="noopener noreferrer">${escapeHtml(alertId)}</a>`;
+  // พาไปที่แถวของ ALT นี้ในหน้า "MNF ที่บันทึกไว้" ตรงๆ (หน้านั้นจะเลื่อนไปหา + ไฮไลต์แถวให้เอง)
+  return `<a href="/alerts?alert_id=${encodeURIComponent(alertId)}" target="_blank" rel="noopener noreferrer">${escapeHtml(alertId)}</a>`;
 }
 
 function fmtJobTimestamp(iso){

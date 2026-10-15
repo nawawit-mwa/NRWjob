@@ -18,6 +18,14 @@
   .alert-actions { display: flex; flex-direction: column; gap: 6px; min-width: 130px; }
   .alert-actions form { margin: 0; }
   .btn-full { width: 100%; text-align: center; display: block; box-sizing: border-box; }
+  /* แถวที่เปิดมาจากลิงก์ ALT ในหน้า Monitoring (/alerts?alert_id=...) */
+  .alert-table tr.alert-target td,
+  .alert-table tr.alert-target:hover td { background: #fff6d6; }
+  .alert-table tr.alert-target td:first-child { box-shadow: inset 4px 0 0 #f2a900; }
+  .alert-target-missing {
+    margin-bottom: 12px; padding: 10px 14px; border-radius: 10px;
+    background: #fff6d6; border: 1px solid #f2a900; font-size: 0.85rem;
+  }
 </style>
 {% endblock %}
 
@@ -32,6 +40,7 @@
   {% endwith %}
 
   <div class="section-title">MNF ที่บันทึกไว้</div>
+  <div id="alertTargetMissing" class="alert-target-missing" style="display:none;"></div>
 
   {% if alerts %}
   <div class="panel alert-table-wrap">
@@ -52,7 +61,7 @@
       <tbody>
         {% for alert in alerts %}
         {% set perms = alert_permissions.get(alert.AlertID, {}) %}
-        <tr>
+        <tr id="alert-{{ alert.AlertID }}" data-alert-id="{{ alert.AlertID }}">
           <td>
             <div class="alert-actions">
               {% if perms.already_linked %}
@@ -133,5 +142,21 @@ function openImageLightbox(src){
 function closeImageLightbox(){
   document.getElementById('imgLightboxOverlay').style.display = 'none';
 }
+
+// เปิดมาจากลิงก์ ALT ในหน้า Monitoring (/alerts?alert_id=ALT-000064) -> เลื่อนไปที่แถวนั้น + ไฮไลต์
+// ไม่ต้องจำเลขแล้วไล่หาเอง ถ้าไม่เจอ (อยู่นอกขอบเขตสาขาของผู้ใช้ หรือถูกยกเลิกไปแล้ว) แจ้งให้รู้แทนเงียบไป
+(function focusTargetAlert(){
+  const targetId = new URLSearchParams(location.search).get('alert_id');
+  if(!targetId) return;
+  const row = document.querySelector(`tr[data-alert-id="${CSS.escape(targetId)}"]`);
+  if(row){
+    row.classList.add('alert-target');
+    row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }else{
+    const box = document.getElementById('alertTargetMissing');
+    box.textContent = `ไม่พบ ${targetId} ในรายการ — อาจอยู่นอกขอบเขตสาขาของคุณ หรือถูกยกเลิกไปแล้ว`;
+    box.style.display = 'block';
+  }
+})();
 </script>
 {% endblock %}
