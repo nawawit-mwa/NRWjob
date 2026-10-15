@@ -103,12 +103,42 @@ except Exception as e:
     print(f"[app.py] warm_up ล้มเหลว (จะโหลดแบบ lazy แทน): {type(e).__name__}: {e}")
 
 
+def _resolve_user():
+    """หา user จาก token ใน cookie — ถ้า token ไม่อยู่ใน memory แล้ว (เซิร์ฟเวอร์รีสตาร์ท)
+    ลองกู้จาก UserID/เวลาหมดอายุที่เก็บใน cookie ก่อนสรุปว่าไม่ได้ login"""
+    token = session.get("token")
+    user = auth_service.get_current_user(token) if token else None
+    if user:
+        return user
+    uid, exp = session.get("uid"), session.get("exp")
+    if uid and exp:
+        new_token, user = auth_service.restore_session(uid, exp)
+        if new_token:
+            session["token"] = new_token
+            return user
+        # หมดอายุ/ผู้ใช้ถูกระงับแล้ว — ล้างทิ้ง ไม่ต้องลองกู้ซ้ำทุก request
+        session.pop("uid", None)
+        session.pop("exp", None)
+    return None
+
+
+def _wants_json():
+    """request จาก fetch()/AJAX ที่คาดหวัง JSON — ห้าม redirect ไปหน้า login (HTML) เพราะฝั่ง JS
+    จะ parse ไม่ได้และขึ้น error 'Unexpected token <' ให้ผู้ใช้เห็นแทนข้อความที่อ่านรู้เรื่อง"""
+    if request.is_json or request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        return True
+    best = request.accept_mimetypes.best_match(["application/json", "text/html"])
+    return best == "application/json" and request.accept_mimetypes[best] > request.accept_mimetypes["text/html"]
+
+
 def login_required(view_func):
     @wraps(view_func)
     def wrapped(*args, **kwargs):
-        token = session.get("token")
-        user = auth_service.get_current_user(token) if token else None
+        user = _resolve_user()
         if not user:
+            if _wants_json():
+                return jsonify(success=False, login_required=True,
+                               error="เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่"), 401
             flash("กรุณาเข้าสู่ระบบก่อนใช้งาน", "error")
             return redirect(url_for("login"))
         request.current_user = user
@@ -119,8 +149,7 @@ def login_required(view_func):
 def get_optional_user():
     """คืนข้อมูล user ถ้า login อยู่ ไม่ redirect ถ้าไม่ได้ login (ใช้กับหน้าที่ไม่บังคับ login
     แต่ต้องรู้ว่าใคร login อยู่หรือเปล่า เพื่อสลับเมนู sidebar)"""
-    token = session.get("token")
-    return auth_service.get_current_user(token) if token else None
+    return _resolve_user()
 
 
 @app.route("/", methods=["GET"])
@@ -353,6 +382,10 @@ def login():
         try:
             token = auth_service.login(username, password)
             session["token"] = token
+            # เก็บไว้กู้ session หลังเซิร์ฟเวอร์รีสตาร์ท (ดู _resolve_user)
+            info = auth_service.session_info(token)
+            session["uid"] = info.get("user_id", "")
+            session["exp"] = info.get("expires_at", 0)
             if is_ajax:
                 return jsonify(success=True, redirect=url_for("monitoring"))
             return redirect(url_for("monitoring"))

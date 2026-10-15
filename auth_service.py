@@ -87,6 +87,14 @@ def login(username: str, password: str) -> str:
     return token
 
 
+def session_info(token: str) -> dict:
+    """คืน {"user_id", "expires_at"} ของ token (ใช้เก็บลง cookie ไว้กู้ session หลังรีสตาร์ท)"""
+    s = _sessions.get(token)
+    if not s:
+        return {}
+    return {"user_id": s["user"].get("UserID", ""), "expires_at": s["expires_at"]}
+
+
 def get_current_user(token: str) -> dict:
     """คืนข้อมูล user จาก token ถ้ายังไม่หมดอายุ, คืน None ถ้าไม่ valid/หมดอายุ"""
     session = _sessions.get(token)
@@ -96,6 +104,25 @@ def get_current_user(token: str) -> dict:
         del _sessions[token]
         return None
     return session["user"]
+
+
+def restore_session(user_id: str, expires_at: float):
+    """กู้ session หลังเซิร์ฟเวอร์รีสตาร์ท (เช่น Render หลับ/deploy ใหม่) — _sessions อยู่ใน memory
+    จึงหายหมดทุกครั้งที่ process เริ่มใหม่ ทำให้คนที่เปิดหน้าค้างไว้กดบันทึกแล้วโดนเด้งไปหน้า login
+    ใช้ UserID + เวลาหมดอายุที่เก็บใน Flask session cookie (เซ็นด้วย SECRET_KEY แก้ไขเองไม่ได้)
+    โหลด user ใหม่จากชีท Users แล้วออก token ใหม่ให้ คืน (token, user) หรือ (None, None) ถ้ากู้ไม่ได้"""
+    try:
+        expires_at = float(expires_at)
+    except (TypeError, ValueError):
+        return None, None
+    if not user_id or time.time() > expires_at:
+        return None, None
+    user = sc.find_one("Users", "UserID", user_id)
+    if not user or user.get("Status") != "Active":
+        return None, None
+    token = secrets.token_hex(24)
+    _sessions[token] = {"user": user, "expires_at": expires_at}
+    return token, user
 
 
 def logout(token: str):

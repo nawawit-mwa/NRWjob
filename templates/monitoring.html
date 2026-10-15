@@ -2068,6 +2068,27 @@ function getResizedChartImage(sourceCanvas, maxWidth, quality){
   return tmp.toDataURL('image/jpeg', quality);
 }
 
+// อ่าน response เป็น JSON อย่างปลอดภัย — ถ้าเซิร์ฟเวอร์ตอบ HTML กลับมา (เช่น หน้า login, หน้า error
+// ของ Render ตอนเซิร์ฟเวอร์กำลังตื่น) ให้โยน error ที่อ่านรู้เรื่องแทน "Unexpected token '<'"
+async function readJsonResponse(res){
+  const ct = res.headers.get('content-type') || '';
+  if(ct.includes('application/json')){
+    const json = await res.json();
+    if(res.status === 401 || (json && json.login_required)){
+      const err = new Error(json.error || 'เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่');
+      err.loginRequired = true;
+      throw err;
+    }
+    return json;
+  }
+  if(res.redirected && /\/login(\?|$)/.test(res.url)){
+    const err = new Error('เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่');
+    err.loginRequired = true;
+    throw err;
+  }
+  throw new Error(`เซิร์ฟเวอร์ตอบกลับผิดรูปแบบ (HTTP ${res.status}) ลองใหม่อีกครั้งในอีกสักครู่`);
+}
+
 async function saveCurrentAlert(){
   if(!currentJobRtuId) return;
   const d = data.find(x => x.code === currentJobRtuId);
@@ -2116,7 +2137,7 @@ async function saveCurrentAlert(){
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
-    const json = await res.json();
+    const json = await readJsonResponse(res);
     if(json && json.success){
       // บันทึกสำเร็จ -> สลับไปโชว์แผง "บันทึกแล้ว" ทันที ไม่ต้องปิดเปิด popup ใหม่ (ข้อ 2)
       // + ใส่เครื่องหมาย "บันทึกแล้ว" ในตารางด้านหลังทันที ไม่ต้องรอรีเฟรชรอบถัดไป
@@ -2129,6 +2150,14 @@ async function saveCurrentAlert(){
   }catch(err){
     statusEl.style.color = 'var(--red)';
     statusEl.textContent = `⚠️ ${err.message}`;
+    if(err.loginRequired){
+      // หมายเหตุที่พิมพ์ไว้ยังอยู่ในกล่อง — เปิดหน้า login ในแท็บใหม่ ให้ login แล้วกลับมากดบันทึกซ้ำได้เลย
+      const a = document.createElement('a');
+      a.href = '/login'; a.target = '_blank'; a.rel = 'noopener';
+      a.textContent = ' เข้าสู่ระบบ';
+      a.style.marginLeft = '6px';
+      statusEl.appendChild(a);
+    }
     btn.textContent = '💾 บันทึกการแจ้งเตือนนี้';
     btn.disabled = false;
   }
@@ -2190,7 +2219,7 @@ async function submitJobLog(){
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ rtu_id: currentJobRtuId }),
         });
-        const json = await res.json();
+        const json = await readJsonResponse(res);
         if(json && json.success && json.removed){
           // อัปเดตข้อมูลในหน่วยความจำทันที ไม่ต้องรอโหลดหน้าใหม่ — ซ่อน badge/แผงหมายเหตุที่เกี่ยวข้องทั้งหมด
           delete remarksByDma[currentJobRtuId];
