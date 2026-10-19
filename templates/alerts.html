@@ -26,6 +26,16 @@
     margin-bottom: 12px; padding: 10px 14px; border-radius: 10px;
     background: #fff6d6; border: 1px solid #f2a900; font-size: 0.85rem;
   }
+  /* เลือกหลายรายการแล้วยกเลิกทีเดียว */
+  .alert-table .col-check { width: 34px; text-align: center; padding-left: 8px; padding-right: 4px; }
+  .alert-table .col-check input { width: 16px; height: 16px; cursor: pointer; }
+  .alert-table tr.is-selected td { background: #eef6ff; }
+  .bulk-bar {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    margin-bottom: 10px; font-size: 0.85rem;
+  }
+  .bulk-bar .bulk-count { color: var(--ink-soft); }
+  .bulk-bar button[disabled] { opacity: .45; cursor: not-allowed; }
 </style>
 {% endblock %}
 
@@ -43,10 +53,27 @@
   <div id="alertTargetMissing" class="alert-target-missing" style="display:none;"></div>
 
   {% if alerts %}
+  {# มีรายการที่ผู้ใช้นี้ยกเลิกได้อย่างน้อย 1 รายการไหม — ถ้าไม่มี ไม่ต้องโชว์ช่องติ๊ก/แถบปุ่มเลย #}
+  {% set ns = namespace(any_cancellable=false) %}
+  {% for a in alerts %}{% if alert_permissions.get(a.AlertID, {}).can_cancel %}{% set ns.any_cancellable = true %}{% endif %}{% endfor %}
+
+  {% if ns.any_cancellable %}
+  {# ฟอร์มแยกอยู่นอกตาราง (ในตารางมีฟอร์มรายแถวอยู่แล้ว ซ้อนฟอร์มไม่ได้) — ช่องติ๊กผูกเข้าฟอร์มนี้ด้วย form="bulkCancelForm" #}
+  <form id="bulkCancelForm" method="post" action="{{ url_for('alert_cancel_bulk') }}" class="bulk-bar"
+        onsubmit="return confirmBulkCancel();">
+    <button type="submit" id="bulkCancelBtn" class="btn-sm reject" disabled>ยกเลิกที่เลือก</button>
+    <span class="bulk-count" id="bulkCount">ติ๊กเลือกรายการที่ต้องการยกเลิก (เลือกได้หลายรายการ)</span>
+  </form>
+  {% endif %}
+
   <div class="panel alert-table-wrap">
     <table class="alert-table">
       <thead>
         <tr>
+          {% if ns.any_cancellable %}
+          <th class="col-check"><input type="checkbox" id="bulkSelectAll" title="เลือกทั้งหมดที่ยกเลิกได้"
+                                       onchange="toggleSelectAll(this.checked)"></th>
+          {% endif %}
           <th></th>
           <th>รหัส</th>
           <th>RTU</th>
@@ -62,6 +89,14 @@
         {% for alert in alerts %}
         {% set perms = alert_permissions.get(alert.AlertID, {}) %}
         <tr id="alert-{{ alert.AlertID }}" data-alert-id="{{ alert.AlertID }}">
+          {% if ns.any_cancellable %}
+          <td class="col-check">
+            {% if perms.can_cancel %}
+            <input type="checkbox" class="bulk-check" name="alert_ids" value="{{ alert.AlertID }}"
+                   form="bulkCancelForm" onchange="onBulkCheckChange(this)">
+            {% endif %}
+          </td>
+          {% endif %}
           <td>
             <div class="alert-actions">
               {% if perms.already_linked %}
@@ -142,6 +177,57 @@ function openImageLightbox(src){
 function closeImageLightbox(){
   document.getElementById('imgLightboxOverlay').style.display = 'none';
 }
+
+// ---- เลือกหลายรายการแล้วยกเลิกทีเดียว ----
+function bulkChecks(){ return Array.from(document.querySelectorAll('.bulk-check')); }
+
+function refreshBulkBar(){
+  const checks = bulkChecks();
+  const selected = checks.filter(c => c.checked);
+  const btn = document.getElementById('bulkCancelBtn');
+  const countEl = document.getElementById('bulkCount');
+  const allBox = document.getElementById('bulkSelectAll');
+  if(!btn) return;
+  btn.disabled = selected.length === 0;
+  btn.textContent = selected.length ? `ยกเลิกที่เลือก (${selected.length})` : 'ยกเลิกที่เลือก';
+  countEl.textContent = selected.length
+    ? `เลือกแล้ว ${selected.length} จาก ${checks.length} รายการที่ยกเลิกได้`
+    : 'ติ๊กเลือกรายการที่ต้องการยกเลิก (เลือกได้หลายรายการ)';
+  if(allBox){
+    allBox.checked = checks.length > 0 && selected.length === checks.length;
+    allBox.indeterminate = selected.length > 0 && selected.length < checks.length;
+  }
+}
+
+function onBulkCheckChange(cb){
+  cb.closest('tr').classList.toggle('is-selected', cb.checked);
+  refreshBulkBar();
+}
+
+function toggleSelectAll(checked){
+  bulkChecks().forEach(cb => {
+    cb.checked = checked;
+    cb.closest('tr').classList.toggle('is-selected', checked);
+  });
+  refreshBulkBar();
+}
+
+function confirmBulkCancel(){
+  const ids = bulkChecks().filter(c => c.checked).map(c => c.value);
+  if(!ids.length) return false;
+  const preview = ids.length <= 10 ? '\n\n' + ids.join(', ') : '';
+  const ok = confirm(`ยืนยันยกเลิกแจ้งเตือน ${ids.length} รายการ?${preview}\n\nRTU เหล่านี้จะกลับมาบันทึกใหม่ได้ทันที`);
+  if(ok){
+    const btn = document.getElementById('bulkCancelBtn');
+    btn.disabled = true;
+    btn.textContent = 'กำลังยกเลิก...';
+  }
+  return ok;
+}
+
+// ปุ่มย้อนกลับของเบราว์เซอร์อาจคืนค่าติ๊กเดิมไว้ — ซิงก์ไฮไลต์/ปุ่มให้ตรงตอนโหลดหน้า
+bulkChecks().forEach(cb => cb.closest('tr').classList.toggle('is-selected', cb.checked));
+refreshBulkBar();
 
 // เปิดมาจากลิงก์ ALT ในหน้า Monitoring (/alerts?alert_id=ALT-000064) -> เลื่อนไปที่แถวนั้น + ไฮไลต์
 // ไม่ต้องจำเลขแล้วไล่หาเอง ถ้าไม่เจอ (อยู่นอกขอบเขตสาขาของผู้ใช้ หรือถูกยกเลิกไปแล้ว) แจ้งให้รู้แทนเงียบไป

@@ -218,6 +218,36 @@ def cancel_alert(alert_id: str, user: dict):
     sc.update_row("SavedAlerts", "AlertID", alert_id, {"Status": ALERT_STATUS_CANCELLED})
 
 
+def cancel_alerts(alert_ids: list, user: dict) -> dict:
+    """ยกเลิกหลายรายการพร้อมกัน (soft เหมือน cancel_alert) — เช็คสิทธิ์/เงื่อนไขทีละรายการเหมือนเดิม
+    แล้วเขียน Status ของทุกรายการที่ผ่านลง Sheet ใน API call เดียว
+    รายการที่ไม่ผ่าน (ไม่มีสิทธิ์ / แปลงเป็นเหตุการณ์แล้ว / ยกเลิกไปแล้ว / หาไม่เจอ) จะถูกข้าม ไม่ทำให้
+    ทั้งชุดล้มเหลว คืน {"cancelled": [AlertID...], "skipped": [(AlertID, เหตุผล)...]}"""
+    to_cancel, skipped = [], []
+    seen = set()
+    for alert_id in alert_ids:
+        alert_id = str(alert_id).strip()
+        if not alert_id or alert_id in seen:
+            continue
+        seen.add(alert_id)
+        alert = sc.find_one("SavedAlerts", "AlertID", alert_id)
+        if not alert:
+            skipped.append((alert_id, "ไม่พบรายการ"))
+            continue
+        perms = get_alert_permissions(alert, user)
+        if perms["can_cancel"]:
+            to_cancel.append(alert_id)
+        elif perms["already_linked"]:
+            skipped.append((alert_id, "แปลงเป็นเหตุการณ์แล้ว"))
+        elif perms["already_cancelled"]:
+            skipped.append((alert_id, "ยกเลิกไปแล้ว"))
+        else:
+            skipped.append((alert_id, "ไม่มีสิทธิ์"))
+
+    cancelled = sc.update_many("SavedAlerts", "AlertID", to_cancel, {"Status": ALERT_STATUS_CANCELLED})
+    return {"cancelled": cancelled, "skipped": skipped}
+
+
 def get_all_linked_rtu_ids() -> dict:
     """คืน {RTUID: LinkedIncidentID} ของทุกแถวที่เชื่อมโยงเหตุการณ์แล้ว (ทั้งระบบ ไม่จำกัดขอบเขตพื้นที่
     เพราะใช้เป็นตัวกรอง overlay บนหน้า Monitoring ซึ่งไม่ได้ scope ตามสาขาอยู่แล้วตั้งแต่ต้น)

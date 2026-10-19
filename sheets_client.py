@@ -282,6 +282,47 @@ def update_row(sheet_name: str, id_field: str, id_value, updates: dict):
                 break
 
 
+def update_many(sheet_name: str, id_field: str, id_values: list, updates: dict) -> list:
+    """อัปเดตค่าเดียวกัน (updates) ให้หลายแถวพร้อมกันด้วย API call เดียว (batch_update) — ใช้กับงาน
+    แบบ "เลือกหลายรายการแล้วกดทีเดียว" แทนการเรียก update_row() ทีละแถวในลูป ซึ่งจะกินโควตา
+    1 call ต่อแถว (เลือก 50 รายการ = 50 calls ชนลิมิต 45/นาทีทันที)
+    คืน list ของ id ที่อัปเดตจริง (id ที่หาไม่เจอในชีทจะถูกข้ามไปเงียบๆ)
+    กติกาคอลัมน์เหมือน update_row(): ถ้ามี field ไม่ตรง header -> error ทันที ไม่เขียนอะไรเลย"""
+    if not id_values or not updates:
+        return []
+    headers = get_headers(sheet_name)
+    missing_fields = [f for f in updates if f not in headers]
+    if missing_fields:
+        _header_cache.pop(sheet_name, None)
+        headers = get_headers(sheet_name)
+        missing_fields = [f for f in updates if f not in headers]
+    if missing_fields:
+        raise ValueError(
+            f"อัปเดต {sheet_name} ไม่สำเร็จ: ไม่พบคอลัมน์ {missing_fields} ใน header จริงของ Sheet "
+            f"(header ที่มีอยู่ตอนนี้: {headers}) — ต้องเพิ่มคอลัมน์นี้ใน Sheet ให้ตรงเป๊ะก่อน"
+        )
+
+    wanted = {str(v) for v in id_values}
+    records = get_all_records(sheet_name)
+    batch_data, updated_ids = [], []
+    for i, r in enumerate(records):
+        rid = str(r.get(id_field, ""))
+        if rid in wanted and rid not in updated_ids:
+            row_idx = i + 2  # +1 index เริ่ม 0, +1 แถว header
+            for field, value in updates.items():
+                a1 = rowcol_to_a1(row_idx, headers.index(field) + 1)
+                batch_data.append({"range": a1, "values": [[value]]})
+            updated_ids.append(rid)
+
+    if batch_data:
+        ws = get_worksheet(sheet_name)
+        _with_retry(ws.batch_update, batch_data, value_input_option="RAW")
+        for r in records:
+            if str(r.get(id_field, "")) in updated_ids:
+                r.update(updates)
+    return updated_ids
+
+
 def delete_row(sheet_name: str, id_field: str, id_value) -> bool:
     """ลบทั้งแถวที่ id_field == id_value ออกจาก sheet (ลบจริง ไม่ใช่แค่ล้างข้อความ)
     คืน True ถ้าพบและลบสำเร็จ, False ถ้าไม่พบแถวให้ลบเลย (ไม่ raise — เพราะ 'ไม่พบ = ไม่มีอะไรต้องลบ' ก็ถือว่าจบงานแล้ว)

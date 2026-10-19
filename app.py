@@ -643,6 +643,29 @@ def alert_cancel(alert_id):
     return redirect(url_for("alerts_list"))
 
 
+@app.route("/alerts/cancel-bulk", methods=["POST"])
+@login_required
+def alert_cancel_bulk():
+    """ยกเลิกหลายแจ้งเตือนพร้อมกันจากช่องติ๊กในหน้า 'MNF ที่บันทึกไว้'"""
+    user = request.current_user
+    alert_ids = request.form.getlist("alert_ids")
+    if not alert_ids:
+        flash("ยังไม่ได้เลือกรายการที่จะยกเลิก", "error")
+        return redirect(url_for("alerts_list"))
+    try:
+        result = alert_service.cancel_alerts(alert_ids, user)
+    except (PermissionError, ValueError) as e:
+        flash(str(e), "error")
+        return redirect(url_for("alerts_list"))
+
+    if result["cancelled"]:
+        flash(f"ยกเลิกแจ้งเตือน {len(result['cancelled'])} รายการเรียบร้อยแล้ว — RTU เหล่านี้บันทึกใหม่ได้ทันที", "info")
+    if result["skipped"]:
+        detail = ", ".join(f"{aid} ({why})" for aid, why in result["skipped"])
+        flash(f"ข้าม {len(result['skipped'])} รายการ: {detail}", "error")
+    return redirect(url_for("alerts_list"))
+
+
 @app.route("/alerts/status/<rtu_id>")
 def alert_status(rtu_id):
     # public endpoint (ไม่บังคับ login) — บอกว่า RTU นี้บันทึกไว้แล้วหรือยัง + เชื่อมโยงเหตุการณ์หรือไม่
