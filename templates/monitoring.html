@@ -796,7 +796,7 @@ function seriesFromCsv(rows){
 
 const CASE_META = {
   A: {label:'NF สูงฉับพลัน', icon:'🔴', cls:'alert'},
-  B: {label:'NF สูงสะสม', icon:'🟠', cls:'watch'},
+  B: {label:'NF สะสม', icon:'🟠', cls:'watch'},
   C: {label:'ไม่พบ MNF ผิดปกติเชิงสถิติ', icon:'🟡', cls:'ok'},
   // D = ข้อมูลผิดปกติ (E เกินเกณฑ์/ค่าค้าง/ข้อมูลขาด ในวันล่าสุด) — pipeline ไม่ประเมินการรั่วให้ (status data_fault)
   // มาจาก AlertParams.data_fault_group ใน prepare_dma_csv.py (Alert Tuner) ถ้าไม่เปิด จะไม่มี D ในไฟล์เลย
