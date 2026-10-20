@@ -76,12 +76,13 @@
           {% endif %}
           <th></th>
           <th>รหัส</th>
+          <th>วันที่บันทึก</th>
           <th>RTU</th>
           <th>กลุ่ม</th>
           <th></th>
           <th>หมายเหตุ</th>
           <th>กราฟ</th>
-          <th>บันทึกโดย / วันที่</th>
+          <th>บันทึกโดย</th>
           <th>สถานะ</th>
         </tr>
       </thead>
@@ -121,6 +122,7 @@
             </div>
           </td>
           <td class="mono">{{ alert.AlertID }}</td>
+          <td class="mono" style="white-space:nowrap;">{{ alert.SavedAt|datetime_display or '—' }}</td>
           <td>{{ alert.RTUName or alert.RTUID }}</td>
           <td>{{ alert.CaseClassification or '—' }}</td>
           <td style="min-width:220px;">
@@ -141,8 +143,7 @@
             {% endif %}
           </td>
           <td style="white-space:nowrap;">
-            {{ alert.SavedBy|user_short }}<br>
-            <span class="mono" style="font-size:0.78rem; color:var(--ink-soft);">{{ alert.SavedAt|date_display }}</span>
+            {{ alert.SavedBy|user_short }}
           </td>
           <td>
             {% if perms.already_linked and perms.incident_closed %}

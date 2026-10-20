@@ -74,6 +74,23 @@ def _date_display(value):
 app.jinja_env.filters["date_display"] = _date_display
 
 
+def _datetime_display(value):
+    """แปลง timestamp ISO (เช่น '2026-10-15T10:00:23' หรือ '2026-10-15 10:00:23') เป็น
+    'dd/mm/yyyy HH:MM' สำหรับแสดงผล — date_display ใช้กับค่าที่มีเวลาติดมาไม่ได้ (คืนค่าดิบ ISO ทั้งก้อน)
+    ถ้ามีแต่วันที่ แสดงแค่วันที่ ถ้ารูปแบบไม่ตรงคืนค่าเดิม"""
+    if not value:
+        return value
+    s = str(value).strip().replace("T", " ")
+    date_part, _, time_part = s.partition(" ")
+    shown_date = _date_display(date_part)
+    if shown_date == date_part:  # วันที่ไม่ใช่ ISO ที่คาดไว้
+        return value
+    return f"{shown_date} {time_part[:5]}" if time_part else shown_date
+
+
+app.jinja_env.filters["datetime_display"] = _datetime_display
+
+
 def _user_short_display(user_id):
     """แปลง UserID -> 'ชื่อ(คำแรก) / ตำแหน่ง' สำหรับแสดงในตาราง (เช่น ปิดงานโดย)
     ถ้าหา user ไม่เจอ (เช่นถูกลบไปแล้ว) แสดง UserID ดิบแทน ไม่ error"""
