@@ -610,6 +610,9 @@ def alerts_list():
     user = request.current_user
     alerts = alert_service.get_alerts_for_user(user)
     alert_permissions = {a["AlertID"]: alert_service.get_alert_permissions(a, user) for a in alerts}
+    # ไม่แสดงรายการที่เหตุการณ์ปลายทางปิดไปแล้ว (จบงานแล้ว ไม่ต้องติดตามต่อในหน้านี้)
+    # แถวยังอยู่ในชีท SavedAlerts ครบ แค่ไม่โชว์บนหน้าเว็บ
+    alerts = [a for a in alerts if not alert_permissions[a["AlertID"]]["incident_closed"]]
     return render_template(
         "alerts.html",
         user=user,

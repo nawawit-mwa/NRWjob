@@ -240,7 +240,7 @@ refreshBulkBar();
     row.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }else{
     const box = document.getElementById('alertTargetMissing');
-    box.textContent = `ไม่พบ ${targetId} ในรายการ — อาจอยู่นอกขอบเขตสาขาของคุณ หรือถูกยกเลิกไปแล้ว`;
+    box.textContent = `ไม่พบ ${targetId} ในรายการ — อาจอยู่นอกขอบเขตสาขาของคุณ, ถูกยกเลิกไปแล้ว หรือเหตุการณ์ที่สร้างจากรายการนี้ปิดไปแล้ว`;
     box.style.display = 'block';
   }
 })();
