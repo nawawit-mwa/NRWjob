@@ -171,6 +171,9 @@
   .badge.no_data{background:var(--gray-soft);color:var(--gray);}
   .badge.remark{background:var(--remark-soft);color:var(--remark);}
   .badge.data_fault{background:var(--purple-soft);color:var(--purple);}
+  .nfhigh-tag{display:inline-block;padding:1px 7px;border-radius:99px;font-size:10.5px;font-weight:600;white-space:nowrap;
+              background:var(--red-soft);color:var(--red);border:1px solid var(--red);cursor:help;}
+  .nfhigh-tag.linked{background:transparent;color:var(--text-dim);border-color:var(--text-faint);}
   .badge .bdot{width:6px;height:6px;border-radius:50%;background:currentColor;}
   .delta-pos{color:var(--red);}
   .delta-flat{color:var(--text-dim);}
@@ -353,7 +356,6 @@
       <div id="mHardBanner" style="display:none;margin-bottom:12px;padding:10px 14px;border-radius:10px;background:var(--red-soft);border:1px solid var(--red);color:var(--red);font-size:12.5px;font-weight:600;">⚡ <span id="mHardBannerText"></span></div>
       <div id="mFaultBanner" style="display:none;margin-bottom:12px;padding:10px 14px;border-radius:10px;background:var(--purple-soft);border:1px solid var(--purple);color:var(--purple);font-size:12.5px;font-weight:600;">🟣 <span id="mFaultBannerText"></span></div>
       <div id="mFallbackBanner" style="display:none;margin-bottom:12px;padding:10px 14px;border-radius:10px;background:var(--amber-soft);border:1px solid var(--amber);color:var(--amber);font-size:12.5px;font-weight:600;">📅 <span id="mFallbackBannerText"></span></div>
-      <div id="mZigzagBanner" style="display:none;margin-bottom:12px;padding:10px 14px;border-radius:10px;background:var(--amber-soft);border:1px solid var(--amber);color:var(--amber);font-size:12.5px;font-weight:600;">⚠️ <span id="mZigzagBannerText"></span></div>
       <div id="mRemarkPanel" style="display:none;margin-bottom:12px;padding:10px 14px;border-radius:10px;background:var(--remark-soft);border:1px solid var(--remark);color:var(--remark);font-size:12.5px;">
         <div style="font-weight:700;margin-bottom:4px;">📌 หมายเหตุจากระบบ / Remark<span id="mRemarkCategory" class="mono" style="font-weight:400;font-size:11px;"></span></div>
         <div id="mRemarkText" style="font-weight:400;white-space:pre-wrap;"></div>
@@ -850,10 +852,11 @@ function summaryFromCsv(rows){
       windowDays: (r.window_days!==undefined && r.window_days!=='') ? Number(r.window_days) : null,
       latestEPoints: (r.latest_e_points!==undefined && r.latest_e_points!=='') ? Number(r.latest_e_points) : null,
       evalDaysExcluded: r.eval_days_excluded || '',
-      // diagnostic เท่านั้น — ไม่มีผลต่อ case/status ใดๆ แค่เตือนให้คนไปเช็คข้อมูลดิบ ดูที่มาที่
-      // prepare_dma_csv.py คอมเมนต์ RTU_ZIGZAG_SIGN_CHANGE_RATIO
-      rtuZigzagFlag: String(r.rtu_zigzag_flag).toLowerCase()==='true',
-      rtuZigzagRatio: (r.rtu_zigzag_ratio!==undefined && r.rtu_zigzag_ratio!=='') ? Number(r.rtu_zigzag_ratio) : null,
+      // ป้าย "NF สูง" (prepare_dma_csv.py 9 พ.ย. 2569) — ขั้นบันไดที่ CUSUM ตัดเกณฑ์เกิน 7 วันและ MNF ยังสูง
+      // ป้ายเสริมของกลุ่ม B เท่านั้น ไม่เปลี่ยน case/status — ไฟล์เก่าไม่มีคอลัมน์ = false ทุกตู้
+      nfHigh: String(r.nf_high).toLowerCase()==='true',
+      nfHighSince: r.nf_high_since || '',
+      nfHighDays: (r.nf_high_days!==undefined && r.nf_high_days!=='') ? Number(r.nf_high_days) : null,
     };
   });
   return out;
@@ -1077,6 +1080,7 @@ async function refreshFromCsv(isFirstLoad){
           dataFaultReasons: s.dataFaultReasons, fallbackFromDate: s.fallbackFromDate, evalDaysExcluded: s.evalDaysExcluded,
           latestEImputed: s.latestEImputed, latestEPoints: s.latestEPoints,
           goodDays: s.goodDays, windowDays: s.windowDays,
+          nfHigh: s.nfHigh, nfHighSince: s.nfHighSince, nfHighDays: s.nfHighDays,
           remark, hasRemark: !!remark,
         },
       };
@@ -1112,6 +1116,8 @@ if(AUTO_REFRESH_ENABLED){
 }
 
 let activeStatusFilter = null;   // null = แสดงทุกสถานะ, ไม่ก็เป็น 'alert'/'watch'/'ok'/'no_data'/'remark'
+const ENABLE_NF_HIGH = true;        // ปิด = ซ่อนป้าย/การ์ดกรอง "NF สูง" ทั้งหมด (pipeline ยังส่งคอลัมน์มาตามเดิม)
+let activeNfHighFilter = false;     // true = กรองเฉพาะตู้ที่ติดป้าย NF สูง (ทำงานร่วมกับตัวกรองอื่นแบบ AND)
 let activeIncidentFilter = false;   // true = กรองเฉพาะ RTU ที่เปิดเป็นเหตุการณ์แล้ว (ทำงานร่วมกับ activeStatusFilter แบบ AND)
 let savedAlertMap = {};             // {RTUID: AlertID} ของ RTU ที่บันทึกแจ้งเตือนไว้แล้ว (ยังไม่ยกเลิก)
 let linkedIncidentMap = {};         // {RTUID: IncidentID} ของ RTU ที่เปิดเป็นเหตุการณ์แล้ว — เห็นเฉพาะ login แล้ว
@@ -1251,8 +1257,16 @@ function matchesFilters(d){
   if(!matchesScope(d)) return false;
   if(activeStatusFilter && dStatus(d)!==activeStatusFilter) return false;
   if(activeIncidentFilter && !linkedIncidentMap[d.code]) return false;
+  if(activeNfHighFilter && !isNfHigh(d)) return false;
   if(searchQuery && !(d.code.toLowerCase().includes(searchQuery) || (d.name||'').toLowerCase().includes(searchQuery))) return false;
   return true;
+}
+
+function toggleNfHighFilter(){
+  activeNfHighFilter = !activeNfHighFilter;
+  renderCards();
+  renderPriority();
+  renderKpis();
 }
 
 function toggleIncidentFilter(){
@@ -1268,6 +1282,7 @@ function emptyFilterMessage(){
   if(activeBranch) parts.push(`สาขา "${branchNameById(activeBranch)}"`);
   if(activeStatusFilter) parts.push(`สถานะ "${STATUS_LABEL[activeStatusFilter]}"`);
   if(activeIncidentFilter) parts.push(`"เปิดเป็นเหตุการณ์แล้ว"`);
+  if(activeNfHighFilter) parts.push(`ป้าย "NF สูง"`);
   if(searchQuery) parts.push(`คำค้นหา "${searchQuery}"`);
   return parts.length ? `ไม่พบ RTUที่ตรงกับ ${parts.join(' และ ')}` : 'ไม่มีข้อมูล DM';
 }
@@ -1299,6 +1314,11 @@ function renderKpis(){
       <div class="label">${k.label}</div>
       <div class="val mono">${k.val}${k.unit?`<small>${k.unit}</small>`:''}</div>
     </div>`).join('')
+    + (ENABLE_NF_HIGH && (activeNfHighFilter || data.some(isNfHigh)) ? `
+    <div class="kpi alert ${activeNfHighFilter?'active':''}" onclick="toggleNfHighFilter()" title="NF สูง = MNF ขึ้นฉับพลันเกิน 7 วันแล้วยังค้างสูง (อยู่ในกลุ่มเฝ้าระวัง) — คลิกเพื่อกรอง (คลิกซ้ำเพื่อล้าง)">
+      <div class="label">⏳ NF สูง</div>
+      <div class="val mono">${regionData.filter(isNfHigh).length}</div>
+    </div>` : '')
     + (IS_LOGGED_IN ? `
     <div class="kpi ${activeIncidentFilter?'active':''}" onclick="toggleIncidentFilter()" title="คลิกเพื่อกรองเฉพาะ RTU ที่เปิดเป็นเหตุการณ์แล้ว (คลิกซ้ำเพื่อล้าง)">
       <div class="label">เปิดเหตุการณ์แล้ว</div>
@@ -1309,6 +1329,7 @@ function renderKpis(){
     const noteParts = [];
     if(activeStatusFilter) noteParts.push(`"${STATUS_LABEL[activeStatusFilter]}"`);
     if(activeIncidentFilter) noteParts.push(`"เปิดเหตุการณ์แล้ว"`);
+    if(activeNfHighFilter) noteParts.push(`"NF สูง"`);
     filterNote.style.display = noteParts.length ? '' : 'none';
     filterNote.textContent = noteParts.length ? `🔍 กำลังกรองเฉพาะ ${noteParts.join(' + ')} — คลิกการ์ดเดิมอีกครั้งเพื่อล้างตัวกรอง` : '';
   }
@@ -1343,6 +1364,29 @@ function updateSortIndicators(){
     if(!ind) return;
     ind.textContent = (th.dataset.key===prioritySort.key) ? (prioritySort.dir>0 ? '▲':'▼') : '';
   });
+}
+
+/** ตู้นี้ติดป้าย "NF สูง" ไหม (กลุ่ม D/ไม่มีข้อมูลไม่ติด — pipeline กันไว้แล้ว เช็คซ้ำฝั่งหน้าเว็บกันไฟล์ผสม) */
+function isNfHigh(d){
+  return ENABLE_NF_HIGH && !!d.a && d.a.nfHigh && d.a.status!=='data_fault' && d.a.status!=='no_data';
+}
+
+/** ข้อความ tooltip ของป้าย NF สูง — วันที่เริ่ม/จำนวนวัน/ส่วนเกิน + งานที่ผูกแล้ว (ถ้ามี) */
+function nfHighTitle(d){
+  const parts = [];
+  parts.push(`MNF ขึ้นฉับพลันแล้วค้างสูง — CUSUM ตัดเกณฑ์ ${formatDateDDMMYYYY(d.a.nfHighSince)}`
+             + (d.a.nfHighDays!=null ? ` (ค้างมา ${d.a.nfHighDays} วัน)` : ''));
+  if(isFinite(d.a.excessPerHour) && d.a.excessPerHour>0)
+    parts.push(`ส่วนเกิน ~${d.a.excessPerHour.toFixed(1)} m³/hr (~${Math.round(d.a.estLossPerDay).toLocaleString()} m³/วัน)`);
+  parts.push(linkedIncidentMap[d.code] ? `มีงานแล้ว: ${linkedIncidentMap[d.code]}` : 'ยังไม่มีงานผูก');
+  return parts.join(' · ');
+}
+
+/** ป้าย "NF สูง" ต่อท้ายสถานะ — ตาราง/การ์ด/หัว popup ใช้ตัวเดียวกัน */
+function nfHighBadgeHtml(d){
+  if(!isNfHigh(d)) return '';
+  const linked = !!linkedIncidentMap[d.code];
+  return ` <span class="nfhigh-tag${linked?' linked':''}" title="${escapeHtml(nfHighTitle(d))}">⏳ NF สูง${linked?' · มีงานแล้ว':''}</span>`;
 }
 
 /** เครื่องหมายเล็ก "บันทึกแล้ว" ต่อท้ายสถานะในตาราง — เฉพาะ RTU ที่มีการบันทึกแจ้งเตือน (ALT) ค้างอยู่ */
@@ -1398,7 +1442,7 @@ function renderPriority(){
     const deltaTxt = noEx ? '—' : `+${d.a.excessPerHour.toFixed(1)} m³/hr`;
     const pctTxt = noEx ? '—' : `+${displayPct(d).toFixed(1)}%`;
     return `<tr onclick="openModal('${d.code}')">
-      <td><span class="badge ${d.a.status}"${d.a.status==='data_fault'?` title="${escapeHtml(d.a.caseReason||'')}"`:''}><span class="bdot"></span>${(CASE_META[d.a.case]||CASE_META.C).icon} ${(CASE_META[d.a.case]||CASE_META.C).label}</span>${d.a.fallbackFromDate?` <span class="mono" style="font-size:10.5px;color:var(--amber);" title="วันล่าสุดข้อมูลไม่สมบูรณ์ ใช้ข้อมูลวันที่ ${escapeHtml(d.a.fallbackFromDate)} แทน">📅เมื่อวาน</span>`:''}${d.a.status!=='data_fault' && d.a.hardThresholdBreached?' <span class="mono" style="font-size:10.5px;color:#e5484d;" title="เกิน Hard Flow Threshold ตรงๆ เตือนทันที">⚡hard</span>':''}${d.a.status!=='data_fault' && d.a.mk.significant?' <span class="mono" style="font-size:10.5px;color:#e8a33d;" title="Mann-Kendall: แนวโน้มเพิ่มขึ้นมีนัยสำคัญ">▲trend</span>':''}${d.a.status!=='data_fault' && d.a.cusumRecentBreach?' <span class="mono" style="font-size:10.5px;color:#e5484d;" title="CUSUM: ฐานการไหลขยับขึ้นถาวรในช่วงล่าสุด">⚑cusum</span>':''}${savedMarkHtml(d.code)}${d.a.hasRemark?` <span class="mono" style="font-size:10.5px;color:var(--remark);" title="${(d.a.remark.text||d.a.remark.category||'').replace(/"/g,'&quot;')}">📌 remark</span>`:''}</td>
+      <td><span class="badge ${d.a.status}"${d.a.status==='data_fault'?` title="${escapeHtml(d.a.caseReason||'')}"`:''}><span class="bdot"></span>${(CASE_META[d.a.case]||CASE_META.C).icon} ${(CASE_META[d.a.case]||CASE_META.C).label}</span>${d.a.fallbackFromDate?` <span class="mono" style="font-size:10.5px;color:var(--amber);" title="วันล่าสุดข้อมูลไม่สมบูรณ์ ใช้ข้อมูลวันที่ ${escapeHtml(d.a.fallbackFromDate)} แทน">📅เมื่อวาน</span>`:''}${d.a.status!=='data_fault' && d.a.hardThresholdBreached?' <span class="mono" style="font-size:10.5px;color:#e5484d;" title="เกิน Hard Flow Threshold ตรงๆ เตือนทันที">⚡hard</span>':''}${d.a.status!=='data_fault' && d.a.mk.significant?' <span class="mono" style="font-size:10.5px;color:#e8a33d;" title="Mann-Kendall: แนวโน้มเพิ่มขึ้นมีนัยสำคัญ">▲trend</span>':''}${d.a.status!=='data_fault' && d.a.cusumRecentBreach?' <span class="mono" style="font-size:10.5px;color:#e5484d;" title="CUSUM: ฐานการไหลขยับขึ้นถาวรในช่วงล่าสุด">⚑cusum</span>':''}${nfHighBadgeHtml(d)}${savedMarkHtml(d.code)}${d.a.hasRemark?` <span class="mono" style="font-size:10.5px;color:var(--remark);" title="${(d.a.remark.text||d.a.remark.category||'').replace(/"/g,'&quot;')}">📌 remark</span>`:''}</td>
       <td><b>${d.code}</b> <!--· ${d.name}--></td>
       <td class="mono">${mnfText(d,' m³/hr')}</td>
       <td class="mono">${d.a.mean.toFixed(1)} ± ${(2*d.a.sd).toFixed(1)}</td>
@@ -1438,6 +1482,7 @@ function renderCards(){
         <div><div class="name">${d.name}</div><div class="code">${d.code}</div></div>
         <span class="badge ${d.a.status}"><span class="bdot"></span>${(CASE_META[d.a.case]||CASE_META.C).icon} ${STATUS_LABEL[d.a.status]}</span>
       </div>
+      ${isNfHigh(d) ? `<div style="margin:2px 0 4px;text-align:right;">${nfHighBadgeHtml(d).trim()}</div>` : ''}
       <svg viewBox="0 0 200 36" preserveAspectRatio="none"><polyline points="${spark}" fill="none" stroke="${color}" stroke-width="2"/></svg>
       <div class="metrics">
         <span>MNF ปัจจุบัน <span class="mnf">${mnfText(d)}</span></span>
@@ -1497,6 +1542,7 @@ function openModal(code){
   document.getElementById('mName').textContent = d.name;
   document.getElementById('mCode').textContent = `${d.code} · ${cm.icon} ${cm.label}`;
   document.getElementById('mCode').title = d.a.caseReason || '';
+  if(isNfHigh(d)) document.getElementById('mCode').insertAdjacentHTML('beforeend', nfHighBadgeHtml(d));
 
   // ชื่อสาขา — ข้อมูล Monitoring (จาก CSV) ไม่มีข้อมูลสาขาเลย ต้องขอจากฝั่ง NRW Job backend
   // (RTUs -> BranchID -> Branches) เป็น public endpoint เรียกได้ไม่ว่า login หรือไม่
@@ -1557,7 +1603,6 @@ function openModal(code){
       </div>
       <div class="mkpi"><div class="l">ช่วง Night Flow (MNF Window) ที่ตั้งไว้</div><div class="v mono">${windowTxt}</div></div>`;
     document.getElementById('mHardBanner').style.display = 'none';
-    document.getElementById('mZigzagBanner').style.display = 'none';
     document.getElementById('mFaultBanner').style.display = 'none';
     document.getElementById('mFallbackBanner').style.display = 'none';
 
@@ -1582,6 +1627,7 @@ function openModal(code){
     <div class="mkpi"><div class="l">เกณฑ์แจ้งเตือน (+2SD)</div><div class="v mono">${d.a.threshold.toFixed(1)} m³/hr</div></div>
     <div class="mkpi"><div class="l">Mann-Kendall (10 วัน)</div><div class="v mono" style="font-size:13px;">${d.a.mk.trend}</div></div>
     <div class="mkpi"><div class="l">CUSUM</div><div class="v mono" style="font-size:13px;">${d.a.cs.breached?`ตัดเกณฑ์ที่วันหลัง baseline #${d.a.cs.breachIndex+1}`:'ยังไม่ตัดเกณฑ์'}</div></div>
+    ${isNfHigh(d) ? `<div class="mkpi" style="border-color:var(--red);"><div class="l">⏳ NF สูง</div><div class="v mono" style="font-size:13px;color:var(--red);" title="${escapeHtml(nfHighTitle(d))}">ค้าง ${d.a.nfHighDays!=null?d.a.nfHighDays:'—'} วัน · ตั้งแต่ ${formatDateDDMMYYYY(d.a.nfHighSince)}${linkedIncidentMap[d.code]?` · มีงานแล้ว`:''}</div></div>` : ''}
     <!--<div class="mkpi"><div class="l">Sustained Flow วันนี้</div><div class="v mono" style="font-size:13px;">${d.a.sustainedRunIntervals} จาก 96 intervals${d.a.sustainedFlowBreach?' ⚠️':''}</div></div>-->
     <div class="mkpi"><div class="l">แรงดันตกยืนยัน</div><div class="v mono" style="font-size:13px;">${noPressureData(d)?'— (ไม่มีข้อมูลแรงดัน)':(d.a.pressureDropConfirmed?'ใช่ — ตกร่วมกับ flow สูง':'ไม่พบ')}</div></div>
     ${d.a.goodDays!=null && d.a.windowDays ? `<div class="mkpi"><div class="l">คุณภาพข้อมูล (${d.a.windowDays} วันล่าสุด)</div><div class="v mono" style="font-size:13px;${d.a.goodDays < d.a.windowDays*0.7 ? 'color:var(--amber);' : ''}" title="วันที่ใช้ได้ตามป้ายคุณภาพรายวัน (RTU Tuner) — วันใช้ไม่ได้ไม่ถูกนำไปคำนวณ">ใช้ได้ ${d.a.goodDays}/${d.a.windowDays} วัน</div></div>` : ''}
@@ -1610,19 +1656,6 @@ function openModal(code){
     document.getElementById('mHardBannerText').textContent = d.a.caseReason || 'เกิน Hard Flow Threshold — เตือนทันทีโดยไม่รอผลสถิติ';
   } else {
     hardBanner.style.display = 'none';
-  }
-  // diagnostic เท่านั้น (ไม่กระทบ case/status) — เตือนว่าข้อมูล flow แกว่งขึ้นลงสลับทิศทางถี่ผิดปกติ อาจเกิด
-  // จาก RTU เวลาคลาดเคลื่อน/ข้อมูล 2 ชุดปนกัน ควรไปเช็คข้อมูลดิบก่อนเชื่อผลวิเคราะห์เต็มที่ — ดูที่มาของเกณฑ์
-  // ที่ RTU_ZIGZAG_SIGN_CHANGE_RATIO ใน prepare_dma_csv.py
-  const zigzagBanner = document.getElementById('mZigzagBanner');
-  if(d.a.rtuZigzagFlag){
-    zigzagBanner.style.display = 'block';
-    const pct = d.a.rtuZigzagRatio!=null ? `${(d.a.rtuZigzagRatio*100).toFixed(0)}%` : '';
-    document.getElementById('mZigzagBannerText').textContent =
-      `ข้อมูล flow แกว่งขึ้นลงสลับทิศทางถี่ผิดปกติ${pct?` (${pct} ของจุดข้อมูล)`:''} — อาจเกิดจากนาฬิกา RTU `+
-      `คลาดเคลื่อนหรือข้อมูลปนกัน 2 ชุด ควรตรวจสอบข้อมูลดิบก่อนเชื่อผลวิเคราะห์นี้เต็มที่`;
-  } else {
-    zigzagBanner.style.display = 'none';
   }
   // mkBadge/cusumNote อยู่ใน CUSUM chart-box ที่ comment ไว้ด้านบน — comment ตามไปด้วยกัน
   // document.getElementById('mkBadge').textContent = d.a.mk.significant ? `(Z=${d.a.mk.Z.toFixed(2)}, มีนัยสำคัญ)` : `(Z=${d.a.mk.Z.toFixed(2)}, ยังไม่ชัดเจน)`;
