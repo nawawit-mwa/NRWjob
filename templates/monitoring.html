@@ -763,12 +763,13 @@ function envelopeFromCsv(rows){
     // ก่อน จะกลายเป็นกราฟเส้นแรงดัน 0 บาร์แบนๆ ที่ดูเหมือนมีข้อมูลจริงทั้งที่ไม่มี)
     const pressureAvailable = d.pressureLast.some(v => v !== null) || d.pressureMax.some(v => v !== null);
     // เส้นวันล่าสุดว่างทั้งเส้น = pipeline ตั้งใจไม่ส่ง (วันข้อมูล E ที่ถูกเติมค่า) — คง null ไว้ ไม่วาดเส้น
+    // แถบเทาว่างทั้งเส้น = pipeline ไม่ส่ง (วันข้อมูลจริงย้อนหลังไม่พอ) — คง null ไว้ ไม่เติม 0 (11 พ.ย. 2569)
     const keepNull = arr => arr.some(v => v !== null) ? fillGaps(arr) : arr;
     out[code] = {
-      flowLast: keepNull(d.flowLast), flowMin: fillGaps(d.flowMin), flowMax: fillGaps(d.flowMax),
+      flowLast: keepNull(d.flowLast), flowMin: keepNull(d.flowMin), flowMax: keepNull(d.flowMax),
       pressureLast: pressureAvailable ? keepNull(d.pressureLast) : [],
-      pressureMin: pressureAvailable ? fillGaps(d.pressureMin) : [],
-      pressureMax: pressureAvailable ? fillGaps(d.pressureMax) : [],
+      pressureMin: pressureAvailable ? keepNull(d.pressureMin) : [],
+      pressureMax: pressureAvailable ? keepNull(d.pressureMax) : [],
     };
   });
   return out;
@@ -849,6 +850,10 @@ function summaryFromCsv(rows){
       fallbackFromDate: r.fallback_from_date || '',
       latestEImputed: String(r.latest_e_imputed).toLowerCase()==='true',
       goodDays: (r.good_days!==undefined && r.good_days!=='') ? Number(r.good_days) : null,
+      // แถบเทาคิดจากวันข้อมูลจริงกี่วัน (prepare_dma_csv.py 11 พ.ย. 2569 — ไม่นับวันข้อมูล E ที่ถูกเติมค่า)
+      // ไฟล์เก่าไม่มีคอลัมน์ = null -> ไม่แสดงข้อความเพิ่ม
+      envDays: (r.envelope_days!==undefined && r.envelope_days!=='') ? Number(r.envelope_days) : null,
+      envRealDays: (r.envelope_real_days!==undefined && r.envelope_real_days!=='') ? Number(r.envelope_real_days) : null,
       windowDays: (r.window_days!==undefined && r.window_days!=='') ? Number(r.window_days) : null,
       latestEPoints: (r.latest_e_points!==undefined && r.latest_e_points!=='') ? Number(r.latest_e_points) : null,
       evalDaysExcluded: r.eval_days_excluded || '',
@@ -1080,6 +1085,7 @@ async function refreshFromCsv(isFirstLoad){
           dataFaultReasons: s.dataFaultReasons, fallbackFromDate: s.fallbackFromDate, evalDaysExcluded: s.evalDaysExcluded,
           latestEImputed: s.latestEImputed, latestEPoints: s.latestEPoints,
           goodDays: s.goodDays, windowDays: s.windowDays,
+          envDays: s.envDays, envRealDays: s.envRealDays,
           nfHigh: s.nfHigh, nfHighSince: s.nfHighSince, nfHighDays: s.nfHighDays,
           remark, hasRemark: !!remark,
         },
@@ -1728,9 +1734,18 @@ function openModal(code){
     ? `⚠️ วันที่ ${lastPlottedDate || 'ล่าสุด'} ข้อมูล E ${d.a.latestEPoints!=null ? d.a.latestEPoints+'/96 จุด' : 'เกินเกณฑ์'} — `
       + 'ระบบเติมค่าแทนทั้งวัน ไม่ใช่ข้อมูลจริง จึงไม่แสดงเส้นวันล่าสุด (แถบเทา = ช่วงปกติย้อนหลัง)'
     : null;
+  // แถบเทา: ไม่นับวันข้อมูล E ที่ถูกเติมค่า — วันจริงไม่พอ pipeline ไม่ส่งแถบมา (min/max ว่าง)
+  const hasBand = arr => Array.isArray(arr) && arr.some(v => v!=null);
+  const bandNote = (hasBandArr) => {
+    const n = d.a.envDays, r = d.a.envRealDays;
+    if(n==null || r==null || r >= n) return '';
+    return hasBandArr
+      ? ` · แถบเทาคิดจากข้อมูลจริง ${r} จาก ${n} วัน (ไม่นับวันข้อมูล E ที่ระบบเติมค่า)`
+      : ` · ⚠️ ไม่แสดงแถบช่วงปกติ — ${n} วันย้อนหลังเป็นข้อมูลจริงแค่ ${r} วัน (ที่เหลือเป็นวันข้อมูล E ที่ระบบเติมค่า)`;
+  };
   if(hasHourly){
     hourlyCanvas.style.display = '';
-    hourlyNoteEl.textContent = eNote || HOURLY_NOTE_DEFAULT;
+    hourlyNoteEl.textContent = (eNote || HOURLY_NOTE_DEFAULT) + bandNote(hasBand(d.envelope.flowMax));
     hourlyTitleEl.textContent = lastPlottedDate
       ? `รูปแบบการไหลรายวัน (ราย 15 นาที) — ล่าสุด (${lastPlottedDate}) เทียบช่วงปกติ`
       : 'รูปแบบการไหลรายวัน (ราย 15 นาที) — ล่าสุด เทียบช่วงปกติ';
@@ -1763,7 +1778,7 @@ function openModal(code){
 
   if(lastDayPressure.length){
     pressureCanvas.style.display = '';
-    pressureNoteEl.textContent = eNote || PRESSURE_NOTE_DEFAULT;
+    pressureNoteEl.textContent = (eNote || PRESSURE_NOTE_DEFAULT) + bandNote(hasBand(d.envelope.pressureMax));
     pressureChart = new Chart(pressureCanvas, {
       type:'line',
       data:{ labels:intervalLabels, datasets:[
