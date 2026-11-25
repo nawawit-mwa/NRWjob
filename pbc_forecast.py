@@ -337,9 +337,9 @@ def forecast_rate(series, horizon_months, confidence_k=1.96,
         lo, hi = clamp(value - margin), clamp(value + margin)
         points.append({
             "month_no": m,
-            "rate": round(clamp(value), 2),
-            "lo": round(lo, 2),
-            "hi": round(hi, 2),
+            "rate": round(clamp(value), 3),
+            "lo": round(lo, 3),
+            "hi": round(hi, 3),
             "conclusive": (hi - lo) <= band_width_limit,
         })
 
@@ -371,7 +371,7 @@ def gap_to_target(forecast, target_rate_pct, month_no):
                 "lo": p.get("lo"),
                 "hi": p.get("hi"),
                 "target_rate": target_rate_pct,
-                "gap": round(p["rate"] - target_rate_pct, 2),
+                "gap": round(p["rate"] - target_rate_pct, 3),
                 "on_track": p["rate"] <= target_rate_pct,
                 # ถ้าช่วงความเชื่อมั่นกว้างจนคร่อมเส้นเป้า จะบอกว่าผ่านหรือไม่ผ่านไม่ได้
                 "conclusive": p.get("conclusive", True)

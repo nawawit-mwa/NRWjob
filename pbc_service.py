@@ -576,7 +576,7 @@ def rolling_series(monthly, start_month, dma_codes=None):
             "inflow_m3": round(agg["inflow_m3"], 2),
             "sales_m3": round(agg["sales_m3"], 2),
             "loss_m3": round(agg["loss_m3"], 2),
-            "loss_rate": round(agg["loss_rate"], 2),
+            "loss_rate": round(agg["loss_rate"], 3),
         })
     out.sort(key=lambda x: x["month_no"])
     return out
@@ -596,7 +596,7 @@ def monthly_series(monthly, start_month, dma_codes=None):
             "inflow_m3": round(agg["inflow_m3"], 2),
             "sales_m3": round(agg["sales_m3"], 2),
             "loss_m3": round(agg["loss_m3"], 2),
-            "loss_rate": round(agg["loss_rate"], 2),
+            "loss_rate": round(agg["loss_rate"], 3),
             # จำนวน DMA ที่มีข้อมูลจริงในเดือนนั้น ใช้ตรวจว่าข้อมูลครบหรือไม่
             "n_dma": agg["n_records"],
         })

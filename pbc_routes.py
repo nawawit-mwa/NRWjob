@@ -153,7 +153,7 @@ def create_pbc_blueprint(login_required=None, current_user_fn=None,
                 "inflow_m3": round(agg["inflow_m3"], 0) if agg else None,
                 "sales_m3": round(agg["sales_m3"], 0) if agg else None,
                 "loss_m3": round(agg["loss_m3"], 0) if agg else None,
-                "loss_rate": round(agg["loss_rate"], 2)
+                "loss_rate": round(agg["loss_rate"], 3)
                 if agg and agg["loss_rate"] is not None else None,
                 "loss_m3_month": round(agg["loss_m3"] / months_n, 0) if agg else None,
                 "mnf_current": info.get("mnf_current"),
@@ -272,7 +272,7 @@ def create_pbc_blueprint(login_required=None, current_user_fn=None,
             if actual:
                 row["status"] = "pass" if actual["loss_rate"] <= t["target_rate"] \
                     else "fail"
-                row["diff"] = round(actual["loss_rate"] - t["target_rate"], 2)
+                row["diff"] = round(actual["loss_rate"] - t["target_rate"], 3)
             milestones.append(row)
 
         # แรงดันเฉลี่ยเดือนล่าสุด เทียบกับแรงดันฐาน (สัญญาข้อ 1.32 / 2.1.2(7))
@@ -514,7 +514,7 @@ def create_pbc_blueprint(login_required=None, current_user_fn=None,
                 "alc_service_pipe": sum(w["alc_service_pipe"] for w in work.values()),
             })
             if row["current_rate"] is not None and row["plan_rate_now"] is not None:
-                row["vs_plan"] = round(row["current_rate"] - row["plan_rate_now"], 2)
+                row["vs_plan"] = round(row["current_rate"] - row["plan_rate_now"], 3)
                 row["on_plan"] = row["vs_plan"] <= 0
             rows.append(row)
 
@@ -664,7 +664,7 @@ def create_pbc_blueprint(login_required=None, current_user_fn=None,
                 "billed_total_m3": round(rec["billed_total_m3"], 0),
                 "other_m3": round(rec["other_m3"], 0),
                 "loss_m3": round(rec["loss_m3"], 0),
-                "loss_rate": round(rec["loss_rate"], 2)
+                "loss_rate": round(rec["loss_rate"], 3)
                 if rec["loss_rate"] is not None else None,
                 "avg_pressure_24h": rec["avg_pressure_24h"],
                 "avg_pressure_night": rec["avg_pressure_night"],

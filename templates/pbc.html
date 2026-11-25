@@ -1240,15 +1240,15 @@ function renderPlan(){
           callbacks:{
             title: monthTitle,
             label:function(ctx){
-              return ctx.dataset.label + ": " + ctx.parsed.y.toFixed(2) + "%";
+              return ctx.dataset.label + ": " + ctx.parsed.y.toFixed(3) + "%";
             },
             footer:function(items){
               var m = msMap[nos[items[0].dataIndex]];
               if(!m) return "";
               if(m.status === "pending") return "จุดวัดผลตามสัญญา · ยังไม่ถึงกำหนด";
               return "จุดวัดผลตามสัญญา · " + (m.status === "pass"
-                ? "ผ่านเป้า (ต่ำกว่า " + num(-m.diff, 2) + " จุด)"
-                : "ไม่ผ่าน (สูงกว่า " + num(m.diff, 2) + " จุด)");
+                ? "ผ่านเป้า (ต่ำกว่า " + num(-m.diff, 3) + " จุด)"
+                : "ไม่ผ่าน (สูงกว่า " + num(m.diff, 3) + " จุด)");
             }
           }
         }
@@ -1339,11 +1339,11 @@ function renderPlan(){
     { label:"น้ำจำหน่าย (ลบ.ม.)", sw:"bar", color:PLAN_COLOR.sales, vals:vSales, d:0 },
     { label:"น้ำสูญเสีย (ลบ.ม.)", sw:"bar", color:PLAN_COLOR.loss, vals:vLoss, d:0 },
     { label:"อัตราน้ำสูญเสีย (รายเดือน)", sw:"dash", color:PLAN_COLOR.monthly,
-      vals:vRate, d:2, pct:true },
+      vals:vRate, d:3, pct:true },
     { label:"อัตราน้ำสูญเสีย (เป้าหมาย)", sw:"line", color:PLAN_COLOR.target,
-      vals:vTarget, d:2, pct:true, future:true },
+      vals:vTarget, d:3, pct:true, future:true },
     { label:"อัตราน้ำสูญเสีย (เฉลี่ย 3 เดือน)", sw:"line", color:PLAN_COLOR.rolling,
-      vals:vRoll, d:2, pct:true, judge:true },
+      vals:vRoll, d:3, pct:true, judge:true },
     { label:"น้ำสูญเสียเฉลี่ย (ลบ.ม./วัน)", vals:vDaily, d:0 }
   ];
   var body = rowDefs.map(function(r){
@@ -1390,7 +1390,7 @@ function renderPlan(){
   var lastRoll = rolling.length ? rolling[rolling.length-1] : null;
   if(lastRoll){
     chips.push('<span class="plan-chip">เฉลี่ย 3 เดือนล่าสุด <b>' +
-      num(lastRoll.loss_rate, 2) + '%</b> <span class="dim">' +
+      num(lastRoll.loss_rate, 3) + '%</b> <span class="dim">' +
       esc(lastRoll.label) + '</span></span>');
   }
   $("planChips").innerHTML = chips.join("");
